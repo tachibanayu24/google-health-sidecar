@@ -1,0 +1,19 @@
+{
+  "name": "@ghs/tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "oauth:bootstrap": "tsx oauth-bootstrap.ts",
+    "oauth:check": "tsx oauth-playground-check.ts"
+  },
+  "dependencies": {
+    "@ghs/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
