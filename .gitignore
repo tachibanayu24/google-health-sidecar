@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+*.local
+.DS_Store
+*.log
+coverage/
+# wrangler.jsonc に database_id 等の実IDを入れるが、単一ユーザー個人運用のため追跡対象。
+# secret は wrangler secret / .dev.vars(gitignore)で管理。
+.design-workflow.js

@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ghsidecar-web",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // M1 で React PWA を ./dist にビルドして assets バインドを追加する(§12.1)。
+  // "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*", "/auth/*"] },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ghsidecar",
+      // `wrangler d1 create ghsidecar` で得た id をここに貼る(--local では placeholder で可)。
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "../../packages/core/src/db/migrations"
+    }
+  ],
+  "kv_namespaces": [
+    { "binding": "TOKENS", "id": "REPLACE_WITH_TOKENS_KV_ID" },
+    { "binding": "CACHE", "id": "REPLACE_WITH_CACHE_KV_ID" },
+    { "binding": "LOCK", "id": "REPLACE_WITH_LOCK_KV_ID" }
+  ],
+  // pull(JST 06/13/22時 = UTC 21/04/13) と gh-push retry(*/30) を別スロットに(§12.2)。
+  "triggers": { "crons": ["0 21 * * *", "0 4 * * *", "0 13 * * *", "*/30 * * * *"] },
+  "observability": { "enabled": true },
+  "vars": {
+    "ALLOWED_EMAIL": "tachibanayu24@gmail.com",
+    "FEATURE_GH_NUTRITION_PUSH": "false"
+  }
+}

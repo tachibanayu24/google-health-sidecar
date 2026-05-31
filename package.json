@@ -1,0 +1,25 @@
+{
+  "name": "google-health-sidecar",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "Yuto Tachibana",
+  "description": "単一ユーザー向け Google Health sidecar(ボディメイク特化)。Cloudflare Workers + D1 + PWA + MCP。",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.1.1",
+  "scripts": {
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "db:apply:local": "pnpm --filter @ghs/web exec wrangler d1 migrations apply ghsidecar --local",
+    "db:apply:remote": "pnpm --filter @ghs/web exec wrangler d1 migrations apply ghsidecar --remote"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.0",
+    "typescript": "^5.7.0"
+  }
+}
