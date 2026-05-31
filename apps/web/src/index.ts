@@ -1,14 +1,19 @@
 import { todayJst } from '@ghs/core/util/date';
 import { Hono } from 'hono';
-import type { Env } from './env';
+import { api } from './api/routes';
+import { requireAuth } from './auth/gate';
+import type { Env, HonoEnv } from './env';
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<HonoEnv>();
 
 app.get('/healthz', (c) => c.json({ ok: true, app: 'ghsidecar-web', todayJst: todayJst() }));
 
-// M1: /auth/* (Google OIDC ゲート), /api/* (UIバックエンド) を実装。
-app.all('/auth/*', (c) => c.text('auth: not implemented (M1)', 501));
-app.all('/api/*', (c) => c.json({ error: 'not_implemented', milestone: 'M1' }, 501));
+// /api/* は認証ゲートの背後(系統A, §6.1)。
+app.use('/api/*', requireAuth);
+app.route('/api', api);
+
+// M1: /auth/* (Google OIDC ログイン)。callback 実装は UI 結線時。
+app.all('/auth/*', (c) => c.text('auth: login flow (M1, 結線中)', 501));
 
 // SPA フォールバック(M1で assets バインド配信に置換)。
 app.get('*', (c) => c.text('ghsidecar (UI is M1)', 200));

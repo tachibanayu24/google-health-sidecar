@@ -6,12 +6,7 @@ import {
   resolveExercise,
 } from '../db/repositories/exercises';
 import { getSettings } from '../db/repositories/settings';
-import {
-  markPushFailed,
-  markPushSynced,
-  pendingPushStmt,
-  skippedPushStmt,
-} from '../db/repositories/sync';
+import { markPushFailed, markPushSynced, pendingPushStmt } from '../db/repositories/sync';
 import {
   getExerciseHistoryRows,
   getWindowSets,
@@ -409,6 +404,3 @@ function daysBetween(fromIso: string, toIso: string): number {
   const b = Date.parse(`${toIso}T00:00:00Z`);
   return Math.max(0, Math.round((b - a) / 86_400_000));
 }
-
-// skippedPushStmt は flag OFF 時に NutritionService から使うため re-export。
-export { skippedPushStmt };

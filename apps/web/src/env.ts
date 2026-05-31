@@ -13,4 +13,12 @@ export interface Env {
   GOOGLE_CLIENT_SECRET?: string;
   SESSION_SIGNING_KEY?: string;
   ALLOWED_SUB?: string;
+  /** ローカル開発のみ。.dev.vars 限定で本番 vars には入れない(§6.1)。 */
+  DEV_AUTH_BYPASS?: string;
 }
+
+/** Hono のジェネリック(Bindings + ログインユーザー)。 */
+export type HonoEnv = {
+  Bindings: Env;
+  Variables: { user: { sub: string; email: string } };
+};
