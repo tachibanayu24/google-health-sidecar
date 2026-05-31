@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
 import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter';
 import { Card } from '../components/Card';
 import { api, type MuscleVolume } from '../lib/api';
@@ -55,7 +54,6 @@ function bucket(s: number): number {
 
 export function MuscleScreen() {
   const q = useQuery({ queryKey: ['muscle-volume', 7], queryFn: () => api.muscleVolume(7) });
-  const [side, setSide] = useState<'anterior' | 'posterior'>('anterior');
   if (q.isLoading) return <Loading />;
   if (q.error) return <ErrorBox error={q.error} />;
   const muscles = q.data!.muscles;
@@ -80,43 +78,22 @@ export function MuscleScreen() {
 
   return (
     <div className="mx-auto max-w-md space-y-4">
-      <div className="flex items-end justify-between">
-        <div>
-          <div className="font-display text-[11px] font-bold uppercase tracking-[0.14em] text-faint">
-            直近7日の刺激
-          </div>
-          <div className="stat text-2xl">
-            {worked}
-            <span className="ml-1 text-base text-muted">/ 16 部位</span>
-          </div>
+      <div>
+        <div className="font-display text-[11px] font-bold uppercase tracking-[0.14em] text-faint">
+          直近7日の刺激
         </div>
-        <div className="flex overflow-hidden rounded-lg border border-line text-xs font-bold">
-          {(['anterior', 'posterior'] as const).map((s) => (
-            <button
-              type="button"
-              key={s}
-              onClick={() => setSide(s)}
-              className={`px-3 py-1.5 transition-colors ${
-                side === s ? 'bg-ink text-card' : 'bg-card text-faint'
-              }`}
-            >
-              {s === 'anterior' ? '前面' : '背面'}
-            </button>
-          ))}
+        <div className="stat text-2xl">
+          {worked}
+          <span className="ml-1 text-base text-muted">/ 16 部位</span>
         </div>
       </div>
 
       <Card>
-        <div className="flex justify-center [&_svg]:h-auto [&_svg]:max-h-[46vh] [&_svg]:w-auto">
-          <Model
-            type={side}
-            data={data}
-            highlightedColors={RAMP}
-            bodyColor={BASE_BODY}
-            style={{ width: '62%' }}
-          />
+        <div className="grid grid-cols-2 gap-2 [&_svg]:h-auto [&_svg]:max-h-[40vh] [&_svg]:w-full">
+          <Figure label="前面" type="anterior" data={data} />
+          <Figure label="背面" type="posterior" data={data} />
         </div>
-        <div className="mt-2 flex items-center gap-2 text-xs text-muted">
+        <div className="mt-3 flex items-center gap-2 text-xs text-muted">
           <span>少</span>
           <div
             className="h-2 flex-1 rounded-full"
@@ -133,6 +110,23 @@ export function MuscleScreen() {
           ))}
         </ul>
       </Card>
+    </div>
+  );
+}
+
+function Figure({
+  label,
+  type,
+  data,
+}: {
+  label: string;
+  type: 'anterior' | 'posterior';
+  data: IExerciseData[];
+}) {
+  return (
+    <div className="flex flex-col items-center">
+      <Model type={type} data={data} highlightedColors={RAMP} bodyColor={BASE_BODY} />
+      <span className="mt-1 text-[11px] font-semibold text-faint">{label}</span>
     </div>
   );
 }

@@ -18,22 +18,13 @@ import { TodayScreen } from './screens/Today';
 
 type View = 'today' | 'history' | 'record' | 'meal' | 'muscle' | 'settings';
 
-const TITLES: Record<View, string> = {
-  today: 'Today',
-  history: 'Trends',
-  record: 'Workout',
-  meal: 'Meal',
-  muscle: 'Muscle Map',
-  settings: 'Settings',
-};
-
 export function App() {
   const [view, setView] = useState<View>('today');
   const [chooser, setChooser] = useState(false);
 
   return (
     <div className="flex h-full flex-col">
-      <Header title={TITLES[view]} />
+      <Header />
       <main className="flex-1 overflow-y-auto px-5 pb-28 pt-3">
         <div key={view} className="rise">
           {view === 'today' && <TodayScreen onGoRecord={() => setView('record')} />}
@@ -60,19 +51,12 @@ export function App() {
   );
 }
 
-function Header({ title }: { title: string }) {
+function Header() {
   return (
     <header className="safe-top sticky top-0 z-20 border-b border-line bg-paper/85 backdrop-blur-md">
-      <div className="mx-auto flex max-w-md items-center justify-between px-5 pb-3 pt-4">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-ink text-card">
-            <span className="font-display text-sm font-black leading-none">L</span>
-          </span>
-          <span className="font-display text-[13px] font-bold uppercase tracking-[0.18em] text-muted">
-            Logbook
-          </span>
-        </div>
-        <h1 className="font-display text-[15px] font-bold tracking-tight">{title}</h1>
+      <div className="mx-auto flex max-w-md items-center gap-2 px-5 pb-3 pt-4">
+        <Dumbbell className="h-5 w-5 text-accent" strokeWidth={2.4} />
+        <span className="font-display text-lg font-extrabold tracking-tight">Logbook</span>
       </div>
     </header>
   );
