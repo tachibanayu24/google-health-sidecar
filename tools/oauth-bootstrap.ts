@@ -2,7 +2,7 @@
  * GH OAuth 初回 bootstrap(Pattern B, §6.2 / §13 M0)。
  *
  * 使い方:
- *   export GOOGLE_CLIENT_ID=...   GOOGLE_CLIENT_SECRET=...
+ *   # 認証情報は apps/web/.dev.vars(gitignore済)から自動読み込み。env で上書きも可。
  *   # nutrition.writeonly も要求するなら: export GH_NUTRITION_PUSH=1
  *   pnpm --filter @ghs/tools oauth:bootstrap
  *   → 表示されたURLをブラウザで開いて同意 → refresh_token を取得 → 表示の wrangler コマンドを実行。
@@ -11,17 +11,40 @@
  *   http://127.0.0.1:8788/oauth/callback
  * を登録し、同意画面を "In production" に publish しておくこと(7日失効回避, §6.2)。
  */
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { fileURLToPath } from 'node:url';
 import { buildAuthUrl, exchangeCode } from '@ghs/core/auth/googleOAuth';
 import { ghScopeSet } from '@ghs/core/providers/scopes';
 
 const PORT = 8788;
 const REDIRECT_URI = `http://127.0.0.1:${PORT}/oauth/callback`;
 
+/** apps/web/.dev.vars(KEY=VALUE)を読み、env 未設定のものだけ補う。 */
+function loadDevVars(): void {
+  try {
+    const path = fileURLToPath(new URL('../apps/web/.dev.vars', import.meta.url));
+    for (const line of readFileSync(path, 'utf8').split('\n')) {
+      const t = line.trim();
+      if (!t || t.startsWith('#')) continue;
+      const eq = t.indexOf('=');
+      if (eq < 0) continue;
+      const k = t.slice(0, eq).trim();
+      const v = t.slice(eq + 1).trim();
+      if (k && process.env[k] === undefined) process.env[k] = v;
+    }
+  } catch {
+    // .dev.vars が無ければ env のみ使用。
+  }
+}
+loadDevVars();
+
 const clientId = process.env.GOOGLE_CLIENT_ID;
 const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 if (!clientId || !clientSecret) {
-  console.error('✗ GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET を環境変数で渡してください。');
+  console.error(
+    '✗ GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET が見つかりません(apps/web/.dev.vars か env で指定)。',
+  );
   process.exit(1);
 }
 
