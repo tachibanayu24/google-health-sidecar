@@ -53,8 +53,13 @@ export class GhClient {
     return this.request<T>('POST', this.dpPath(dataType), payload);
   }
 
-  reconcile<T = unknown>(dataType: string, payload: unknown): Promise<T> {
-    return this.request<T>(RECONCILE_VERB, `${this.dpPath(dataType)}:reconcile`, payload);
+  /** reconcile は GET + query(discovery doc 確定, §5.1)。body は持たない。 */
+  reconcile<T = unknown>(dataType: string, query: Record<string, string | undefined>): Promise<T> {
+    const u = new URL(`${this.dpPath(dataType)}:reconcile`);
+    for (const [k, v] of Object.entries(query)) {
+      if (v !== undefined && v !== '') u.searchParams.set(k, v);
+    }
+    return this.request<T>(RECONCILE_VERB, u.toString());
   }
 
   list<T = unknown>(dataType: string, query: Record<string, string | undefined>): Promise<T> {

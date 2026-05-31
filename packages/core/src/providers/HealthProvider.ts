@@ -72,8 +72,6 @@ export interface BodyPushInput {
   weightKg?: number;
   /** kind=body-fat のとき。 */
   bodyFatPct?: number;
-  /** 手入力は 'MANUAL'(§2.1 own-write 判定の根拠)。 */
-  recordingMethod: 'MANUAL';
   clientTag: string;
 }
 

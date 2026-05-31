@@ -7,7 +7,7 @@ import type {
   ReconcileResult,
 } from '../HealthProvider';
 import { type GetToken, GhClient } from './client';
-import { RECONCILE_VERB, WRITE_DATATYPE } from './discovery-pin';
+import { WRITE_DATATYPE } from './discovery-pin';
 import {
   buildBodyPayload,
   buildExercisePayload,
@@ -37,20 +37,13 @@ export class GoogleHealthProvider implements HealthProvider {
     untilSec: number,
     cursor: string | null,
   ): Promise<ReconcileResult> {
-    // 時間範囲フィルタは形状依存(§5.4)。reconcile が GET の場合は query、POST の場合は body。
+    // reconcile = GET + query(discovery doc 確定, §5.1)。filter 構文は AIP-160。
     const filter = `start_time >= "${rfc3339(sinceSec)}" AND start_time <= "${rfc3339(untilSec)}"`;
-    const res =
-      RECONCILE_VERB === 'POST'
-        ? await this.client.reconcile(ghDataType, {
-            filter,
-            pageSize: 25,
-            ...(cursor ? { pageToken: cursor } : {}),
-          })
-        : await this.client.list(ghDataType, {
-            filter,
-            pageSize: '25',
-            pageToken: cursor ?? undefined,
-          });
+    const res = await this.client.reconcile(ghDataType, {
+      filter,
+      pageSize: '25',
+      pageToken: cursor ?? undefined,
+    });
     return parseReconcileResponse(ghDataType, res);
   }
 

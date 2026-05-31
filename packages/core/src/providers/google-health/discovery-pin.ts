@@ -10,8 +10,8 @@
 export const GH_BASE = 'https://health.googleapis.com/v4';
 export const GH_USER = 'me';
 
-/** reconcile の verb は discovery doc で確定するまで POST 想定(§5.1 要検証)。 */
-export const RECONCILE_VERB: 'POST' | 'GET' = 'POST';
+/** reconcile は GET(2026-05-31 discovery doc で確定: `dataPoints:reconcile` httpMethod=GET, body無し)。 */
+export const RECONCILE_VERB: 'POST' | 'GET' = 'GET';
 
 /** daily batch 読取の単一マスタ(§5.4)。内部キー=GH dataType ID。 */
 export interface ReadDataType {
