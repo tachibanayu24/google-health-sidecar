@@ -4,4 +4,5 @@ export * from './meals';
 export * from './settings';
 export * from './storage';
 export * from './sync';
+export * from './trends';
 export * from './workouts';

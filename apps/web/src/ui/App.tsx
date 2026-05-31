@@ -1,37 +1,61 @@
-import { House, PersonStanding, Plus, Settings, TrendingUp } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import {
+  Dumbbell,
+  House,
+  PersonStanding,
+  Plus,
+  Settings,
+  TrendingUp,
+  Utensils,
+  X,
+} from 'lucide-react';
+import { useState } from 'react';
 import { HistoryScreen } from './screens/History';
+import { MealScreen } from './screens/Meal';
 import { MuscleScreen } from './screens/Muscle';
 import { RecordScreen } from './screens/Record';
 import { SettingsScreen } from './screens/Settings';
 import { TodayScreen } from './screens/Today';
 
-type Tab = 'today' | 'history' | 'record' | 'muscle' | 'settings';
+type View = 'today' | 'history' | 'record' | 'meal' | 'muscle' | 'settings';
 
-const TITLES: Record<Tab, string> = {
+const TITLES: Record<View, string> = {
   today: 'Today',
   history: 'Trends',
-  record: 'Log Workout',
+  record: 'Workout',
+  meal: 'Meal',
   muscle: 'Muscle Map',
   settings: 'Settings',
 };
 
 export function App() {
-  const [tab, setTab] = useState<Tab>('today');
+  const [view, setView] = useState<View>('today');
+  const [chooser, setChooser] = useState(false);
 
   return (
     <div className="flex h-full flex-col">
-      <Header title={TITLES[tab]} />
+      <Header title={TITLES[view]} />
       <main className="flex-1 overflow-y-auto px-5 pb-28 pt-3">
-        <div key={tab} className="rise">
-          {tab === 'today' && <TodayScreen onGoRecord={() => setTab('record')} />}
-          {tab === 'history' && <HistoryScreen />}
-          {tab === 'record' && <RecordScreen onSaved={() => setTab('today')} />}
-          {tab === 'muscle' && <MuscleScreen />}
-          {tab === 'settings' && <SettingsScreen />}
+        <div key={view} className="rise">
+          {view === 'today' && <TodayScreen onGoRecord={() => setView('record')} />}
+          {view === 'history' && <HistoryScreen />}
+          {view === 'record' && <RecordScreen onSaved={() => setView('today')} />}
+          {view === 'meal' && <MealScreen onSaved={() => setView('today')} />}
+          {view === 'muscle' && <MuscleScreen />}
+          {view === 'settings' && <SettingsScreen />}
         </div>
       </main>
-      <BottomNav tab={tab} onChange={setTab} />
+
+      {chooser && (
+        <LogChooser
+          onClose={() => setChooser(false)}
+          onPick={(v) => {
+            setChooser(false);
+            setView(v);
+          }}
+        />
+      )}
+
+      <BottomNav view={view} onTab={setView} onPlus={() => setChooser(true)} />
     </div>
   );
 }
@@ -42,10 +66,10 @@ function Header({ title }: { title: string }) {
       <div className="mx-auto flex max-w-md items-center justify-between px-5 pb-3 pt-4">
         <div className="flex items-center gap-2.5">
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-ink text-card">
-            <span className="font-display text-sm font-black leading-none">G</span>
+            <span className="font-display text-sm font-black leading-none">L</span>
           </span>
           <span className="font-display text-[13px] font-bold uppercase tracking-[0.18em] text-muted">
-            GH Sidecar
+            Logbook
           </span>
         </div>
         <h1 className="font-display text-[15px] font-bold tracking-tight">{title}</h1>
@@ -54,54 +78,129 @@ function Header({ title }: { title: string }) {
   );
 }
 
-const NAV: Array<{ id: Tab; label: string; Icon: typeof House }> = [
-  { id: 'today', label: 'Today', Icon: House },
-  { id: 'history', label: 'Trends', Icon: TrendingUp },
-  { id: 'record', label: 'Log', Icon: Plus },
-  { id: 'muscle', label: 'Muscles', Icon: PersonStanding },
-  { id: 'settings', label: 'Settings', Icon: Settings },
-];
-
-function BottomNav({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
+function BottomNav({
+  view,
+  onTab,
+  onPlus,
+}: {
+  view: View;
+  onTab: (v: View) => void;
+  onPlus: () => void;
+}) {
+  const plusActive = view === 'record' || view === 'meal';
   return (
     <nav className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-line bg-card/95 backdrop-blur-md">
-      <div className="mx-auto flex max-w-md items-stretch justify-around px-2">
-        {NAV.map(({ id, label, Icon }) => {
-          const active = tab === id;
-          if (id === 'record') {
-            return (
-              <NavSlot key={id}>
-                <button
-                  type="button"
-                  aria-label="Log workout"
-                  onClick={() => onChange(id)}
-                  className="-mt-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent text-card shadow-[0_8px_24px_-6px] shadow-accent/60 transition-transform active:scale-95"
-                >
-                  <Icon strokeWidth={2.5} className="h-7 w-7" />
-                </button>
-              </NavSlot>
-            );
-          }
-          return (
-            <NavSlot key={id}>
-              <button
-                type="button"
-                onClick={() => onChange(id)}
-                className={`flex w-full flex-col items-center gap-1 py-2.5 text-[10px] font-semibold tracking-wide transition-colors ${
-                  active ? 'text-accent' : 'text-faint'
-                }`}
-              >
-                <Icon strokeWidth={active ? 2.4 : 2} className="h-[22px] w-[22px]" />
-                {label}
-              </button>
-            </NavSlot>
-          );
-        })}
+      <div className="mx-auto grid max-w-md grid-cols-5 items-stretch px-2">
+        <NavTab
+          Icon={House}
+          label="Today"
+          active={view === 'today'}
+          onClick={() => onTab('today')}
+        />
+        <NavTab
+          Icon={TrendingUp}
+          label="Trends"
+          active={view === 'history'}
+          onClick={() => onTab('history')}
+        />
+        <div className="flex items-center justify-center">
+          <button
+            type="button"
+            aria-label="記録する"
+            onClick={onPlus}
+            className={`-mt-6 flex h-14 w-14 items-center justify-center rounded-2xl text-card shadow-[0_8px_24px_-6px] shadow-accent/60 transition-transform active:scale-95 ${
+              plusActive ? 'bg-accent-ink' : 'bg-accent'
+            }`}
+          >
+            <Plus strokeWidth={2.5} className="h-7 w-7" />
+          </button>
+        </div>
+        <NavTab
+          Icon={PersonStanding}
+          label="Muscles"
+          active={view === 'muscle'}
+          onClick={() => onTab('muscle')}
+        />
+        <NavTab
+          Icon={Settings}
+          label="Settings"
+          active={view === 'settings'}
+          onClick={() => onTab('settings')}
+        />
       </div>
     </nav>
   );
 }
 
-function NavSlot({ children }: { children: ReactNode }) {
-  return <div className="flex flex-1 items-center justify-center">{children}</div>;
+function NavTab({
+  Icon,
+  label,
+  active,
+  onClick,
+}: {
+  Icon: typeof House;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex flex-col items-center gap-1 py-2.5 text-[10px] font-semibold tracking-wide transition-colors ${
+        active ? 'text-accent' : 'text-faint'
+      }`}
+    >
+      <Icon strokeWidth={active ? 2.4 : 2} className="h-[22px] w-[22px]" />
+      {label}
+    </button>
+  );
+}
+
+function LogChooser({ onClose, onPick }: { onClose: () => void; onPick: (v: View) => void }) {
+  return (
+    <div className="fixed inset-0 z-30 flex items-end">
+      <button
+        type="button"
+        aria-label="閉じる"
+        onClick={onClose}
+        className="absolute inset-0 bg-ink/40 backdrop-blur-[2px]"
+      />
+      <div className="safe-bottom rise relative mx-auto w-full max-w-md rounded-t-3xl border border-line bg-paper p-5 pb-8">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-display text-lg font-bold tracking-tight">何を記録する?</h2>
+          <button type="button" aria-label="閉じる" onClick={onClose} className="p-1 text-faint">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <ChooserButton Icon={Dumbbell} label="ワークアウト" onClick={() => onPick('record')} />
+          <ChooserButton Icon={Utensils} label="食事" onClick={() => onPick('meal')} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChooserButton({
+  Icon,
+  label,
+  onClick,
+}: {
+  Icon: typeof House;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex flex-col items-center gap-2 rounded-2xl border border-line bg-card py-6 font-semibold transition active:scale-[0.98]"
+    >
+      <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent-soft text-accent">
+        <Icon className="h-6 w-6" strokeWidth={2.2} />
+      </span>
+      {label}
+    </button>
+  );
 }

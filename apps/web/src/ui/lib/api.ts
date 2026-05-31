@@ -83,6 +83,19 @@ export interface SaveWorkoutResult {
   totalVolumeKg: number;
   newPrs: string[];
 }
+export interface FoodSuggestion {
+  food_name: string;
+  calories_kcal: number;
+  protein_g: number;
+  fat_g: number;
+  carbs_g: number;
+}
+export interface Trends {
+  days: number;
+  body: Array<{ date: string; weight_kg: number | null; body_fat_pct: number | null }>;
+  volumeDaily: Array<{ date: string; volume_kg: number }>;
+  pfcDaily: Array<{ date: string; kcal: number; p: number; f: number; c: number }>;
+}
 
 export const api = {
   getSettings: () =>
@@ -95,7 +108,10 @@ export const api = {
     req<{ sets: HistorySet[] }>(`/exercises/${encodeURIComponent(id)}/history`),
   muscleVolume: (windowDays = 7) =>
     req<{ windowDays: number; muscles: MuscleVolume[] }>(`/muscle-volume?window=${windowDays}`),
+  trends: (days = 90) => req<Trends>(`/trends?days=${days}`),
   today: () => req<Today>('/today'),
+  foodAutocomplete: (q: string) =>
+    req<{ foods: FoodSuggestion[] }>(`/foods/autocomplete?q=${encodeURIComponent(q)}`),
   saveWorkout: (body: unknown) =>
     req<SaveWorkoutResult>('/workouts', { method: 'POST', body: JSON.stringify(body) }),
   logMeal: (body: unknown) =>

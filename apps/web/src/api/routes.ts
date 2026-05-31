@@ -1,4 +1,5 @@
 import {
+  autocompleteFoods,
   getActiveNutritionTarget,
   getBodyMetricsByDate,
   getExerciseHistory,
@@ -7,6 +8,8 @@ import {
   getMealsByDate,
   getMuscleVolume,
   getSettings,
+  getTrends,
+  jstDaysAgo,
   type LogMealInput,
   type LogWeightInput,
   logMeal,
@@ -21,6 +24,11 @@ import type { HonoEnv } from '../env';
 
 /** UIバックエンド /api(§10.4 read 契約と対応, 全 write は services 経由 §8.5)。 */
 export const api = new Hono<HonoEnv>();
+
+api.get('/me', (c) => {
+  const user = c.get('user');
+  return c.json({ email: user.email, sub: user.sub });
+});
 
 api.get('/settings', async (c) => {
   const ctx = makeContext(c.env);
@@ -39,11 +47,46 @@ api.get('/exercises/search', async (c) => {
   return c.json({ exercises: rows });
 });
 
+api.get('/foods/autocomplete', async (c) => {
+  const ctx = makeContext(c.env);
+  const q = c.req.query('q') ?? '';
+  if (q.trim().length === 0) return c.json({ foods: [] });
+  const items = await autocompleteFoods(ctx.db, q, 8);
+  // 同名は最新1件に集約して候補化(food_name + 直近PFC)。
+  const seen = new Set<string>();
+  const foods: Array<{
+    food_name: string;
+    calories_kcal: number;
+    protein_g: number;
+    fat_g: number;
+    carbs_g: number;
+  }> = [];
+  for (const it of items) {
+    if (seen.has(it.food_name)) continue;
+    seen.add(it.food_name);
+    foods.push({
+      food_name: it.food_name,
+      calories_kcal: it.calories_kcal,
+      protein_g: it.protein_g,
+      fat_g: it.fat_g,
+      carbs_g: it.carbs_g,
+    });
+  }
+  return c.json({ foods });
+});
+
 api.get('/exercises/:id/history', async (c) => {
   const ctx = makeContext(c.env);
   const since = c.req.query('since');
   const sets = await getExerciseHistory(ctx, c.req.param('id'), { since });
   return c.json({ provenance: 'd1_confirmed', sets });
+});
+
+api.get('/trends', async (c) => {
+  const ctx = makeContext(c.env);
+  const days = Math.min(365, Number(c.req.query('days') ?? '90') || 90);
+  const trends = await getTrends(ctx.db, jstDaysAgo(days));
+  return c.json({ days, provenance: 'd1_confirmed', ...trends });
 });
 
 api.get('/muscle-volume', async (c) => {

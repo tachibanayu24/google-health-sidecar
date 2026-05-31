@@ -2,18 +2,19 @@ import { todayJst } from '@ghs/core/util/date';
 import { Hono } from 'hono';
 import { api } from './api/routes';
 import { requireAuth } from './auth/gate';
+import { auth } from './auth/routes';
 import type { Env, HonoEnv } from './env';
 
 const app = new Hono<HonoEnv>();
 
-app.get('/healthz', (c) => c.json({ ok: true, app: 'ghsidecar-web', todayJst: todayJst() }));
+app.get('/healthz', (c) => c.json({ ok: true, app: 'logbook', todayJst: todayJst() }));
+
+// 系統A: Google OIDC ログイン(/auth/login, /auth/callback, /auth/logout)。
+app.route('/auth', auth);
 
 // /api/* は認証ゲートの背後(系統A, §6.1)。
 app.use('/api/*', requireAuth);
 app.route('/api', api);
-
-// M1: /auth/* (Google OIDC ログイン)。callback 実装は UI 結線時。
-app.all('/auth/*', (c) => c.text('auth: login flow (M1, 結線中)', 501));
 
 // SPA(/ 以下の非API)は assets バインドが配信(run_worker_first 対象外)。Worker catch-all は持たない。
 

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { Flame } from 'lucide-react';
+import { useState } from 'react';
+import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter';
 import { Card } from '../components/Card';
 import { api, type MuscleVolume } from '../lib/api';
 import { ErrorBox, Loading } from './Today';
@@ -23,85 +24,132 @@ const NAME_JA: Record<string, string> = {
   lower_back: '脊柱起立筋',
 };
 
-/** stimulus(0..1)→ light 用の暖色ヒート(無刺激=ペーパー寄り → 朱)。 */
-function heat(s: number): { bg: string; fg: string; border: string } {
-  if (s <= 0.02) return { bg: '#efece4', fg: '#a8a294', border: '#e6e1d5' };
-  // 黄(45) → 朱(12) を彩度・明度を上げながら
-  const hue = 45 - s * 33;
-  const light = 92 - s * 42;
-  const sat = 70 + s * 20;
-  return {
-    bg: `hsl(${hue} ${sat}% ${light}%)`,
-    fg: s > 0.55 ? '#fffefb' : '#5a3410',
-    border: `hsl(${hue} ${sat}% ${light - 8}%)`,
-  };
+/** 我々の muscle id → react-body-highlighter の Muscle slug。 */
+const TO_SLUG: Record<string, Muscle> = {
+  chest: 'chest',
+  lats: 'upper-back',
+  traps: 'trapezius',
+  front_delts: 'front-deltoids',
+  side_delts: 'front-deltoids', // libに side が無いので前部で近似
+  rear_delts: 'back-deltoids',
+  biceps: 'biceps',
+  triceps: 'triceps',
+  forearms: 'forearm',
+  abs: 'abs',
+  obliques: 'obliques',
+  quads: 'quadriceps',
+  hamstrings: 'hamstring',
+  glutes: 'gluteal',
+  calves: 'calves',
+  lower_back: 'lower-back',
+};
+
+// 刺激量 0..1 を 5 段にバケット。色は light テーマの暖色ランプ(黄→朱)。
+const RAMP = ['#f6e7b0', '#f3c97a', '#ef9f53', '#e96f38', '#df4a26'];
+const BASE_BODY = '#e6e1d5';
+
+function bucket(s: number): number {
+  if (s <= 0.02) return 0;
+  return Math.min(5, Math.max(1, Math.ceil(s * 5)));
 }
 
 export function MuscleScreen() {
   const q = useQuery({ queryKey: ['muscle-volume', 7], queryFn: () => api.muscleVolume(7) });
+  const [side, setSide] = useState<'anterior' | 'posterior'>('anterior');
   if (q.isLoading) return <Loading />;
   if (q.error) return <ErrorBox error={q.error} />;
-  const muscles = [...q.data!.muscles].sort((a, b) => b.stimulus - a.stimulus);
+  const muscles = q.data!.muscles;
   const worked = muscles.filter((m) => m.actual_sets > 0).length;
+
+  // slug 単位で最大バケットを採る(side_delts/front_delts が同一 slug に当たる二重加算を回避)。
+  const slugBucket = new Map<Muscle, number>();
+  for (const m of muscles) {
+    const slug = TO_SLUG[m.muscle];
+    if (!slug) continue;
+    const b = bucket(m.stimulus);
+    if (b > (slugBucket.get(slug) ?? 0)) slugBucket.set(slug, b);
+  }
+  // バケットごとに slug をまとめ、frequency=バケット で塗り分け(index=freq-1)。
+  const data: IExerciseData[] = [1, 2, 3, 4, 5].map((b) => ({
+    name: `level-${b}`,
+    muscles: [...slugBucket.entries()].filter(([, bb]) => bb === b).map(([slug]) => slug),
+    frequency: b,
+  }));
+
+  const sorted = [...muscles].sort((a, b) => b.stimulus - a.stimulus);
 
   return (
     <div className="mx-auto max-w-md space-y-4">
       <div className="flex items-end justify-between">
         <div>
           <div className="font-display text-[11px] font-bold uppercase tracking-[0.14em] text-faint">
-            直近7日
+            直近7日の刺激
           </div>
           <div className="stat text-2xl">
             {worked}
-            <span className="ml-1 text-base text-muted">/16 部位</span>
+            <span className="ml-1 text-base text-muted">/ 16 部位</span>
           </div>
         </div>
-        <Flame className="h-6 w-6 text-accent" strokeWidth={2} />
+        <div className="flex overflow-hidden rounded-lg border border-line text-xs font-bold">
+          {(['anterior', 'posterior'] as const).map((s) => (
+            <button
+              type="button"
+              key={s}
+              onClick={() => setSide(s)}
+              className={`px-3 py-1.5 transition-colors ${
+                side === s ? 'bg-ink text-card' : 'bg-card text-faint'
+              }`}
+            >
+              {s === 'anterior' ? '前面' : '背面'}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5">
-        {muscles.map((m) => (
-          <MuscleCell key={m.muscle} m={m} />
-        ))}
-      </div>
-
-      <Card title="凡例">
-        <div className="flex items-center gap-2 text-xs text-muted">
+      <Card>
+        <div className="flex justify-center [&_svg]:h-auto [&_svg]:max-h-[46vh] [&_svg]:w-auto">
+          <Model
+            type={side}
+            data={data}
+            highlightedColors={RAMP}
+            bodyColor={BASE_BODY}
+            style={{ width: '62%' }}
+          />
+        </div>
+        <div className="mt-2 flex items-center gap-2 text-xs text-muted">
           <span>少</span>
           <div
             className="h-2 flex-1 rounded-full"
-            style={{
-              background: 'linear-gradient(90deg, #efece4, hsl(45 75% 80%), hsl(12 88% 55%))',
-            }}
+            style={{ background: `linear-gradient(90deg, ${BASE_BODY}, ${RAMP.join(',')})` }}
           />
           <span>多</span>
         </div>
-        <p className="mt-2 text-[11px] text-faint">
-          色 = 刺激量(ボリューム × 効き係数 × 直近減衰)。人体SVG(body-highlighter)は次段で重ねる。
-        </p>
+      </Card>
+
+      <Card title="部位別ボリューム">
+        <ul className="space-y-2">
+          {sorted.map((m) => (
+            <MuscleRow key={m.muscle} m={m} />
+          ))}
+        </ul>
       </Card>
     </div>
   );
 }
 
-function MuscleCell({ m }: { m: MuscleVolume }) {
-  const c = heat(m.stimulus);
-  const vsTarget = m.vs_target != null ? Math.round(m.vs_target * 100) : null;
+function MuscleRow({ m }: { m: MuscleVolume }) {
+  const b = bucket(m.stimulus);
+  const color = b === 0 ? BASE_BODY : RAMP[b - 1];
+  const pct = Math.round(m.stimulus * 100);
   return (
-    <div
-      className="rounded-xl border p-3"
-      style={{ background: c.bg, borderColor: c.border, color: c.fg }}
-    >
-      <div className="text-sm font-bold leading-tight">{NAME_JA[m.muscle] ?? m.muscle}</div>
-      <div className="mt-2 flex items-baseline gap-1">
-        <span className="stat text-xl leading-none">{m.actual_sets}</span>
-        <span className="text-[11px] opacity-80">
-          set{m.target_sets ? ` / ${m.target_sets}` : ''}
-        </span>
+    <li className="flex items-center gap-3">
+      <span className="w-24 shrink-0 text-sm">{NAME_JA[m.muscle] ?? m.muscle}</span>
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-line">
+        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
       </div>
-      {vsTarget != null && (
-        <div className="mt-0.5 text-[10px] font-semibold opacity-80">目標 {vsTarget}%</div>
-      )}
-    </div>
+      <span className="tnum w-16 shrink-0 text-right text-xs text-muted">
+        {m.actual_sets}set{m.target_sets ? `/${m.target_sets}` : ''}
+      </span>
+    </li>
   );
 }
