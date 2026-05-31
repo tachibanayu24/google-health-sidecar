@@ -15,8 +15,7 @@ app.route('/api', api);
 // M1: /auth/* (Google OIDC ログイン)。callback 実装は UI 結線時。
 app.all('/auth/*', (c) => c.text('auth: login flow (M1, 結線中)', 501));
 
-// SPA フォールバック(M1で assets バインド配信に置換)。
-app.get('*', (c) => c.text('ghsidecar (UI is M1)', 200));
+// SPA(/ 以下の非API)は assets バインドが配信(run_worker_first 対象外)。Worker catch-all は持たない。
 
 export default {
   fetch: app.fetch,

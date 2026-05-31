@@ -1,8 +1,4 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "types": ["@cloudflare/workers-types"],
-    "rootDir": "src"
-  },
-  "include": ["src/**/*.ts"]
+  "extends": "./tsconfig.app.json",
+  "comment": "エディタ既定はUI(app)。型チェックは package.json typecheck が worker/app 双方を実行。"
 }

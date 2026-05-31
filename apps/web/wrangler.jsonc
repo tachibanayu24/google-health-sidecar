@@ -4,8 +4,12 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-05-01",
   "compatibility_flags": ["nodejs_compat"],
-  // M1 で React PWA を ./dist にビルドして assets バインドを追加する(§12.1)。
-  // "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*", "/auth/*"] },
+  // React PWA(@cloudflare/vite-plugin)。client アセットはプラグインが配線。
+  // /api・/auth・/healthz は Worker、他は SPA フォールバック(§12.1)。
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/auth/*", "/healthz"]
+  },
   "d1_databases": [
     {
       "binding": "DB",
