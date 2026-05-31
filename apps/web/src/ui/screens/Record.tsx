@@ -3,6 +3,7 @@ import { Check, Plus, Search, Trophy, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Card } from '../components/Card';
 import { api, type Exercise } from '../lib/api';
+import { MUSCLE_GROUPS } from '../lib/muscles';
 
 interface SetRow {
   key: string;
@@ -35,6 +36,7 @@ export function RecordScreen({ onSaved }: { onSaved: () => void }) {
   const [bodyweight, setBodyweight] = useState<number | null>(null);
   const [items, setItems] = useState<LoggedExercise[]>([]);
   const [search, setSearch] = useState('');
+  const [muscle, setMuscle] = useState<string | null>(null);
 
   // 主単位は settings 読込後に「一度だけ」初期化(ユーザー操作後は上書きしない)。
   const unitInit = useRef(false);
@@ -45,14 +47,16 @@ export function RecordScreen({ onSaved }: { onSaved: () => void }) {
     }
   }, [settings.data]);
 
+  // テキスト検索 or 部位チップ のどちらかが指定されたら候補を引く(部位タップで種目候補, 要望)。
   const found = useQuery({
-    queryKey: ['ex-search', search],
-    queryFn: () => api.searchExercises(search),
-    enabled: search.trim().length > 0,
+    queryKey: ['ex-search', search, muscle],
+    queryFn: () => api.searchExercises(search, muscle ?? undefined),
+    enabled: search.trim().length > 0 || muscle != null,
   });
 
   async function addExercise(ex: Exercise) {
     setSearch('');
+    setMuscle(null);
     let prefill: SetRow[] = [newSet()];
     let last: string | undefined;
     try {
@@ -206,9 +210,30 @@ export function RecordScreen({ onSaved }: { onSaved: () => void }) {
             className="w-full bg-transparent text-sm outline-none placeholder:text-faint"
           />
         </div>
-        {found.data && search && (
+
+        {/* 部位タップで種目候補(要望) */}
+        <div className="mt-2 -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+          {MUSCLE_GROUPS.map((mg) => (
+            <button
+              type="button"
+              key={mg.id}
+              onClick={() => setMuscle((cur) => (cur === mg.id ? null : mg.id))}
+              className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+                muscle === mg.id ? 'bg-accent text-card' : 'bg-paper text-muted border border-line'
+              }`}
+            >
+              {mg.ja}
+            </button>
+          ))}
+        </div>
+
+        {(search.trim() || muscle) && (
           <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto">
-            {found.data.exercises.map((ex) => (
+            {found.isLoading && <li className="px-3 py-2 text-sm text-faint">検索中…</li>}
+            {found.data?.exercises.length === 0 && (
+              <li className="px-3 py-2 text-sm text-faint">該当なし(種目シードは順次拡充)</li>
+            )}
+            {found.data?.exercises.map((ex) => (
               <li key={ex.id}>
                 <button
                   type="button"
