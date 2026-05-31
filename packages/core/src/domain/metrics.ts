@@ -78,6 +78,23 @@ export function countsTowardVolume(setType: SetType): boolean {
   return setType !== 'warmup';
 }
 
+/** 直近減衰(§8.3 ヒートマップ)。half_life≈window/2 の指数減衰。 */
+export function recencyDecay(daysAgo: number, windowDays: number): number {
+  const halfLife = Math.max(1, windowDays / 2);
+  return 2 ** (-daysAgo / halfLife);
+}
+
+/** 筋トレ消費カロリー推定(§8.4, METs。保守的・GH push用の参考値)。 */
+export function estStrengthCaloriesKcal(
+  bodyweightKg: number | null,
+  activeDurationSec: number | null,
+  met = 5.0,
+): number | null {
+  if (!bodyweightKg || !activeDurationSec || activeDurationSec <= 0) return null;
+  const minutes = activeDurationSec / 60;
+  return Math.round(((met * 3.5 * bodyweightKg) / 200) * minutes);
+}
+
 /** ヒートマップ stimulus の set_type 重み(§8.3)。 */
 export function setTypeStimulusWeight(setType: SetType): number {
   switch (setType) {
