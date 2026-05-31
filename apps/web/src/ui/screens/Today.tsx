@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { Card } from '../components/Card';
+import { Dumbbell, Flame, Moon, Scale, Utensils } from 'lucide-react';
+import { Card, Stat } from '../components/Card';
 import { api } from '../lib/api';
-import { fmtKg } from '../lib/units';
+import { fmtKg, round } from '../lib/units';
 
 export function TodayScreen({ onGoRecord }: { onGoRecord: () => void }) {
   const today = useQuery({ queryKey: ['today'], queryFn: api.today });
@@ -16,31 +17,47 @@ export function TodayScreen({ onGoRecord }: { onGoRecord: () => void }) {
   const weight = deviceWeight ?? appWeight;
 
   return (
-    <div className="mx-auto max-w-md space-y-3">
-      <h1 className="text-lg font-bold">{t.date}</h1>
+    <div className="mx-auto max-w-md space-y-4">
+      <DateLine date={t.date} />
 
       <div className="grid grid-cols-2 gap-3">
-        <Card title="体重">
-          <div className="text-xl font-semibold">{fmtKg(weight?.weight_kg ?? null)}</div>
-          <div className="mt-1 text-[11px] text-gray-400">
-            {deviceWeight ? 'Google Health(測定)' : appWeight ? '手入力' : '記録なし'}
+        <Card>
+          <div className="mb-1 flex items-center gap-1.5 text-faint">
+            <Scale className="h-3.5 w-3.5" strokeWidth={2.4} />
+            <span className="font-display text-[11px] font-bold uppercase tracking-[0.12em]">
+              体重
+            </span>
           </div>
+          <div className="stat text-2xl leading-none">{weightMain(weight?.weight_kg)}</div>
+          <div className="mt-1.5 text-[11px] text-muted">{weightSub(weight?.weight_kg)}</div>
+          <SourceBadge device={!!deviceWeight} app={!!appWeight} />
         </Card>
-        <Card title="体脂肪">
-          <div className="text-xl font-semibold">
-            {weight?.body_fat_pct != null ? `${weight.body_fat_pct}%` : '—'}
+        <Card>
+          <div className="mb-1 flex items-center gap-1.5 text-faint">
+            <span className="font-display text-[11px] font-bold uppercase tracking-[0.12em]">
+              体脂肪
+            </span>
+          </div>
+          <div className="stat text-2xl leading-none">
+            {weight?.body_fat_pct != null ? round(weight.body_fat_pct, 1) : '—'}
+            {weight?.body_fat_pct != null && <span className="ml-0.5 text-base text-muted">%</span>}
           </div>
         </Card>
       </div>
 
       {t.inProgress && (
-        <Card title="記録中のワークアウト" accent>
+        <Card accent>
           <div className="flex items-center justify-between">
-            <span>{t.inProgress.title ?? 'ワークアウト'}</span>
+            <div className="flex items-center gap-2">
+              <Dumbbell className="h-4 w-4 text-accent" strokeWidth={2.4} />
+              <span className="text-sm font-semibold">
+                記録中 · {t.inProgress.title ?? 'ワークアウト'}
+              </span>
+            </div>
             <button
               type="button"
               onClick={onGoRecord}
-              className="rounded-md bg-emerald-600 px-3 py-1 text-sm"
+              className="rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-card"
             >
               再開
             </button>
@@ -48,43 +65,111 @@ export function TodayScreen({ onGoRecord }: { onGoRecord: () => void }) {
         </Card>
       )}
 
-      <Card title="今日の食事">
+      <Card title="今日の栄養" right={<Flame className="h-4 w-4 text-accent" strokeWidth={2.2} />}>
         <div className="flex items-baseline justify-between">
-          <span className="text-2xl font-bold">{Math.round(t.pfc.kcal)}</span>
-          <span className="text-sm text-gray-400">
-            / {target ? Math.round(target.target_kcal) : '—'} kcal
+          <Stat value={Math.round(t.pfc.kcal)} unit="kcal" />
+          <span className="text-sm text-muted">
+            目標 {target ? Math.round(target.target_kcal) : '—'}
           </span>
         </div>
-        <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
-          <Macro label="P" v={t.pfc.p} t={target?.target_protein_g} color="text-rose-300" />
-          <Macro label="F" v={t.pfc.f} t={target?.target_fat_g} color="text-amber-300" />
-          <Macro label="C" v={t.pfc.c} t={target?.target_carbs_g} color="text-sky-300" />
+        <div className="mt-4 space-y-2.5">
+          <MacroBar
+            label="Protein"
+            v={t.pfc.p}
+            t={target?.target_protein_g}
+            varName="--color-protein"
+          />
+          <MacroBar label="Fat" v={t.pfc.f} t={target?.target_fat_g} varName="--color-fat" />
+          <MacroBar label="Carbs" v={t.pfc.c} t={target?.target_carbs_g} varName="--color-carb" />
         </div>
-        {t.meals.length > 0 && (
-          <ul className="mt-3 space-y-1 text-sm text-gray-300">
+        {t.meals.length > 0 ? (
+          <ul className="mt-4 space-y-1.5 border-t border-line pt-3 text-sm">
             {t.meals.map((m) => (
-              <li key={m.id} className="flex justify-between">
-                <span>{mealTypeJa(m.meal_type)}</span>
-                <span className="text-gray-400">
+              <li key={m.id} className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-ink">
+                  <Utensils className="h-3.5 w-3.5 text-faint" strokeWidth={2.2} />
+                  {mealTypeJa(m.meal_type)}
+                </span>
+                <span className="tnum text-muted">
                   {Math.round(m.items.reduce((a, i) => a + i.calories_kcal, 0))} kcal
                 </span>
               </li>
             ))}
           </ul>
+        ) : (
+          <p className="mt-4 border-t border-line pt-3 text-sm text-faint">
+            まだ食事の記録がありません
+          </p>
         )}
+      </Card>
+
+      <Card title="睡眠" right={<Moon className="h-4 w-4 text-carb" strokeWidth={2.2} />}>
+        <p className="text-sm text-faint">
+          Google Health 同期(daily batch)で表示。トークン接続後に有効化。
+        </p>
       </Card>
     </div>
   );
 }
 
-function Macro({ label, v, t, color }: { label: string; v: number; t?: number; color: string }) {
+function weightMain(kg: number | null | undefined): string {
+  if (kg == null) return '—';
+  return `${round(kg, 1)}`;
+}
+function weightSub(kg: number | null | undefined): string {
+  if (kg == null) return 'kg / lb';
+  return fmtKg(kg);
+}
+
+function SourceBadge({ device, app }: { device: boolean; app: boolean }) {
+  const label = device ? 'Google Health' : app ? '手入力' : '記録なし';
   return (
-    <div className="rounded-lg bg-white/5 py-2">
-      <div className={`font-bold ${color}`}>{label}</div>
-      <div className="text-sm">
-        {Math.round(v)}
-        {t ? <span className="text-gray-500"> / {Math.round(t)}g</span> : 'g'}
+    <span className="mt-2 inline-block rounded-full bg-paper px-2 py-0.5 text-[10px] font-semibold text-faint">
+      {label}
+    </span>
+  );
+}
+
+function MacroBar({
+  label,
+  v,
+  t,
+  varName,
+}: {
+  label: string;
+  v: number;
+  t?: number;
+  varName: string;
+}) {
+  const pct = t && t > 0 ? Math.min(100, (v / t) * 100) : 0;
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-xs">
+        <span className="font-semibold" style={{ color: `var(${varName})` }}>
+          {label}
+        </span>
+        <span className="tnum text-muted">
+          {Math.round(v)}
+          {t ? ` / ${Math.round(t)}g` : 'g'}
+        </span>
       </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-line">
+        <div
+          className="h-full rounded-full transition-[width] duration-500"
+          style={{ width: `${pct}%`, backgroundColor: `var(${varName})` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function DateLine({ date }: { date: string }) {
+  const d = new Date(`${date}T00:00:00+09:00`);
+  const wd = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="stat text-2xl">{date.slice(5).replace('-', '/')}</span>
+      <span className="text-sm font-semibold text-muted">({wd})</span>
     </div>
   );
 }
@@ -103,11 +188,11 @@ function mealTypeJa(t: string): string {
 }
 
 export function Loading() {
-  return <div className="py-20 text-center text-gray-500">読み込み中…</div>;
+  return <div className="py-24 text-center text-sm text-faint">読み込み中…</div>;
 }
 export function ErrorBox({ error }: { error: unknown }) {
   return (
-    <div className="rounded-lg bg-rose-950/50 p-4 text-sm text-rose-200">
+    <div className="rounded-xl border border-accent/30 bg-accent-soft p-4 text-sm text-accent-ink">
       エラー: {error instanceof Error ? error.message : String(error)}
     </div>
   );

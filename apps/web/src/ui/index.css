@@ -1,9 +1,30 @@
 @import 'tailwindcss';
 
-/* ジム映えするダーク前提(§4.1)。セーフエリア対応(iOS home-screen)。 */
-:root {
-  color-scheme: dark;
+/*
+ * デザイン方針: ウォームペーパーの light テーマ × インク黒 × バーミリオン(朱)アクセント。
+ * 精密で athletic なトレーニング・ジャーナル。データは大きな tabular 数字で見せる。
+ * 参照: Whoop(データ明快さ)/ MacroFactor(light・数値前面)/ 印刷物の余白とタイポ。
+ */
+@theme {
+  --font-sans: 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+
+  --color-paper: #f4f1ea; /* ウォームなボーン白 */
+  --color-card: #fffefb;
+  --color-ink: #19160f; /* ウォーム near-black */
+  --color-muted: #746f60; /* ウォームグレー */
+  --color-faint: #a8a294;
+  --color-line: #e6e1d5; /* ウォーム境界 */
+  --color-accent: #df4a26; /* バーミリオン */
+  --color-accent-ink: #b53914;
+  --color-accent-soft: #fbe7df;
+
+  /* マクロ/データ系の差し色(light で映える落ち着いたトーン) */
+  --color-protein: #c2410c;
+  --color-fat: #b7791f;
+  --color-carb: #1d6f6f;
 }
+
 html,
 body,
 #root {
@@ -11,19 +32,59 @@ body,
 }
 body {
   margin: 0;
-  background: #0b0f17;
-  color: #e5e7eb;
-  font-family:
-    system-ui,
-    -apple-system,
-    'Hiragino Kaku Gothic ProN',
-    sans-serif;
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* 微細なペーパーテクスチャ(のっぺり回避) */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.5;
+  background-image: radial-gradient(circle at 1px 1px, rgba(25, 22, 15, 0.035) 1px, transparent 0);
+  background-size: 22px 22px;
+}
+#root {
+  position: relative;
+  z-index: 1;
+}
+
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom);
 }
 .safe-top {
   padding-top: env(safe-area-inset-top);
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* 数字を大きく見せる display ユーティリティ */
+.stat {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise {
+  animation: rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
