@@ -8,6 +8,7 @@
 @theme {
   --font-sans: 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, 'SF Mono', monospace;
 
   --color-paper: #f4f1ea; /* ウォームなボーン白 */
   --color-card: #fffefb;

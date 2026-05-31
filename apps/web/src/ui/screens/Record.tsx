@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Plus, Search, Trophy, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card } from '../components/Card';
 import { api, type Exercise } from '../lib/api';
 
@@ -36,14 +36,14 @@ export function RecordScreen({ onSaved }: { onSaved: () => void }) {
   const [items, setItems] = useState<LoggedExercise[]>([]);
   const [search, setSearch] = useState('');
 
-  if (
-    settings.data &&
-    unit !== settings.data.settings.unit_preference &&
-    items.length === 0 &&
-    !search
-  ) {
-    setUnit(settings.data.settings.unit_preference);
-  }
+  // 主単位は settings 読込後に「一度だけ」初期化(ユーザー操作後は上書きしない)。
+  const unitInit = useRef(false);
+  useEffect(() => {
+    if (!unitInit.current && settings.data) {
+      setUnit(settings.data.settings.unit_preference);
+      unitInit.current = true;
+    }
+  }, [settings.data]);
 
   const found = useQuery({
     queryKey: ['ex-search', search],
@@ -56,7 +56,7 @@ export function RecordScreen({ onSaved }: { onSaved: () => void }) {
     let prefill: SetRow[] = [newSet()];
     let last: string | undefined;
     try {
-      const h = await api.exerciseHistory(ex.id);
+      const h = await api.exerciseHistory(ex.id, { limit: 50 });
       const lastMain = h.sets.find((s) => s.set_type === 'main');
       if (lastMain) {
         const v = unit === lastMain.entry_unit ? lastMain.entry_value : null;
@@ -107,12 +107,15 @@ export function RecordScreen({ onSaved }: { onSaved: () => void }) {
   const totalSets = items.reduce((a, it) => a + it.sets.length, 0);
 
   const save = useMutation({
-    mutationFn: () =>
-      api.saveWorkout({
+    mutationFn: () => {
+      // ライブタイマーは持たないので、所要時間はセット数から概算(1セット≈3分、最低5分)。
+      const now = Math.floor(Date.now() / 1000);
+      const estDurationSec = Math.max(300, totalSets * 180);
+      return api.saveWorkout({
         title: title || undefined,
         bodyweightKg: bodyweight,
-        startedAtSec: Math.floor(Date.now() / 1000) - 3600,
-        endedAtSec: Math.floor(Date.now() / 1000),
+        startedAtSec: now - estDurationSec,
+        endedAtSec: now,
         exercises: items.map((it) => ({
           exerciseId: it.exercise.id,
           sets: it.sets.map((s) => ({
@@ -123,10 +126,12 @@ export function RecordScreen({ onSaved }: { onSaved: () => void }) {
             rpe: s.rpe,
           })),
         })),
-      }),
+      });
+    },
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['today'] });
-      qc.invalidateQueries({ queryKey: ['muscle-volume', 7] });
+      qc.invalidateQueries({ queryKey: ['muscle-volume'] });
+      qc.invalidateQueries({ queryKey: ['trends'] });
       onSaved();
       if (r.newPrs.length) alert(`保存 ${r.totalVolumeKg}kg · 🎉 PR更新 ${r.newPrs.length}件`);
     },

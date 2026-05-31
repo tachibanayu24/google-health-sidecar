@@ -16,6 +16,7 @@ import {
   logWeight,
   makeContext,
   type SaveWorkoutInput,
+  saltGFromSodiumMg,
   saveWorkout,
   searchExercises,
 } from '@ghs/core';
@@ -60,6 +61,7 @@ api.get('/foods/autocomplete', async (c) => {
     protein_g: number;
     fat_g: number;
     carbs_g: number;
+    sodium_mg: number | null;
   }> = [];
   for (const it of items) {
     if (seen.has(it.food_name)) continue;
@@ -70,6 +72,7 @@ api.get('/foods/autocomplete', async (c) => {
       protein_g: it.protein_g,
       fat_g: it.fat_g,
       carbs_g: it.carbs_g,
+      sodium_mg: it.sodium_mg,
     });
   }
   return c.json({ foods });
@@ -78,7 +81,9 @@ api.get('/foods/autocomplete', async (c) => {
 api.get('/exercises/:id/history', async (c) => {
   const ctx = makeContext(c.env);
   const since = c.req.query('since');
-  const sets = await getExerciseHistory(ctx, c.req.param('id'), { since });
+  const limitRaw = c.req.query('limit');
+  const limit = limitRaw ? Math.min(2000, Math.max(1, Number(limitRaw) || 0)) : undefined;
+  const sets = await getExerciseHistory(ctx, c.req.param('id'), { since, limit });
   return c.json({ provenance: 'd1_confirmed', sets });
 });
 
@@ -108,7 +113,7 @@ api.get('/today', async (c) => {
   const mealsWithItems = await Promise.all(
     meals.map(async (m) => ({ ...m, items: await getMealItems(ctx.db, m.id) })),
   );
-  const pfc = mealsWithItems
+  const agg = mealsWithItems
     .flatMap((m) => m.items)
     .reduce(
       (a, it) => ({
@@ -116,9 +121,18 @@ api.get('/today', async (c) => {
         p: a.p + it.protein_g,
         f: a.f + it.fat_g,
         c: a.c + it.carbs_g,
+        sodiumMg: a.sodiumMg + (it.sodium_mg ?? 0),
       }),
-      { kcal: 0, p: 0, f: 0, c: 0 },
+      { kcal: 0, p: 0, f: 0, c: 0, sodiumMg: 0 },
     );
+  // 表示は食塩相当量(g)。GHには sodium(mg)で保存。
+  const pfc = {
+    kcal: agg.kcal,
+    p: agg.p,
+    f: agg.f,
+    c: agg.c,
+    salt_g: Math.round(saltGFromSodiumMg(agg.sodiumMg) * 10) / 10,
+  };
   return c.json({
     date: d,
     provenance: 'd1_confirmed',

@@ -11,3 +11,11 @@ export function round(v: number, d = 1): number {
   const f = 10 ** d;
   return Math.round(v * f) / f;
 }
+
+// 食塩相当量(g) = ナトリウム(mg) × 2.54 / 1000(GHは sodium で保存・表示は食塩相当量)。
+export function saltFromSodiumMg(mg: number): number {
+  return (mg * 2.54) / 1000;
+}
+export function sodiumMgFromSalt(g: number): number {
+  return (g * 1000) / 2.54;
+}

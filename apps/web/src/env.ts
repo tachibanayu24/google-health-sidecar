@@ -8,6 +8,8 @@ export interface Env {
   // vars
   ALLOWED_EMAIL: string;
   FEATURE_GH_NUTRITION_PUSH: string;
+  /** 本番の公開オリジン(OAuth redirect_uri を固定。未設定ならリクエストオリジン)。 */
+  PUBLIC_ORIGIN?: string;
   // secrets(wrangler secret put / .dev.vars)
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;

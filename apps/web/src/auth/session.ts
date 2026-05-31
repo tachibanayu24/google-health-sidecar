@@ -69,12 +69,17 @@ export async function verifySession(
   }
 }
 
-export function sessionCookie(token: string, ttlSec = 30 * 24 * 60 * 60): string {
-  return `${SESSION_COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${ttlSec}`;
+export function sessionCookie(
+  token: string,
+  opts: { secure?: boolean; ttlSec?: number } = {},
+): string {
+  const ttlSec = opts.ttlSec ?? 30 * 24 * 60 * 60;
+  const secure = opts.secure === false ? '' : '; Secure';
+  return `${SESSION_COOKIE}=${token}; HttpOnly${secure}; SameSite=Lax; Path=/; Max-Age=${ttlSec}`;
 }
 
 export function clearSessionCookie(): string {
-  return `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
+  return `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`;
 }
 
 export function readSessionToken(cookieHeader: string | null): string | null {

@@ -54,9 +54,9 @@ export function App() {
 function Header() {
   return (
     <header className="safe-top sticky top-0 z-20 border-b border-line bg-paper/85 backdrop-blur-md">
-      <div className="mx-auto flex max-w-md items-center gap-2 px-5 pb-3 pt-4">
-        <Dumbbell className="h-5 w-5 text-accent" strokeWidth={2.4} />
-        <span className="font-display text-lg font-extrabold tracking-tight">Logbook</span>
+      <div className="mx-auto flex max-w-md items-center justify-center gap-2 px-5 pb-3 pt-4">
+        <Dumbbell className="h-[18px] w-[18px] text-accent" strokeWidth={2.5} />
+        <span className="font-mono text-base font-bold tracking-tight">Logbook</span>
       </div>
     </header>
   );

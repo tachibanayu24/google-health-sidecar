@@ -27,6 +27,7 @@ export function SettingsScreen() {
               nutritionTarget.target_fat_g,
             )} · C${Math.round(nutritionTarget.target_carbs_g)} g`}
           />
+          <Row label="食塩相当量" value={`< ${nutritionTarget.target_salt_g} g`} />
         </Card>
       )}
       <Card title="連携" right={<Gauge className="h-4 w-4 text-faint" strokeWidth={2.2} />}>

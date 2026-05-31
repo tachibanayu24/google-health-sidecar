@@ -57,12 +57,21 @@ export async function getMealItems(db: Db, mealId: string): Promise<MealItem[]> 
   return db.all(MealItemSchema, 'SELECT * FROM meal_items WHERE meal_id = ?', mealId);
 }
 
-/** food_name オートコンプリート源(§9.4: 過去PFCの再利用)。 */
+/** food_name オートコンプリート源(§9.4: 過去PFCの再利用)。同名は「最新行そのもの」を返す。 */
 export async function autocompleteFoods(db: Db, q: string, limit = 8): Promise<MealItem[]> {
+  // bare-column 集約だと max(created_at) の行と他列が一致しないため、相関サブクエリで最新行を取る。
+  // LIKE ワイルドカード(%,_)はエスケープして誤マッチを防ぐ(ESCAPE '\\')。
+  const pattern = `%${q.replace(/[\\%_]/g, '\\$&')}%`;
   return db.all(
     MealItemSchema,
-    `SELECT * FROM meal_items WHERE food_name LIKE ? GROUP BY food_name ORDER BY max(created_at) DESC LIMIT ?`,
-    `%${q}%`,
+    `SELECT mi.* FROM meal_items mi
+      WHERE mi.food_name LIKE ? ESCAPE '\\'
+        AND mi.created_at = (
+          SELECT max(m2.created_at) FROM meal_items m2 WHERE m2.food_name = mi.food_name)
+      GROUP BY mi.food_name
+      ORDER BY mi.created_at DESC
+      LIMIT ?`,
+    pattern,
     limit,
   );
 }

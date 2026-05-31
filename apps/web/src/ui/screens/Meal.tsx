@@ -3,6 +3,7 @@ import { Check, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Card } from '../components/Card';
 import { api, type FoodSuggestion } from '../lib/api';
+import { round, saltFromSodiumMg, sodiumMgFromSalt } from '../lib/units';
 
 const MEAL_TYPES = [
   { id: 'Breakfast', label: '朝食' },
@@ -20,6 +21,7 @@ interface Item {
   proteinG: number | null;
   fatG: number | null;
   carbsG: number | null;
+  saltG: number | null; // 食塩相当量(g)。保存時に sodium(mg)へ換算。
 }
 const newItem = (init?: Partial<Item>): Item => ({
   key: crypto.randomUUID(),
@@ -28,6 +30,7 @@ const newItem = (init?: Partial<Item>): Item => ({
   proteinG: null,
   fatG: null,
   carbsG: null,
+  saltG: null,
   ...init,
 });
 
@@ -46,8 +49,9 @@ export function MealScreen({ onSaved }: { onSaved: () => void }) {
       p: a.p + (it.proteinG ?? 0),
       f: a.f + (it.fatG ?? 0),
       c: a.c + (it.carbsG ?? 0),
+      salt: a.salt + (it.saltG ?? 0),
     }),
-    { kcal: 0, p: 0, f: 0, c: 0 },
+    { kcal: 0, p: 0, f: 0, c: 0, salt: 0 },
   );
 
   const valid = items.filter((it) => it.foodName.trim() && it.caloriesKcal != null);
@@ -63,10 +67,12 @@ export function MealScreen({ onSaved }: { onSaved: () => void }) {
           proteinG: it.proteinG ?? undefined,
           fatG: it.fatG ?? undefined,
           carbsG: it.carbsG ?? undefined,
+          sodiumMg: it.saltG != null ? Math.round(sodiumMgFromSalt(it.saltG)) : undefined,
         })),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['today'] });
+      qc.invalidateQueries({ queryKey: ['trends'] });
       onSaved();
     },
   });
@@ -106,11 +112,12 @@ export function MealScreen({ onSaved }: { onSaved: () => void }) {
         <Plus className="h-4 w-4" /> 品目を追加
       </button>
 
-      <div className="flex items-center justify-around rounded-2xl bg-ink px-4 py-3 text-card">
+      <div className="flex items-center justify-around rounded-2xl bg-ink px-3 py-3 text-card">
         <M label="kcal" v={Math.round(total.kcal)} />
         <M label="P" v={Math.round(total.p)} />
         <M label="F" v={Math.round(total.f)} />
         <M label="C" v={Math.round(total.c)} />
+        <M label="塩g" v={round(total.salt, 1)} />
       </div>
 
       <button
@@ -178,6 +185,7 @@ function ItemCard({
       proteinG: Math.round(s.protein_g),
       fatG: Math.round(s.fat_g),
       carbsG: Math.round(s.carbs_g),
+      saltG: s.sodium_mg != null ? round(saltFromSodiumMg(s.sodium_mg), 1) : null,
     });
     setOpen(false);
   }
@@ -193,6 +201,7 @@ function ItemCard({
               setOpen(true);
             }}
             onFocus={() => setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
             placeholder="食品名(例: 鶏胸肉)"
             className="w-full border-b border-line bg-transparent pb-1 text-sm font-semibold outline-none placeholder:font-normal placeholder:text-faint focus:border-accent"
           />
@@ -226,7 +235,7 @@ function ItemCard({
           </button>
         )}
       </div>
-      <div className="mt-3 grid grid-cols-4 gap-2">
+      <div className="mt-3 grid grid-cols-5 gap-1.5">
         <Field
           label="kcal"
           value={item.caloriesKcal}
@@ -235,6 +244,7 @@ function ItemCard({
         <Field label="P" value={item.proteinG} onChange={(v) => onChange({ proteinG: v })} />
         <Field label="F" value={item.fatG} onChange={(v) => onChange({ fatG: v })} />
         <Field label="C" value={item.carbsG} onChange={(v) => onChange({ carbsG: v })} />
+        <Field label="塩g" value={item.saltG} onChange={(v) => onChange({ saltG: v })} />
       </div>
     </Card>
   );

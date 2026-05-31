@@ -43,11 +43,13 @@ export async function updateSessionDerived(
   );
 }
 
-/** 中断再開(§9.3): in_progress の最新セッション。 */
+/** 中断再開(§9.3): in_progress の最新セッション。24h 超の放置は除外(バナーが残り続けない)。 */
 export async function getInProgressSession(db: Db): Promise<WorkoutSession | null> {
+  const cutoff = nowSec() - 24 * 60 * 60;
   return db.one(
     WorkoutSessionSchema,
-    `SELECT * FROM workout_sessions WHERE status='in_progress' ORDER BY started_at DESC LIMIT 1`,
+    `SELECT * FROM workout_sessions WHERE status='in_progress' AND started_at > ? ORDER BY started_at DESC LIMIT 1`,
+    cutoff,
   );
 }
 

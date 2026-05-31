@@ -82,6 +82,7 @@ export function TodayScreen({ onGoRecord }: { onGoRecord: () => void }) {
           <MacroBar label="Fat" v={t.pfc.f} t={target?.target_fat_g} varName="--color-fat" />
           <MacroBar label="Carbs" v={t.pfc.c} t={target?.target_carbs_g} varName="--color-carb" />
         </div>
+        <SaltLine v={t.pfc.salt_g} target={target?.target_salt_g ?? 6} />
         {t.meals.length > 0 ? (
           <ul className="mt-4 space-y-1.5 border-t border-line pt-3 text-sm">
             {t.meals.map((m) => (
@@ -157,6 +158,30 @@ function MacroBar({
         <div
           className="h-full rounded-full transition-[width] duration-500"
           style={{ width: `${pct}%`, backgroundColor: `var(${varName})` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SaltLine({ v, target }: { v: number; target: number }) {
+  const over = v > target;
+  const pct = target > 0 ? Math.min(100, (v / target) * 100) : 0;
+  return (
+    <div className="mt-3 border-t border-line pt-3">
+      <div className="mb-1 flex items-center justify-between text-xs">
+        <span className="font-semibold text-muted">食塩相当量</span>
+        <span className={`tnum font-semibold ${over ? 'text-accent-ink' : 'text-muted'}`}>
+          {v} / {target} g{over ? ' ⚠' : ''}
+        </span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-line">
+        <div
+          className="h-full rounded-full transition-[width] duration-500"
+          style={{
+            width: `${pct}%`,
+            backgroundColor: over ? 'var(--color-accent)' : 'var(--color-muted)',
+          }}
         />
       </div>
     </div>

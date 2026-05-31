@@ -12,8 +12,18 @@ export const auth = new Hono<HonoEnv>();
 const GOOGLE_AUTH = 'https://accounts.google.com/o/oauth2/v2/auth';
 const STATE_COOKIE = 'ghs_oauth_state';
 
-function redirectUri(reqUrl: string): string {
-  return `${new URL(reqUrl).origin}/auth/callback`;
+/**
+ * redirect_uri は GCP 登録値と完全一致が必須。プロキシ環境で req オリジンが内部値になる事故を防ぐため、
+ * `PUBLIC_ORIGIN`(vars)が設定されていればそれを優先し、無ければ req のオリジンにフォールバック(dev)。
+ */
+function redirectUri(c: { env: { PUBLIC_ORIGIN?: string }; req: { url: string } }): string {
+  const origin = c.env.PUBLIC_ORIGIN || new URL(c.req.url).origin;
+  return `${origin.replace(/\/$/, '')}/auth/callback`;
+}
+
+/** http(ローカル)では Secure cookie が保存されないため、https のときだけ Secure を付ける。 */
+function secureAttr(reqUrl: string): string {
+  return new URL(reqUrl).protocol === 'https:' ? '; Secure' : '';
 }
 
 auth.get('/login', (c) => {
@@ -22,14 +32,14 @@ auth.get('/login', (c) => {
   const state = crypto.randomUUID();
   const u = new URL(GOOGLE_AUTH);
   u.searchParams.set('client_id', clientId);
-  u.searchParams.set('redirect_uri', redirectUri(c.req.url));
+  u.searchParams.set('redirect_uri', redirectUri(c));
   u.searchParams.set('response_type', 'code');
   u.searchParams.set('scope', 'openid email');
   u.searchParams.set('state', state);
   u.searchParams.set('prompt', 'select_account');
   c.header(
     'Set-Cookie',
-    `${STATE_COOKIE}=${state}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=600`,
+    `${STATE_COOKIE}=${state}; HttpOnly${secureAttr(c.req.url)}; SameSite=Lax; Path=/; Max-Age=600`,
   );
   return c.redirect(u.toString(), 302);
 });
@@ -54,7 +64,7 @@ auth.get('/callback', async (c) => {
   try {
     const token = await exchangeCode(
       { clientId: GOOGLE_CLIENT_ID, clientSecret: GOOGLE_CLIENT_SECRET },
-      { code, redirectUri: redirectUri(c.req.url) },
+      { code, redirectUri: redirectUri(c) },
     );
     if (!token.id_token) return c.text('id_token なし', 400);
     const claims = await verifyGoogleIdToken(token.id_token, {
@@ -63,7 +73,8 @@ auth.get('/callback', async (c) => {
       allowedSub: ALLOWED_SUB,
     });
     const jwt = await issueSession(claims, SESSION_SIGNING_KEY);
-    c.header('Set-Cookie', sessionCookie(jwt), { append: true });
+    const secure = new URL(c.req.url).protocol === 'https:';
+    c.header('Set-Cookie', sessionCookie(jwt, { secure }), { append: true });
     c.header('Set-Cookie', `${STATE_COOKIE}=; Path=/; Max-Age=0`, { append: true });
     return c.redirect('/', 302);
   } catch (e) {

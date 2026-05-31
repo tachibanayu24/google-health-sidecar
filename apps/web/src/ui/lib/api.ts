@@ -25,6 +25,7 @@ export interface NutritionTarget {
   target_protein_g: number;
   target_fat_g: number;
   target_carbs_g: number;
+  target_salt_g: number;
 }
 export interface Exercise {
   id: string;
@@ -72,7 +73,7 @@ export interface TodayMeal {
 }
 export interface Today {
   date: string;
-  pfc: { kcal: number; p: number; f: number; c: number };
+  pfc: { kcal: number; p: number; f: number; c: number; salt_g: number };
   meals: TodayMeal[];
   inProgress: { id: string; title: string | null; started_at: number } | null;
   body: Array<{ source: string; weight_kg: number | null; body_fat_pct: number | null }>;
@@ -89,6 +90,7 @@ export interface FoodSuggestion {
   protein_g: number;
   fat_g: number;
   carbs_g: number;
+  sodium_mg: number | null;
 }
 export interface Trends {
   days: number;
@@ -104,8 +106,10 @@ export const api = {
     req<{ exercises: Exercise[] }>(
       `/exercises/search?q=${encodeURIComponent(q)}${muscle ? `&muscle=${muscle}` : ''}`,
     ),
-  exerciseHistory: (id: string) =>
-    req<{ sets: HistorySet[] }>(`/exercises/${encodeURIComponent(id)}/history`),
+  exerciseHistory: (id: string, opts?: { limit?: number }) =>
+    req<{ sets: HistorySet[] }>(
+      `/exercises/${encodeURIComponent(id)}/history${opts?.limit ? `?limit=${opts.limit}` : ''}`,
+    ),
   muscleVolume: (windowDays = 7) =>
     req<{ windowDays: number; muscles: MuscleVolume[] }>(`/muscle-volume?window=${windowDays}`),
   trends: (days = 90) => req<Trends>(`/trends?days=${days}`),
