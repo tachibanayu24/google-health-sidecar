@@ -21,16 +21,33 @@ type View = 'home' | 'history' | 'record' | 'meal' | 'muscle' | 'settings';
 export function App() {
   const [view, setView] = useState<View>('home');
   const [chooser, setChooser] = useState(false);
+  const [editMealId, setEditMealId] = useState<string | null>(null);
 
   return (
     <div className="flex h-full flex-col">
       <Header />
       <main className="flex-1 overflow-y-auto px-5 pb-28 pt-3">
         <div key={view} className="rise">
-          {view === 'home' && <HomeScreen onGoRecord={() => setView('record')} />}
+          {view === 'home' && (
+            <HomeScreen
+              onGoRecord={() => setView('record')}
+              onEditMeal={(id) => {
+                setEditMealId(id);
+                setView('meal');
+              }}
+            />
+          )}
           {view === 'history' && <HistoryScreen />}
           {view === 'record' && <RecordScreen onSaved={() => setView('home')} />}
-          {view === 'meal' && <MealScreen onSaved={() => setView('home')} />}
+          {view === 'meal' && (
+            <MealScreen
+              editMealId={editMealId}
+              onSaved={() => {
+                setEditMealId(null);
+                setView('home');
+              }}
+            />
+          )}
           {view === 'muscle' && <MuscleScreen />}
           {view === 'settings' && <SettingsScreen />}
         </div>
@@ -41,6 +58,7 @@ export function App() {
           onClose={() => setChooser(false)}
           onPick={(v) => {
             setChooser(false);
+            if (v === 'meal') setEditMealId(null); // 新規記録なので編集状態をクリア
             setView(v);
           }}
         />

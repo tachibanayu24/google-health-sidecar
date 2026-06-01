@@ -7,6 +7,7 @@ import {
   Flame,
   HeartPulse,
   Moon,
+  Pencil,
   Scale,
   Trash2,
   Utensils,
@@ -25,7 +26,13 @@ function shiftDate(date: string, delta: number): string {
   return new Date(t).toISOString().slice(0, 10);
 }
 
-export function HomeScreen({ onGoRecord }: { onGoRecord: () => void }) {
+export function HomeScreen({
+  onGoRecord,
+  onEditMeal,
+}: {
+  onGoRecord: () => void;
+  onEditMeal: (id: string) => void;
+}) {
   const [date, setDate] = useState(todayJst());
   const isToday = date === todayJst();
   const today = useQuery({ queryKey: ['today', date], queryFn: () => api.today(date) });
@@ -117,7 +124,7 @@ export function HomeScreen({ onGoRecord }: { onGoRecord: () => void }) {
           <MacroBar label="Carbs" v={t.pfc.c} t={target?.target_carbs_g} varName="--color-carb" />
         </div>
         <SaltLine v={t.pfc.salt_g} target={target?.target_salt_g ?? 6} />
-        {hasMeals && <MealList meals={t.meals} date={date} />}
+        {hasMeals && <MealList meals={t.meals} date={date} onEdit={onEditMeal} />}
       </Card>
 
       <SleepCard sleep={t.sleep} />
@@ -126,7 +133,15 @@ export function HomeScreen({ onGoRecord }: { onGoRecord: () => void }) {
   );
 }
 
-function MealList({ meals, date }: { meals: TodayMeal[]; date: string }) {
+function MealList({
+  meals,
+  date,
+  onEdit,
+}: {
+  meals: TodayMeal[];
+  date: string;
+  onEdit: (id: string) => void;
+}) {
   const qc = useQueryClient();
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const del = useMutation({
@@ -166,8 +181,16 @@ function MealList({ meals, date }: { meals: TodayMeal[]; date: string }) {
                 </button>
               </span>
             ) : (
-              <span className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5">
                 <span className="tnum text-muted">{kcal} kcal</span>
+                <button
+                  type="button"
+                  aria-label="編集"
+                  onClick={() => onEdit(m.id)}
+                  className="p-1 text-faint active:text-accent"
+                >
+                  <Pencil className="h-3.5 w-3.5" strokeWidth={2.2} />
+                </button>
                 <button
                   type="button"
                   aria-label="削除"

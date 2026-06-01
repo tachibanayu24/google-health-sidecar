@@ -309,7 +309,10 @@ export async function deleteWorkout(
       /* best-effort: GH 失敗でも D1 正本は削除 */
     }
   }
-  await ctx.db.run("DELETE FROM gh_sync_state WHERE entity_type='workout' AND entity_id=?", sessionId);
+  await ctx.db.run(
+    "DELETE FROM gh_sync_state WHERE entity_type='workout' AND entity_id=?",
+    sessionId,
+  );
   await deleteSessionRow(ctx.db, sessionId);
   return { deleted: true, ghDeleted };
 }

@@ -34,13 +34,44 @@ const newItem = (init?: Partial<Item>): Item => ({
   ...init,
 });
 
-export function MealScreen({ onSaved }: { onSaved: () => void }) {
+export function MealScreen({
+  onSaved,
+  editMealId,
+}: {
+  onSaved: () => void;
+  editMealId?: string | null;
+}) {
   const qc = useQueryClient();
   const [mealType, setMealType] = useState<string>(defaultMealType());
   const [items, setItems] = useState<Item[]>([newItem()]);
   const [presetId, setPresetId] = useState<string | null>(null);
+  const [editMeta, setEditMeta] = useState<{ date: string; loggedAtSec: number } | null>(null);
 
   const presets = useQuery({ queryKey: ['meal-presets'], queryFn: api.mealPresets });
+
+  // 編集モード: 既存の食事を読み込んでプレフィル(保存時は旧削除+新記録で置換)。
+  const editQ = useQuery({
+    queryKey: ['meal', editMealId],
+    queryFn: () => api.getMeal(editMealId!),
+    enabled: !!editMealId,
+  });
+  useEffect(() => {
+    if (!editQ.data) return;
+    setMealType(editQ.data.meal.meal_type);
+    setEditMeta({ date: editQ.data.meal.date, loggedAtSec: editQ.data.meal.logged_at });
+    setItems(
+      editQ.data.items.map((i) =>
+        newItem({
+          foodName: i.food_name,
+          caloriesKcal: Math.round(i.calories_kcal),
+          proteinG: Math.round(i.protein_g),
+          fatG: Math.round(i.fat_g),
+          carbsG: Math.round(i.carbs_g),
+          saltG: i.sodium_mg != null ? round(saltFromSodiumMg(i.sodium_mg), 1) : null,
+        }),
+      ),
+    );
+  }, [editQ.data]);
 
   const update = (k: string, patch: Partial<Item>) =>
     setItems((prev) => prev.map((it) => (it.key === k ? { ...it, ...patch } : it)));
@@ -87,13 +118,18 @@ export function MealScreen({ onSaved }: { onSaved: () => void }) {
     }));
 
   const save = useMutation({
-    mutationFn: () =>
-      api.logMeal({
+    mutationFn: async () => {
+      // 編集 = 旧 meal を削除(GH datapoint も)→ 元の日時で再記録(GH anonymous food は immutable, §5.2)。
+      if (editMealId) await api.deleteMeal(editMealId);
+      return api.logMeal({
         mealType,
+        date: editMeta?.date,
+        loggedAtSec: editMeta?.loggedAtSec,
         inputMethod: presetId ? 'preset' : 'manual',
         items: itemInputs(),
         presetId: presetId ?? undefined,
-      }),
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['today'] });
       qc.invalidateQueries({ queryKey: ['trends'] });
@@ -192,7 +228,7 @@ export function MealScreen({ onSaved }: { onSaved: () => void }) {
           '保存中…'
         ) : (
           <>
-            <Check className="h-5 w-5" strokeWidth={3} /> 食事を記録
+            <Check className="h-5 w-5" strokeWidth={3} /> {editMealId ? '食事を更新' : '食事を記録'}
           </>
         )}
       </button>

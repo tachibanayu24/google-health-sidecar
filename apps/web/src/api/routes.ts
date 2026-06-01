@@ -8,6 +8,7 @@ import {
   getDailyMetricsByDate,
   getExerciseHistory,
   getInProgressSession,
+  getMealById,
   getMealItems,
   getMealsByDate,
   getMuscleVolume,
@@ -263,6 +264,15 @@ api.post('/meals', async (c) => {
   }
   const result = await logMeal(ctx, body);
   return c.json(result, 201);
+});
+
+api.get('/meals/:id', async (c) => {
+  const ctx = makeContext(c.env);
+  const id = c.req.param('id');
+  const meal = await getMealById(ctx.db, id);
+  if (!meal) return c.json({ error: 'not found' }, 404);
+  const items = await getMealItems(ctx.db, id);
+  return c.json({ meal, items });
 });
 
 api.delete('/meals/:id', async (c) => {

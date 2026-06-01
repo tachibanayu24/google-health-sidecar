@@ -180,6 +180,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  getMeal: (id: string) =>
+    req<{
+      meal: { id: string; date: string; logged_at: number; meal_type: string; note: string | null };
+      items: Array<{
+        food_name: string;
+        calories_kcal: number;
+        protein_g: number;
+        fat_g: number;
+        carbs_g: number;
+        sodium_mg: number | null;
+      }>;
+    }>(`/meals/${encodeURIComponent(id)}`),
   deleteMeal: (id: string) =>
     req<{ deleted: boolean; ghDeleted: boolean }>(`/meals/${encodeURIComponent(id)}`, {
       method: 'DELETE',
