@@ -53,6 +53,10 @@ export async function getMealsByDate(db: Db, date: string): Promise<Meal[]> {
   return db.all(MealSchema, 'SELECT * FROM meals WHERE date = ? ORDER BY logged_at', date);
 }
 
+export async function getMealById(db: Db, id: string): Promise<Meal | null> {
+  return db.one(MealSchema, 'SELECT * FROM meals WHERE id = ?', id);
+}
+
 export async function getMealItems(db: Db, mealId: string): Promise<MealItem[]> {
   return db.all(MealItemSchema, 'SELECT * FROM meal_items WHERE meal_id = ?', mealId);
 }

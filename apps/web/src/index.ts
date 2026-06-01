@@ -1,3 +1,4 @@
+import { makeContext, retryPendingPushes, runDailyPull, staleAbandonedSessions } from '@ghs/core';
 import { todayJst } from '@ghs/core/util/date';
 import { Hono } from 'hono';
 import { api } from './api/routes';
@@ -22,17 +23,19 @@ export default {
   fetch: app.fetch,
 
   // daily batch(§12.2)。pull(日3回) と gh-push retry(*/30) を別スロットで処理。
-  async scheduled(
-    controller: ScheduledController,
-    _env: Env,
-    _ctx: ExecutionContext,
-  ): Promise<void> {
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    const app = makeContext(env);
     if (controller.cron === '*/30 * * * *') {
-      // TODO(M2/M3): retryPendingGhPushes(env, { max: 20 })
+      // 軽量スロット: 失敗/未送の GH push を少数ずつ再送。
+      ctx.waitUntil(retryPendingPushes(app, { max: 20 }).then(() => undefined));
       return;
     }
-    // TODO(M0/M3): GoogleHealthProvider で §5.4 マスタ表の dataType を reconcile pull
-    //   own-write フィルタ → mergeIntoStore(weight+body-fat は日付合流)。
-    return;
+    // pull スロット: GH→D1 reconcile(own-write 除外, 冪等 upsert)+ 放置セッションの stale 化。
+    ctx.waitUntil(
+      (async () => {
+        await staleAbandonedSessions(app.db);
+        await runDailyPull(app);
+      })(),
+    );
   },
 } satisfies ExportedHandler<Env>;

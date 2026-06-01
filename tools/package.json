@@ -6,7 +6,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "oauth:bootstrap": "tsx oauth-bootstrap.ts",
-    "oauth:check": "tsx oauth-playground-check.ts"
+    "oauth:check": "tsx oauth-playground-check.ts",
+    "gh:probe": "tsx gh-probe.ts"
   },
   "dependencies": {
     "@ghs/core": "workspace:*"

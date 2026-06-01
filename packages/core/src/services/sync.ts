@@ -1,3 +1,5 @@
+import { getBodyMetricById } from '../db/repositories/body';
+import { getMealById, getMealItems } from '../db/repositories/meals';
 import {
   type GhDailyPoint,
   upsertDailyMetric,
@@ -8,10 +10,13 @@ import {
   getPendingPushes,
   getSyncRun,
   isKnownOwnWrite,
+  markPushFailed,
+  markPushSynced,
   markSyncError,
   markSyncOk,
 } from '../db/repositories/sync';
-import type { DailyMetricKind } from '../domain/enums';
+import { getSessionPushData } from '../db/repositories/workouts';
+import { type DailyMetricKind, MEAL_TYPE_TO_GH } from '../domain/enums';
 import { READ_DATATYPES, type ReadDataType } from '../providers/google-health/discovery-pin';
 import type { ProviderDataPoint } from '../providers/HealthProvider';
 import { jstDaysAgo, nowSec, toJstDateString } from '../util/date';
@@ -102,15 +107,90 @@ async function store(ctx: AppContext, dt: ReadDataType, p: ProviderDataPoint): P
 
 /**
  * gh_sync_state の pending/failed を少数ずつ push(毎30分 cron スロット, §12.2)。
- * 実 push の再送はエンティティ別に payload を再構築する必要があるため、M1では
- * 「対象列挙 + ステータス可視化」までを実装し、再送本体は M2/M3 で services と結線する。
+ * エンティティ別に D1 から payload を再構築して push し、成否を台帳に反映(best-effort)。
  */
 export async function retryPendingPushes(
   ctx: AppContext,
   opts: { max?: number } = {},
-): Promise<{ pending: number }> {
+): Promise<{ attempted: number; synced: number; failed: number }> {
   const pending = await getPendingPushes(ctx.db, opts.max ?? 20);
-  // TODO(M2/M3): entity_type 別に payload 再構築 → provider push → markPushSynced/Failed。
-  //   workout=workout_sessions+sets からサマリ再構築、meal=meals+items 合算、body_metric=body_metrics。
-  return { pending: pending.length };
+  const provider = getProvider(ctx);
+  let synced = 0;
+  let failed = 0;
+
+  for (const p of pending) {
+    try {
+      if (p.entity_type === 'workout') {
+        const d = await getSessionPushData(ctx.db, p.entity_id);
+        if (!d) continue;
+        if (d.session.status !== 'completed') continue;
+        const start = d.session.started_at;
+        const end = d.session.ended_at ?? start + (d.session.active_duration_sec ?? 3600);
+        const res = await provider.pushExercise({
+          startSec: start,
+          endSec: end,
+          exerciseType: 'STRENGTH_TRAINING',
+          displayName: d.session.title ?? 'Workout',
+          activeDurationSec: d.session.active_duration_sec ?? Math.max(60, end - start),
+          calories: d.session.est_calories,
+          notes: d.note,
+          clientTag: d.session.id,
+        });
+        await markPushSynced(ctx.db, 'workout', p.entity_id, res.datapointId, res.dataOrigin, null);
+        synced++;
+      } else if (p.entity_type === 'meal') {
+        if (!ctx.featureGhNutritionPush) continue; // flag OFF は push しない
+        const meal = await getMealById(ctx.db, p.entity_id);
+        if (!meal) continue;
+        const items = await getMealItems(ctx.db, p.entity_id);
+        const sum = items.reduce(
+          (a, it) => ({
+            kcal: a.kcal + it.calories_kcal,
+            pr: a.pr + it.protein_g,
+            f: a.f + it.fat_g,
+            c: a.c + it.carbs_g,
+            na: a.na + (it.sodium_mg ?? 0),
+          }),
+          { kcal: 0, pr: 0, f: 0, c: 0, na: 0 },
+        );
+        const name = items.length === 1 && items[0] ? items[0].food_name : `${meal.meal_type}`;
+        const res = await provider.pushNutrition({
+          atSec: meal.logged_at,
+          mealType: MEAL_TYPE_TO_GH[meal.meal_type],
+          foodDisplayName: name,
+          kcal: sum.kcal,
+          proteinG: sum.pr,
+          fatG: sum.f,
+          carbsG: sum.c,
+          sodiumMg: sum.na || undefined,
+          clientTag: meal.id,
+        });
+        await markPushSynced(ctx.db, 'meal', p.entity_id, res.datapointId, res.dataOrigin, null);
+        synced++;
+      } else if (p.entity_type === 'body_metric') {
+        const bm = await getBodyMetricById(ctx.db, p.entity_id);
+        if (!bm) continue;
+        if (bm.source !== 'app' || bm.weight_kg == null) continue;
+        const res = await provider.pushBodyMetric({
+          kind: 'weight',
+          sampleTimeSec: bm.measured_at,
+          weightKg: bm.weight_kg,
+          clientTag: bm.id,
+        });
+        await markPushSynced(
+          ctx.db,
+          'body_metric',
+          p.entity_id,
+          res.datapointId,
+          res.dataOrigin,
+          null,
+        );
+        synced++;
+      }
+    } catch (e) {
+      await markPushFailed(ctx.db, p.entity_type, p.entity_id, errorMessage(e));
+      failed++;
+    }
+  }
+  return { attempted: pending.length, synced, failed };
 }

@@ -48,6 +48,10 @@ export async function getBodyMetricsByDate(db: Db, date: string): Promise<BodyMe
   );
 }
 
+export async function getBodyMetricById(db: Db, id: string): Promise<BodyMetric | null> {
+  return db.one(BodyMetric, 'SELECT * FROM body_metrics WHERE id = ?', id);
+}
+
 export async function getLatestWeight(db: Db): Promise<BodyMetric | null> {
   return db.one(
     BodyMetric,

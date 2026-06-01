@@ -109,6 +109,46 @@ export async function getExerciseHistoryRows(
   );
 }
 
+/** GH push 再送用: セッション本体 + サマリ note を D1 から再構築(§12.2 retry)。 */
+export interface SessionPushData {
+  session: WorkoutSession;
+  note: string;
+}
+export async function getSessionPushData(db: Db, id: string): Promise<SessionPushData | null> {
+  const session = await db.one(
+    WorkoutSessionSchema,
+    'SELECT * FROM workout_sessions WHERE id = ?',
+    id,
+  );
+  if (!session) return null;
+  const rows = await db.raw<{
+    name_ja: string | null;
+    name_en: string;
+    top_val: number | null;
+    top_unit: string | null;
+    top_reps: number | null;
+    work_sets: number;
+  }>(
+    `SELECT ex.name_ja, ex.name_en,
+       (SELECT s.entry_value FROM workout_sets s WHERE s.workout_exercise_id=we.id AND s.set_type!='warmup' ORDER BY s.set_index LIMIT 1) AS top_val,
+       (SELECT s.entry_unit  FROM workout_sets s WHERE s.workout_exercise_id=we.id AND s.set_type!='warmup' ORDER BY s.set_index LIMIT 1) AS top_unit,
+       (SELECT s.reps        FROM workout_sets s WHERE s.workout_exercise_id=we.id AND s.set_type!='warmup' ORDER BY s.set_index LIMIT 1) AS top_reps,
+       (SELECT count(*)      FROM workout_sets s WHERE s.workout_exercise_id=we.id AND s.set_type!='warmup') AS work_sets
+     FROM workout_exercises we JOIN exercises ex ON ex.id = we.exercise_id
+     WHERE we.session_id = ? ORDER BY we.order_index`,
+    id,
+  );
+  const note = rows
+    .map((r) => {
+      const name = r.name_ja ?? r.name_en;
+      return r.top_val != null
+        ? `${name} ${r.top_val}${r.top_unit ?? ''}×${r.top_reps ?? '?'}×${r.work_sets}`
+        : name;
+    })
+    .join('; ');
+  return { session, note };
+}
+
 /** 部位別ボリューム集計の素データ(§8.3)。service が metrics + contribution で stimulus 化。 */
 export interface WindowSetRow extends ExerciseHistoryRow {
   exercise_id: string;
