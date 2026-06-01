@@ -23,6 +23,14 @@ export function App() {
   const [chooser, setChooser] = useState(false);
   const [editMealId, setEditMealId] = useState<string | null>(null);
   const [editWorkoutId, setEditWorkoutId] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [pendingNav, setPendingNav] = useState<{ run: () => void } | null>(null);
+
+  // 記録/食事画面で未保存入力があるとき、離脱操作は破棄確認を挟む。
+  const guard = (run: () => void) => {
+    if ((view === 'record' || view === 'meal') && dirty) setPendingNav({ run });
+    else run();
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -49,7 +57,9 @@ export function App() {
           {view === 'record' && (
             <RecordScreen
               editWorkoutId={editWorkoutId}
+              onDirty={setDirty}
               onSaved={() => {
+                setDirty(false);
                 setEditWorkoutId(null);
                 setView('home');
               }}
@@ -58,7 +68,9 @@ export function App() {
           {view === 'meal' && (
             <MealScreen
               editMealId={editMealId}
+              onDirty={setDirty}
               onSaved={() => {
+                setDirty(false);
                 setEditMealId(null);
                 setView('home');
               }}
@@ -74,14 +86,66 @@ export function App() {
           onClose={() => setChooser(false)}
           onPick={(v) => {
             setChooser(false);
-            if (v === 'meal') setEditMealId(null); // 新規記録なので編集状態をクリア
-            if (v === 'record') setEditWorkoutId(null);
-            setView(v);
+            guard(() => {
+              setDirty(false);
+              if (v === 'meal') setEditMealId(null); // 新規記録なので編集状態をクリア
+              if (v === 'record') setEditWorkoutId(null);
+              setView(v);
+            });
           }}
         />
       )}
 
-      <BottomNav view={view} onTab={setView} onPlus={() => setChooser(true)} />
+      {pendingNav && (
+        <DiscardGuard
+          onDiscard={() => {
+            setDirty(false);
+            pendingNav.run();
+            setPendingNav(null);
+          }}
+          onCancel={() => setPendingNav(null)}
+        />
+      )}
+
+      <BottomNav
+        view={view}
+        onTab={(v) => guard(() => setView(v))}
+        onPlus={() => setChooser(true)}
+      />
+    </div>
+  );
+}
+
+/** 未保存の記録から離脱しようとしたときの破棄確認(データ消失防止)。 */
+function DiscardGuard({ onDiscard, onCancel }: { onDiscard: () => void; onCancel: () => void }) {
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center px-8">
+      <button
+        type="button"
+        aria-label="閉じる"
+        onClick={onCancel}
+        className="absolute inset-0 bg-ink/45 backdrop-blur-[2px]"
+      />
+      <div className="rise relative w-full max-w-xs rounded-2xl bg-card p-5 text-center shadow-[0_20px_50px_-12px] shadow-ink/40">
+        <h2 className="font-display text-base font-bold">記録を破棄しますか?</h2>
+        <p className="mt-1.5 text-sm text-muted">入力中の内容は保存されていません。</p>
+        <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 rounded-xl border border-line py-2.5 text-sm font-semibold text-muted"
+          >
+            続ける
+          </button>
+          <button
+            type="button"
+            onClick={onDiscard}
+            className="flex-1 rounded-xl bg-accent py-2.5 text-sm font-bold text-card"
+          >
+            破棄する
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

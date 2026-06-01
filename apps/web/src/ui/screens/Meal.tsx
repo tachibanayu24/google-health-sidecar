@@ -37,9 +37,11 @@ const newItem = (init?: Partial<Item>): Item => ({
 export function MealScreen({
   onSaved,
   editMealId,
+  onDirty,
 }: {
   onSaved: () => void;
   editMealId?: string | null;
+  onDirty?: (dirty: boolean) => void;
 }) {
   const qc = useQueryClient();
   const [mealType, setMealType] = useState<string>(defaultMealType());
@@ -139,15 +141,29 @@ export function MealScreen({
     },
   });
 
+  const [presetOpen, setPresetOpen] = useState(false);
+  const [presetName, setPresetName] = useState('');
   const savePreset = useMutation({
     mutationFn: (name: string) =>
       api.saveMealPreset({ name, defaultMealType: mealType, items: itemInputs() }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['meal-presets'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['meal-presets'] });
+      setPresetOpen(false);
+      setPresetName('');
+    },
   });
   const delPreset = useMutation({
     mutationFn: api.deleteMealPreset,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['meal-presets'] }),
   });
+
+  // 未保存の入力があるか(離脱時の破棄ガード用)。
+  useEffect(() => {
+    const dirty =
+      !save.isSuccess && items.some((it) => it.foodName.trim() !== '' || it.caloriesKcal != null);
+    onDirty?.(dirty);
+    return () => onDirty?.(false);
+  }, [items, save.isSuccess, onDirty]);
 
   return (
     <div className="mx-auto max-w-md space-y-4">
@@ -212,12 +228,18 @@ export function MealScreen({
         <Plus className="h-4 w-4" /> 品目を追加
       </button>
 
-      <div className="flex items-center justify-around rounded-2xl bg-ink px-3 py-3 text-card">
-        <M label="kcal" v={Math.round(total.kcal)} />
-        <M label="P" v={Math.round(total.p)} />
-        <M label="F" v={Math.round(total.f)} />
-        <M label="C" v={Math.round(total.c)} />
-        <M label="塩g" v={round(total.salt, 1)} />
+      {/* 合計: kcal を別格に大きく、PFC・塩は従属表示 */}
+      <div className="flex items-center justify-between rounded-2xl bg-ink px-4 py-3 text-card">
+        <div className="flex items-baseline gap-1">
+          <span className="stat text-3xl leading-none">{Math.round(total.kcal)}</span>
+          <span className="text-xs font-semibold text-card/55">kcal</span>
+        </div>
+        <div className="flex gap-3.5">
+          <M label="P" v={Math.round(total.p)} />
+          <M label="F" v={Math.round(total.f)} />
+          <M label="C" v={Math.round(total.c)} />
+          <M label="塩g" v={round(total.salt, 1)} />
+        </div>
       </div>
 
       <button
@@ -241,21 +263,89 @@ export function MealScreen({
       {valid.length > 0 && (
         <button
           type="button"
-          onClick={() => {
-            const name = window.prompt('プリセット名(例: 朝の定番)');
-            if (name?.trim()) savePreset.mutate(name.trim());
-          }}
-          disabled={savePreset.isPending}
-          className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-line py-2.5 text-sm font-semibold text-muted disabled:opacity-50"
+          onClick={() => setPresetOpen(true)}
+          className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-line py-2.5 text-sm font-semibold text-muted"
         >
           <Bookmark className="h-4 w-4" strokeWidth={2.2} />
-          {savePreset.isSuccess ? 'プリセット保存しました' : 'プリセットとして保存'}
+          プリセットとして保存
         </button>
       )}
 
       <p className="text-center text-[11px] text-faint">
         写真からの自動栄養計算は Claude(MCP)経由。ここは手入力 + 過去食の補完。
       </p>
+
+      {presetOpen && (
+        <PresetSaveSheet
+          name={presetName}
+          onName={setPresetName}
+          onClose={() => setPresetOpen(false)}
+          onSave={() => presetName.trim() && savePreset.mutate(presetName.trim())}
+          pending={savePreset.isPending}
+          count={valid.length}
+        />
+      )}
+    </div>
+  );
+}
+
+/** プリセット名入力のボトムシート(window.prompt 置換)。 */
+function PresetSaveSheet({
+  name,
+  onName,
+  onClose,
+  onSave,
+  pending,
+  count,
+}: {
+  name: string;
+  onName: (v: string) => void;
+  onClose: () => void;
+  onSave: () => void;
+  pending: boolean;
+  count: number;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center">
+      <button
+        type="button"
+        aria-label="閉じる"
+        onClick={onClose}
+        className="absolute inset-0 bg-ink/40 backdrop-blur-[2px]"
+      />
+      <div className="rise relative w-full max-w-md rounded-t-3xl bg-card px-5 pb-8 pt-5 shadow-[0_-12px_40px_-12px] shadow-ink/30">
+        <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-line" />
+        <div className="mb-1 flex items-center gap-2 font-display text-base font-bold">
+          <Bookmark className="h-4 w-4 text-accent" strokeWidth={2.4} /> プリセットとして保存
+        </div>
+        <p className="mb-3 text-xs text-muted">現在の{count}品をまとめて呼び出せるようにします。</p>
+        <input
+          // biome-ignore lint/a11y/noAutofocus: ボトムシートを開いた直後に名前入力へフォーカスするのは妥当
+          autoFocus
+          value={name}
+          onChange={(e) => onName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onSave()}
+          placeholder="プリセット名(例: 朝の定番)"
+          className="w-full rounded-xl border border-line bg-paper px-3 py-2.5 text-sm font-semibold outline-none placeholder:font-normal placeholder:text-faint focus:border-accent focus:bg-card"
+        />
+        <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-xl border border-line py-2.5 text-sm font-semibold text-muted"
+          >
+            キャンセル
+          </button>
+          <button
+            type="button"
+            disabled={!name.trim() || pending}
+            onClick={onSave}
+            className="flex-1 rounded-xl bg-accent py-2.5 text-sm font-bold text-card disabled:opacity-40"
+          >
+            {pending ? '保存中…' : '保存'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

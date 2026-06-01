@@ -97,13 +97,17 @@ export function MuscleScreen() {
           <Figure label="背面" type="posterior" data={data} />
         </div>
         <div className="mt-3 flex items-center gap-2 text-xs text-muted">
-          <span>少</span>
+          <span>刺激 少</span>
           <div
             className="h-2 flex-1 rounded-full"
             style={{ background: `linear-gradient(90deg, ${BASE_BODY}, ${RAMP.join(',')})` }}
           />
           <span>多</span>
         </div>
+        <p className="mt-2 text-[10px] leading-snug text-faint">
+          ※
+          図は概略表示。中部三角筋は前部と同じ位置に、脊柱起立筋は背面下部に近似して塗っています。正確な部位別数値は下のリストを参照。
+        </p>
       </Card>
 
       <Card title="部位別ボリューム">

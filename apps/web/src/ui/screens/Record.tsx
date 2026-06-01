@@ -32,6 +32,14 @@ const newSet = (init?: Partial<SetRow>): SetRow => ({
 
 // セット種別: タップで循環。warmup は volume 非加算(§8.x)。
 const SET_TYPE_CYCLE: SetRow['setType'][] = ['main', 'warmup', 'drop', 'failure'];
+const SET_TYPE_LABEL: Record<SetRow['setType'], string> = {
+  main: 'メイン',
+  warmup: 'ウォームアップ',
+  drop: 'ドロップ',
+  failure: '限界',
+  backoff: 'バックオフ',
+  amrap: 'AMRAP',
+};
 const SET_TYPE_META: Record<SetRow['setType'], { abbr: string; cls: string }> = {
   main: { abbr: 'M', cls: 'bg-ink text-card' },
   warmup: { abbr: 'W', cls: 'bg-paper text-faint border border-line' },
@@ -44,9 +52,11 @@ const SET_TYPE_META: Record<SetRow['setType'], { abbr: string; cls: string }> = 
 export function RecordScreen({
   onSaved,
   editWorkoutId,
+  onDirty,
 }: {
   onSaved: () => void;
   editWorkoutId?: string | null;
+  onDirty?: (dirty: boolean) => void;
 }) {
   const qc = useQueryClient();
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
@@ -234,6 +244,14 @@ export function RecordScreen({
     },
   });
 
+  // 未保存の入力があるか(離脱時の破棄ガード用)。保存成功後は画面が遷移するので report 不要。
+  useEffect(() => {
+    const dirty =
+      !save.isSuccess && (items.length > 0 || title.trim() !== '' || bodyweight != null);
+    onDirty?.(dirty);
+    return () => onDirty?.(false);
+  }, [items, title, bodyweight, save.isSuccess, onDirty]);
+
   return (
     <div className="mx-auto max-w-md space-y-4">
       <div className="flex items-center justify-between gap-3">
@@ -342,6 +360,23 @@ export function RecordScreen({
           </button>
         </Card>
       ))}
+
+      {items.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-1 text-[11px] text-muted">
+          <span className="font-semibold text-faint">型:</span>
+          {SET_TYPE_CYCLE.map((t) => (
+            <span key={t} className="flex items-center gap-1">
+              <span
+                className={`flex h-4 w-4 items-center justify-center rounded text-[9px] font-bold ${SET_TYPE_META[t].cls}`}
+              >
+                {SET_TYPE_META[t].abbr}
+              </span>
+              {SET_TYPE_LABEL[t]}
+            </span>
+          ))}
+          <span className="text-faint">— Wは総量に含めない</span>
+        </div>
+      )}
 
       <Card title="種目を追加">
         {/* 部位タップ起点(要望#5): 身体図をタップ → その部位の種目を表示 */}

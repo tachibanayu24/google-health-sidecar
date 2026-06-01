@@ -237,7 +237,7 @@ api.get('/workouts/:id', async (c) => {
     }
   >();
   for (const r of rows) {
-    let e = byEx.get(r.exercise_id + ':' + r.order_index);
+    let e = byEx.get(`${r.exercise_id}:${r.order_index}`);
     if (!e) {
       e = {
         exerciseId: r.exercise_id,
@@ -247,7 +247,7 @@ api.get('/workouts/:id', async (c) => {
         order: r.order_index,
         sets: [],
       };
-      byEx.set(r.exercise_id + ':' + r.order_index, e);
+      byEx.set(`${r.exercise_id}:${r.order_index}`, e);
     }
     if (r.set_index != null && r.entry_value != null) {
       e.sets.push({
