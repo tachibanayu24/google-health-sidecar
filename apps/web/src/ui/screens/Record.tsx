@@ -261,7 +261,7 @@ export function RecordScreen({
           <div className="mb-1 flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="truncate font-display text-base font-bold tracking-tight">
-                {it.exercise.name_ja ?? it.exercise.name_en}
+                {it.exercise.name_en}
               </div>
               {it.last && <div className="mt-0.5 text-[11px] text-faint">{it.last}</div>}
             </div>
@@ -391,7 +391,7 @@ export function RecordScreen({
                   onClick={() => addExercise(ex)}
                   className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm hover:bg-paper"
                 >
-                  <span className="font-medium">{ex.name_ja ?? ex.name_en}</span>
+                  <span className="font-medium">{ex.name_en}</span>
                   <span className="rounded-full bg-paper px-2 py-0.5 text-[10px] font-semibold text-faint">
                     {ex.equipment}
                   </span>

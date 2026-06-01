@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
+  ChevronLeft,
   ChevronRight,
   CloudOff,
   Dumbbell,
@@ -14,11 +15,16 @@ import { Card } from '../components/Card';
 import { NutrientBars } from '../components/NutrientBars';
 import { ErrorBox, Loading } from '../components/state';
 import { api, type BodyReading, type NutritionTarget, type Today } from '../lib/api';
-import { todayJst } from '../lib/datetime';
+import { jstDayOfWeek, todayJst } from '../lib/datetime';
 import { flushOutbox, pendingCount, subscribeOutbox } from '../lib/outbox';
 import { round } from '../lib/units';
 
-/** ホーム = 今日のグランス(常に当日)。過去日の振り返りは各専用画面で。詰め込みを排除。 */
+function shiftDate(date: string, delta: number): string {
+  const t = Date.parse(`${date}T00:00:00Z`) + delta * 86_400_000;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+/** ホーム = 今日のグランス + 日付ナビ(選択日に各グランスを整合)。詰め込みは排除。 */
 export function HomeScreen({
   onOpenNutrition,
   onOpenTraining,
@@ -30,7 +36,9 @@ export function HomeScreen({
   onOpenRecovery: () => void;
   onResume: () => void;
 }) {
-  const today = useQuery({ queryKey: ['today'], queryFn: () => api.today() });
+  const [date, setDate] = useState(todayJst());
+  const isToday = date === todayJst();
+  const today = useQuery({ queryKey: ['today', date], queryFn: () => api.today(date) });
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
   // TrainingGlance 用(トレーニング画面と queryKey 共有 → 二重取得回避)。
   const recent = useQuery({
@@ -49,15 +57,24 @@ export function HomeScreen({
   const t = today.data!;
   const target = settings.data?.nutritionTarget ?? null;
   const worked = (mv.data?.muscles ?? []).filter((m) => m.actual_sets > 0).length;
+  // 選択日のワークアウト(無ければ null)。各グランスは選択日に整合させる。
+  const daySession = recent.data?.sessions?.find((s) => s.date === date) ?? null;
 
   return (
     <div className="mx-auto max-w-md space-y-4">
       <SyncHealthBanner />
       <OutboxBanner />
+      <DateNav
+        date={date}
+        isToday={isToday}
+        onPrev={() => setDate((d) => shiftDate(d, -1))}
+        onNext={() => setDate((d) => shiftDate(d, 1))}
+        onToday={() => setDate(todayJst())}
+      />
 
       <BodyStrip body={t.body} onOpen={onOpenRecovery} />
 
-      {t.inProgress && (
+      {t.inProgress && isToday && (
         <Card accent>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -77,13 +94,56 @@ export function HomeScreen({
         </Card>
       )}
 
-      <NutritionGlance pfc={t.pfc} target={target} onOpen={() => onOpenNutrition(todayJst())} />
+      <NutritionGlance pfc={t.pfc} target={target} onOpen={() => onOpenNutrition(date)} />
       <TrainingGlance
-        latest={recent.data?.sessions?.[0] ?? null}
+        session={daySession}
         worked={worked}
+        isToday={isToday}
         onOpen={onOpenTraining}
       />
       <RecoveryGlance sleep={t.sleep} daily={t.daily} onOpen={onOpenRecovery} />
+    </div>
+  );
+}
+
+/** 日付ナビ(±1日/今日)。Home の各グランスは選択日に整合する。 */
+function DateNav({
+  date,
+  isToday,
+  onPrev,
+  onNext,
+  onToday,
+}: {
+  date: string;
+  isToday: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+  onToday: () => void;
+}) {
+  const wd = ['日', '月', '火', '水', '木', '金', '土'][jstDayOfWeek(date)];
+  return (
+    <div className="flex items-center justify-between">
+      <button
+        type="button"
+        aria-label="前日"
+        onClick={onPrev}
+        className="flex h-9 w-9 items-center justify-center rounded-full text-muted active:bg-line/60"
+      >
+        <ChevronLeft className="h-5 w-5" strokeWidth={2.4} />
+      </button>
+      <button type="button" onClick={onToday} className="flex items-baseline gap-2">
+        <span className="stat text-2xl">{isToday ? '今日' : date.slice(5).replace('-', '/')}</span>
+        <span className="text-sm font-semibold text-muted">({wd})</span>
+      </button>
+      <button
+        type="button"
+        aria-label="翌日"
+        onClick={onNext}
+        disabled={isToday}
+        className="flex h-9 w-9 items-center justify-center rounded-full text-muted active:bg-line/60 disabled:opacity-25"
+      >
+        <ChevronRight className="h-5 w-5" strokeWidth={2.4} />
+      </button>
     </div>
   );
 }
@@ -200,44 +260,52 @@ function NutritionGlance({
   );
 }
 
-// ============ トレーニンググランス(直近WO + 刺激部位数) ============
+// ============ トレーニンググランス(選択日のWO + 7日刺激部位[当日のみ]) ============
 function TrainingGlance({
-  latest,
+  session,
   worked,
+  isToday,
   onOpen,
 }: {
-  latest: {
-    date: string;
+  session: {
     title: string | null;
     exercises: number;
     sets: number;
     total_volume_kg: number;
   } | null;
   worked: number;
+  isToday: boolean;
   onOpen: () => void;
 }) {
   return (
     <GlanceCard title="トレーニング" Icon={Dumbbell} onOpen={onOpen}>
-      {latest ? (
-        <div className="flex items-end justify-between">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-ink">
-              {latest.title || 'ワークアウト'}
-            </div>
-            <div className="mt-0.5 text-[11px] text-faint">
-              {latest.date.slice(5).replace('-', '/')} · {latest.exercises}種目 {latest.sets}set ·{' '}
-              {Math.round(latest.total_volume_kg).toLocaleString()}kg
-            </div>
-          </div>
+      <div className="flex items-end justify-between">
+        <div className="min-w-0">
+          {session ? (
+            <>
+              <div className="truncate text-sm font-semibold text-ink">
+                {session.title || 'ワークアウト'}
+              </div>
+              <div className="mt-0.5 text-[11px] text-faint">
+                {session.exercises}種目 {session.sets}set ·{' '}
+                {Math.round(session.total_volume_kg).toLocaleString()}kg
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-faint">
+              {isToday ? '今日はまだ記録なし' : 'この日はトレーニングなし'}
+            </p>
+          )}
+        </div>
+        {/* 刺激部位は直近7日の rolling 指標なので当日表示時のみ。 */}
+        {isToday && (
           <div className="shrink-0 text-right">
             <span className="stat text-xl leading-none">{worked}</span>
             <span className="text-xs text-muted">/16</span>
             <div className="text-[10px] text-faint">7日 刺激部位</div>
           </div>
-        </div>
-      ) : (
-        <p className="text-sm text-faint">まだ記録がありません。＋から記録できます。</p>
-      )}
+        )}
+      </div>
     </GlanceCard>
   );
 }

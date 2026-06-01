@@ -147,7 +147,7 @@ function Performance({
           <div className="tnum text-sm font-semibold">{worked}/16 部位</div>
           {latestPr && (
             <div className="mt-0.5 text-[11px] text-faint">
-              最新PR {latestPr.name_ja ?? latestPr.name_en} {Math.round(latestPr.value * 10) / 10}kg
+              最新PR {latestPr.name_en} {Math.round(latestPr.value * 10) / 10}kg
             </div>
           )}
         </div>
@@ -326,7 +326,7 @@ function MuscleExercises({ muscle, name }: { muscle: string; name: string }) {
             key={ex.id}
             className="flex items-center justify-between rounded-lg px-1 py-2 text-sm"
           >
-            <span className="font-medium">{ex.name_ja ?? ex.name_en}</span>
+            <span className="font-medium">{ex.name_en}</span>
             <span className="rounded-full bg-paper px-2 py-0.5 text-[10px] font-semibold text-faint">
               {ex.equipment}
             </span>
@@ -372,7 +372,7 @@ function ExerciseTrend() {
           }}
           className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-accent"
         >
-          {ex.name_ja ?? ex.name_en} <span className="text-xs text-faint">× 変更</span>
+          {ex.name_en} <span className="text-xs text-faint">× 変更</span>
         </button>
       ) : (
         <div className="flex items-center gap-2 rounded-lg border border-line bg-paper px-3 py-2">
@@ -394,7 +394,7 @@ function ExerciseTrend() {
                 onClick={() => setEx(e)}
                 className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-paper"
               >
-                {e.name_ja ?? e.name_en}
+                {e.name_en}
               </button>
             </li>
           ))}
@@ -459,7 +459,7 @@ function PrList({
             key={`${p.exercise_id}-${p.achieved_at}`}
             className="flex items-center justify-between"
           >
-            <span className="truncate">{p.name_ja ?? p.name_en}</span>
+            <span className="truncate">{p.name_en}</span>
             <span className="flex items-center gap-2">
               <span className="tnum font-semibold">{Math.round(p.value * 10) / 10} kg</span>
               <span className="text-[11px] text-faint">{epochToJstMonthDay(p.achieved_at)}</span>
@@ -574,7 +574,7 @@ function WorkoutSessionRow({
           )}
           {detail.data?.exercises.map((ex) => (
             <div key={ex.exerciseId} className="mt-2 first:mt-0">
-              <div className="text-sm font-medium text-ink">{ex.name_ja ?? ex.name_en}</div>
+              <div className="text-sm font-medium text-ink">{ex.name_en}</div>
               {ex.sets.map((set, i) => (
                 <div
                   // biome-ignore lint/suspicious/noArrayIndexKey: 読み取り専用の静的リスト(並べ替え/挿入なし)
