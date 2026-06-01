@@ -1,5 +1,6 @@
 import { insertStmt, runBatch, type Stmt } from '../db/batch-helpers';
 import { ulid } from '../db/ids';
+import { deleteMealRow } from '../db/repositories/meals';
 import {
   markPushFailed,
   markPushSynced,
@@ -8,6 +9,7 @@ import {
 } from '../db/repositories/sync';
 import type { MealInputMethod, MealType } from '../domain/enums';
 import { MEAL_TYPE_TO_GH } from '../domain/enums';
+import { WRITE_DATATYPE } from '../providers/google-health/discovery-pin';
 import { nowSec, todayJst } from '../util/date';
 import { errorMessage } from '../util/errors';
 import { type AppContext, getProvider } from './context';
@@ -125,4 +127,31 @@ async function pushMeal(ctx: AppContext, mealId: string, input: LogMealInput): P
     await markPushFailed(ctx.db, 'meal', mealId, errorMessage(e));
     return false;
   }
+}
+
+/**
+ * 食事削除(§8.5)。D1 を正本として削除し、GH に push 済みなら datapoint を best-effort で batchDelete。
+ * GH 削除失敗でも D1 削除は行う(正本優先)。
+ */
+export async function deleteMeal(
+  ctx: AppContext,
+  mealId: string,
+): Promise<{ deleted: boolean; ghDeleted: boolean }> {
+  const rows = await ctx.db.raw<{ gh_datapoint_id: string | null }>(
+    "SELECT gh_datapoint_id FROM gh_sync_state WHERE entity_type='meal' AND entity_id=?",
+    mealId,
+  );
+  const dpId = rows[0]?.gh_datapoint_id ?? null;
+  let ghDeleted = false;
+  if (dpId && ctx.featureGhNutritionPush) {
+    try {
+      await getProvider(ctx).batchDelete(WRITE_DATATYPE.nutrition, [dpId]);
+      ghDeleted = true;
+    } catch {
+      /* best-effort: GH 削除に失敗しても D1 正本は削除する */
+    }
+  }
+  await ctx.db.run("DELETE FROM gh_sync_state WHERE entity_type='meal' AND entity_id=?", mealId);
+  await deleteMealRow(ctx.db, mealId);
+  return { deleted: true, ghDeleted };
 }

@@ -44,8 +44,8 @@ export async function replaceMealItemsBatch(
   await runBatch(db, stmts);
 }
 
-export async function deleteMeal(db: Db, mealId: string): Promise<void> {
-  // meal_items は ON DELETE CASCADE。
+/** D1 から食事削除(meal_items は ON DELETE CASCADE)。public write API は services.deleteMeal。 */
+export async function deleteMealRow(db: Db, mealId: string): Promise<void> {
   await db.run('DELETE FROM meals WHERE id = ?', mealId);
 }
 

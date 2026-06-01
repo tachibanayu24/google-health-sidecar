@@ -146,6 +146,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  deleteMeal: (id: string) =>
+    req<{ deleted: boolean; ghDeleted: boolean }>(`/meals/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
   logWeight: (body: unknown) =>
     req<{ id: string; ghPushed: boolean }>('/body/weight', {
       method: 'POST',

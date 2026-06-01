@@ -1,5 +1,6 @@
 import {
   autocompleteFoods,
+  deleteMeal,
   getActiveNutritionTarget,
   getBodyMetricsByDate,
   getDailyMetricsByDate,
@@ -198,6 +199,12 @@ api.post('/meals', async (c) => {
   }
   const result = await logMeal(ctx, body);
   return c.json(result, 201);
+});
+
+api.delete('/meals/:id', async (c) => {
+  const ctx = makeContext(c.env);
+  const result = await deleteMeal(ctx, c.req.param('id'));
+  return c.json(result);
 });
 
 api.post('/body/weight', async (c) => {

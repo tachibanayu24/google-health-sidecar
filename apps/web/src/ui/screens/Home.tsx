@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   ChevronLeft,
@@ -8,12 +8,13 @@ import {
   HeartPulse,
   Moon,
   Scale,
+  Trash2,
   Utensils,
   Wind,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Card, Stat } from '../components/Card';
-import { api } from '../lib/api';
+import { api, type TodayMeal } from '../lib/api';
 import { fmtKg, round } from '../lib/units';
 
 function todayJst(): string {
@@ -116,26 +117,71 @@ export function HomeScreen({ onGoRecord }: { onGoRecord: () => void }) {
           <MacroBar label="Carbs" v={t.pfc.c} t={target?.target_carbs_g} varName="--color-carb" />
         </div>
         <SaltLine v={t.pfc.salt_g} target={target?.target_salt_g ?? 6} />
-        {hasMeals && (
-          <ul className="mt-4 space-y-1.5 border-t border-line pt-3 text-sm">
-            {t.meals.map((m) => (
-              <li key={m.id} className="flex items-center justify-between">
-                <span className="flex items-center gap-2 text-ink">
-                  <Utensils className="h-3.5 w-3.5 text-faint" strokeWidth={2.2} />
-                  {mealTypeJa(m.meal_type)}
-                </span>
-                <span className="tnum text-muted">
-                  {Math.round(m.items.reduce((a, i) => a + i.calories_kcal, 0))} kcal
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+        {hasMeals && <MealList meals={t.meals} date={date} />}
       </Card>
 
       <SleepCard sleep={t.sleep} />
       <SensingCard daily={t.daily} />
     </div>
+  );
+}
+
+function MealList({ meals, date }: { meals: TodayMeal[]; date: string }) {
+  const qc = useQueryClient();
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const del = useMutation({
+    mutationFn: api.deleteMeal,
+    onSuccess: () => {
+      setConfirmId(null);
+      qc.invalidateQueries({ queryKey: ['today', date] });
+      qc.invalidateQueries({ queryKey: ['trends'] });
+    },
+  });
+  return (
+    <ul className="mt-4 space-y-1 border-t border-line pt-3 text-sm">
+      {meals.map((m) => {
+        const kcal = Math.round(m.items.reduce((a, i) => a + i.calories_kcal, 0));
+        return (
+          <li key={m.id} className="flex items-center justify-between gap-2 py-0.5">
+            <span className="flex min-w-0 items-center gap-2 text-ink">
+              <Utensils className="h-3.5 w-3.5 shrink-0 text-faint" strokeWidth={2.2} />
+              <span className="truncate">{mealTypeJa(m.meal_type)}</span>
+            </span>
+            {confirmId === m.id ? (
+              <span className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => del.mutate(m.id)}
+                  disabled={del.isPending}
+                  className="rounded-md bg-accent px-2 py-1 text-xs font-bold text-card disabled:opacity-50"
+                >
+                  削除
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmId(null)}
+                  className="text-xs font-semibold text-muted"
+                >
+                  取消
+                </button>
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <span className="tnum text-muted">{kcal} kcal</span>
+                <button
+                  type="button"
+                  aria-label="削除"
+                  onClick={() => setConfirmId(m.id)}
+                  className="p-1 text-faint active:text-accent"
+                >
+                  <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />
+                </button>
+              </span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
