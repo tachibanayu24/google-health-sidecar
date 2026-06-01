@@ -3,6 +3,7 @@ dist/
 .wrangler/
 .dev.vars
 *.local
+.gh-tokens.json
 .DS_Store
 *.log
 coverage/

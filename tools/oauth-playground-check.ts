@@ -1,8 +1,7 @@
 /**
  * M0 最優先ゲート(§5.2 / §14#1): GH nutrition-log write の実 grant を 200/403 で確認。
  *
- * 使い方:
- *   export GH_ACCESS_TOKEN=<bootstrap で取得した access_token(nutrition.writeonly 付き)>
+ * 使い方(oauth:bootstrap 実行後ならトークンは自動読込・export 不要):
  *   pnpm --filter @ghs/tools oauth:check
  *
  * 結果で apps/web の vars FEATURE_GH_NUTRITION_PUSH を決める(200→true / 403→false 据置)。
@@ -15,13 +14,9 @@ import {
   parseCreateResponse,
 } from '@ghs/core/providers/google-health/mappers';
 import { ProviderApiError } from '@ghs/core/util/errors';
+import { loadAccessToken } from './_token';
 
-const token = process.env.GH_ACCESS_TOKEN;
-if (!token) {
-  console.error('✗ GH_ACCESS_TOKEN を環境変数で渡してください(bootstrap の access_token)。');
-  process.exit(1);
-}
-
+const token = loadAccessToken();
 const client = new GhClient(async () => token);
 const now = Math.floor(Date.now() / 1000);
 const payload = buildNutritionPayload({

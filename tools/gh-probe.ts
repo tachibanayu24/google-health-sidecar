@@ -5,21 +5,17 @@
  * sleep=summary 等)が、実 reconcile レスポンスと一致するかを「生JSON」と「パース結果」を
  * 並べて目視確認する。ズレがあれば mappers.ts を直す。
  *
- * 使い方:
- *   export GH_ACCESS_TOKEN=<oauth:bootstrap で取得した access_token(read scope 付き)>
+ * 使い方(oauth:bootstrap 実行後ならトークンは自動読込・export 不要):
  *   pnpm --filter @ghs/tools gh:probe
+ *   (手動指定する場合は export GH_ACCESS_TOKEN=... も可)
  */
 import { GhClient } from '@ghs/core/providers/google-health/client';
 import { READ_DATATYPES } from '@ghs/core/providers/google-health/discovery-pin';
 import { parseReconcileResponse } from '@ghs/core/providers/google-health/mappers';
 import { ProviderApiError } from '@ghs/core/util/errors';
+import { loadAccessToken } from './_token';
 
-const token = process.env.GH_ACCESS_TOKEN;
-if (!token) {
-  console.error('✗ GH_ACCESS_TOKEN を環境変数で渡してください(oauth:bootstrap の access_token)。');
-  process.exit(1);
-}
-
+const token = loadAccessToken();
 const client = new GhClient(async () => token);
 const now = Math.floor(Date.now() / 1000);
 const since = now - 30 * 24 * 60 * 60;
