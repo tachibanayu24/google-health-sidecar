@@ -1,5 +1,5 @@
 import { getBodyMetricById } from '../db/repositories/body';
-import { getMealById, getMealItems, ghMealExists, insertGhMeal } from '../db/repositories/meals';
+import { getMealById, getMealItems } from '../db/repositories/meals';
 import {
   type GhDailyPoint,
   upsertDailyMetric,
@@ -112,67 +112,8 @@ async function store(ctx: AppContext, dt: ReadDataType, p: ProviderDataPoint): P
   }
 }
 
-/** GH mealType enum → 本アプリの MealType(取り込み時)。 */
-const GH_TO_MEAL_TYPE: Record<string, string> = {
-  BREAKFAST: 'Breakfast',
-  BEFORE_BREAKFAST: 'Breakfast',
-  LUNCH: 'Lunch',
-  BEFORE_LUNCH: 'Lunch',
-  DINNER: 'Dinner',
-  BEFORE_DINNER: 'Dinner',
-  AFTER_DINNER: 'Dinner',
-  SNACK: 'Anytime',
-  ANYTIME: 'Anytime',
-};
-
-/**
- * GH の食事(nutrition-log)を D1 に取り込む(§5.2 双方向)。interval filter 不可のため no-filter +
- * pageToken でページング。reconcile は新しい順なので「新規取込0のページで早期終了」で増分化(冪等)。
- * 自分の push(gh_sync_state 一致)と既取込(gh_external_id)は除外。
- */
-export async function pullNutrition(
-  ctx: AppContext,
-  opts: { maxPages?: number } = {},
-): Promise<{ imported: number }> {
-  const provider = getProvider(ctx);
-  const maxPages = opts.maxPages ?? 40;
-  let cursor: string | null = null;
-  let pages = 0;
-  let imported = 0;
-  try {
-    do {
-      const { entries, cursor: next } = await provider.reconcileNutrition(cursor);
-      let pageImported = 0;
-      for (const e of entries) {
-        if (!e.datapointId) continue;
-        if (await isKnownOwnWrite(ctx.db, e.datapointId, e.dataOrigin)) continue; // 自分のpushは取込まない
-        if (await ghMealExists(ctx.db, e.datapointId)) continue; // 既取込
-        await insertGhMeal(ctx.db, {
-          ghExternalId: e.datapointId,
-          date: e.atSec ? toJstDateString(e.atSec * 1000) : toJstDateString(),
-          loggedAtSec: e.atSec || nowSec(),
-          mealType: GH_TO_MEAL_TYPE[e.mealTypeGh] ?? 'Anytime',
-          foodName: e.foodName,
-          kcal: e.kcal,
-          proteinG: e.proteinG,
-          fatG: e.fatG,
-          carbsG: e.carbsG,
-          sodiumMg: e.sodiumMg,
-        });
-        imported++;
-        pageImported++;
-      }
-      cursor = next;
-      pages++;
-      // 新しい順前提: 新規取込0のページに達したら以降は既取込/自分のpushのみ → 早期終了(冪等・増分化)。
-      if (pageImported === 0) break;
-    } while (cursor && pages < maxPages);
-    await markSyncOk(ctx.db, 'nutrition-log', nowSec(), null);
-  } catch (e) {
-    await markSyncError(ctx.db, 'nutrition-log', errorMessage(e));
-  }
-  return { imported };
-}
+// ※ 食事(nutrition)は GH→アプリの pull をしない方針(§5.2: 食事は app/MCP→D1正本→GH push の一方向)。
+//   既存GH食事の一回限りバックフィルは tools 側で実施済。定期 pull は echo(MCP記録の二重取込)を生むため不採用。
 
 /**
  * 歩数の日次合計集計(§5.4)。GH の `steps` は分単位 interval なので、直近数日分の interval を

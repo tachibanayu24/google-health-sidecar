@@ -81,65 +81,6 @@ export async function autocompleteFoods(db: Db, q: string, limit = 8): Promise<M
   );
 }
 
-// ============ GH の食事取り込み(§5.2 双方向。source='google_health', gh_external_id で dedup) ============
-export async function ghMealExists(db: Db, ghExternalId: string): Promise<boolean> {
-  const r = await db.raw<{ c: number }>(
-    'SELECT count(*) AS c FROM meals WHERE gh_external_id = ?',
-    ghExternalId,
-  );
-  return (r[0]?.c ?? 0) > 0;
-}
-
-export async function insertGhMeal(
-  db: Db,
-  p: {
-    ghExternalId: string;
-    date: string;
-    loggedAtSec: number;
-    mealType: string;
-    foodName: string;
-    kcal: number;
-    proteinG: number | null;
-    fatG: number | null;
-    carbsG: number | null;
-    sodiumMg: number | null;
-  },
-): Promise<void> {
-  const mealId = ulid();
-  const now = nowSec();
-  await runBatch(db, [
-    insertStmt('meals', {
-      id: mealId,
-      date: p.date,
-      logged_at: p.loggedAtSec,
-      meal_type: p.mealType,
-      note: null,
-      photo_r2_key: null,
-      input_method: 'manual',
-      source: 'google_health',
-      gh_external_id: p.ghExternalId,
-      created_at: now,
-      updated_at: now,
-    }),
-    insertStmt('meal_items', {
-      id: ulid(),
-      meal_id: mealId,
-      preset_id: null,
-      food_name: p.foodName,
-      quantity: 1,
-      unit: 'serving',
-      calories_kcal: p.kcal,
-      protein_g: p.proteinG ?? 0,
-      fat_g: p.fatG ?? 0,
-      carbs_g: p.carbsG ?? 0,
-      fiber_g: null,
-      sugar_g: null,
-      sodium_mg: p.sodiumMg ?? null,
-      created_at: now,
-    }),
-  ]);
-}
-
 // ============ 食事プリセット(「朝の定番」ワンタップ, §9.4) ============
 export interface MealPresetRow {
   id: string;

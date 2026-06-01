@@ -3,7 +3,6 @@ import type {
   ExercisePushInput,
   HealthProvider,
   NutritionPushInput,
-  NutritionReadResult,
   PushResult,
   ReconcileResult,
 } from '../HealthProvider';
@@ -18,9 +17,6 @@ export class FitbitProvider implements HealthProvider {
     throw new Error(
       'FitbitProvider.reconcileDataPoints: 未実装(M3まで暫定)。既定は GoogleHealthProvider。',
     );
-  }
-  reconcileNutrition(): Promise<NutritionReadResult> {
-    throw new Error('FitbitProvider.reconcileNutrition: 未実装。');
   }
   pushExercise(_input: ExercisePushInput): Promise<PushResult> {
     throw new Error('FitbitProvider.pushExercise: 未実装。');
