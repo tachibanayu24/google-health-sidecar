@@ -229,7 +229,6 @@ api.get('/workouts/:id', async (c) => {
       exerciseId: string;
       name_en: string;
       name_ja: string | null;
-      supersetGroup: number | null;
       order: number;
       sets: Array<{
         setType: string;
@@ -247,7 +246,6 @@ api.get('/workouts/:id', async (c) => {
         exerciseId: r.exercise_id,
         name_en: r.name_en,
         name_ja: r.name_ja,
-        supersetGroup: r.superset_group,
         order: r.order_index,
         sets: [],
       };

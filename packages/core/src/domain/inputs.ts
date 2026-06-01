@@ -65,7 +65,6 @@ export const SaveWorkoutInputSchema = z.object({
       z.object({
         exerciseId: z.string().min(1),
         note: z.string().max(500).optional(),
-        supersetGroup: z.number().int().min(0).max(20).nullable().optional(),
         sets: z.array(SetInputSchema).max(50),
       }),
     )

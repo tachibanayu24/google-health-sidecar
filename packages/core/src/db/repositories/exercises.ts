@@ -49,10 +49,6 @@ export async function resolveExercise(db: Db, idOrName: string): Promise<Exercis
   throw new DomainError(`種目名が曖昧です: "${idOrName}"。候補: ${names}。id で指定を。`);
 }
 
-export async function getExerciseMuscles(db: Db, exerciseId: string): Promise<ExerciseMuscle[]> {
-  return db.all(ExerciseMuscle, 'SELECT * FROM exercise_muscles WHERE exercise_id = ?', exerciseId);
-}
-
 /** 複数種目の部位リンクを1クエリで取得し exercise_id でグループ化(N+1 回避)。 */
 export async function getExerciseMusclesForExercises(
   db: Db,

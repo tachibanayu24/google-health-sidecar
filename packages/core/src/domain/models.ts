@@ -224,16 +224,6 @@ export const BodyMetric = z.object({
 });
 export type BodyMetric = z.infer<typeof BodyMetric>;
 
-export const BodyMeasurement = z.object({
-  id: Ulid,
-  date: IsoDate,
-  site: z.string(),
-  value_cm: z.number(),
-  note: z.string().nullable(),
-  created_at: Unix,
-});
-export type BodyMeasurement = z.infer<typeof BodyMeasurement>;
-
 // ---------- センシング(GHミラー) ----------
 export const SleepLog = z.object({
   id: Ulid,

@@ -53,7 +53,6 @@ export interface SaveWorkoutInput {
   exercises: Array<{
     exerciseId: string;
     note?: string;
-    supersetGroup?: number | null;
     sets: SaveSetInput[];
   }>;
 }
@@ -109,7 +108,7 @@ export async function saveWorkout(
         session_id: sessionId,
         exercise_id: ex.exerciseId,
         order_index: exIdx,
-        superset_group: ex.supersetGroup ?? null,
+        superset_group: null, // legacy 列(スーパーセットUIは廃止)。互換のため列は保持し常に null。
         note: ex.note ?? null,
       }),
     );

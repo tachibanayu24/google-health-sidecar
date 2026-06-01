@@ -209,7 +209,6 @@ export interface SessionDetailRow {
   name_en: string;
   name_ja: string | null;
   order_index: number;
-  superset_group: number | null;
   set_index: number;
   set_type: string;
   entry_value: number | null;
@@ -222,7 +221,7 @@ export interface SessionDetailRow {
 export async function getSessionDetail(db: Db, id: string): Promise<SessionDetailRow[]> {
   return db.raw<SessionDetailRow>(
     `SELECT s.id, s.date, s.started_at, s.title, s.bodyweight_kg,
-            we.exercise_id, ex.name_en, ex.name_ja, we.order_index, we.superset_group,
+            we.exercise_id, ex.name_en, ex.name_ja, we.order_index,
             ws.set_index, ws.set_type, ws.entry_value, ws.entry_unit, ws.reps, ws.rpe
        FROM workout_sessions s
        JOIN workout_exercises we ON we.session_id = s.id

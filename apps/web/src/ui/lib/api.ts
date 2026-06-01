@@ -262,7 +262,6 @@ export const api = {
         exerciseId: string;
         name_en: string;
         name_ja: string | null;
-        supersetGroup: number | null;
         sets: Array<{
           setType: string;
           entryValue: number | null;
