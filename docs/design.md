@@ -954,8 +954,8 @@ google-health-sidecar/
     { "binding": "CACHE",  "id": "<id>" },
     { "binding": "LOCK",   "id": "<id>" }
   ],
-  // pull(日3回) と gh-push retry を別スロットに分離(§12.2)
-  "triggers": { "crons": ["0 21 * * *", "0 4 * * *", "0 13 * * *", "*/30 * * * *"] },
+  // cron は account 合計5本制限 → 単一式に集約(5分毎に pull+push+stale, §12.2)
+  "triggers": { "crons": ["*/5 * * * *"] },
   "observability": { "enabled": true },
   "vars": { "ALLOWED_EMAIL": "tachibanayu24@gmail.com", "FEATURE_GH_NUTRITION_PUSH": "false" }
   // "r2_buckets": [...] は将来用(進捗写真)にコメント予約
@@ -967,16 +967,20 @@ apps/mcp の wrangler.jsonc は同じD1/KVバインド + `MCP_SHARED_SECRET`/`AN
 **cron予算見積り(概算)**: 読む dataType 8種。多くは daily 系で1日1〜数点(ページング不要)。ページングが要るのは exercise/sleep(pageSize上限25)程度で、単一ユーザー1日分なら各 1〜2ページ。サブリクエスト概算 = 8 dataType ×(reconcile 1 + 追加ページ最大2)≒ 最大 ~24 サブリクエスト/回 + token refresh 1。Workers のサブリクエスト上限(有料1000)に対し**大幅に余裕**、wall-clock も数秒想定。→ **MVP は cron 同期処理で足りる**。
 
 **設計上の安全策**:
-- **pull と gh-push retry を別 cron スロットに分離**(同一invocationに reconcile取得とpushを詰め込まない)。`*/30` の軽量スロットで `gh_sync_state` の pending/failed を少数ずつ掃く。
-- **`sync_runs.last_cursor` で途中再開(再入)**: pull が途中で時間切れ/失敗しても次回 cursor から再開。冪等 upsert なので重複しても安全。
+- **cron は単一式(`*/5`)に集約**(2026-06-01 実デプロイで判明: Cloudflare 無料プランは **account 合計5本** が cron 上限。当初の4式=pull3+push1 では他プロジェクト分と合算で超過)。枠コストは「式の本数」で頻度ではないため、`*/5` 1本で **5分毎に pull(GH→D1 増分)+ push再送 + stale化を毎回実行**する。これで枠1本のまま当初の日3回 pull より高頻度な同期になる。同期頻度を変えたいときはこの周期だけ変更(枠は1のまま)。GH のデバイス同期遅延的に `*/5` が実効上限(それより速くても新データは増えず 429 リスクのみ)。
+- **`sync_runs.last_cursor` で途中再開(再入)**: pull が途中で時間切れ/失敗しても次回 cursor から再開。冪等 upsert なので重複しても安全。高頻度化しても増分のみ取得で軽量。
 - **予算超過の予兆が出たら Queues 採用を再評価**(§4.2): dataType 単位ジョブにファンアウトし各ジョブ短時間・独立リトライ。MVP では不要と判断、リスク顕在化時の代替案として明記。
 
 ```ts
-async scheduled(controller, env, ctx) {
-  if (controller.cron === "*/30 * * * *") {        // 軽量スロット
-    return void await retryPendingGhPushes(env, { max: 20 });
-  }
-  // pull スロット
+// 単一 cron(*/5)。pull・push再送・stale化を毎回実行(cron 枠 1 本に集約)。
+async scheduled(_controller, env, ctx) {
+  const app = makeContext(env);
+  ctx.waitUntil((async () => {
+    await staleAbandonedSessions(app.db);
+    await runDailyPull(app);                  // GH→D1 reconcile(増分)
+    await retryPendingPushes(app, { max: 20 }); // 失敗/未送 push の再送(通常は inline 送信)
+  })());
+  // 以降の pull 詳細(参考: runDailyPull の内部ループ):
   const provider = new GoogleHealthProvider(env);  // 系統BトークンをKV共通getAccessTokenで
   // ★ループ単位は §5.4 マスタ表の「GH dataType ID」粒度(内部キー=GH dataType ID)。
   //   resp-rate/skin-temp は dataType ID がM0未確定なら DATATYPES から除外(表と一致させる)。

@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ghsidecar-web",
+  "account_id": "2ed52fafd3387679d9b97beadf46abee",
   "main": "src/index.ts",
   "compatibility_date": "2026-05-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -14,18 +15,18 @@
     {
       "binding": "DB",
       "database_name": "ghsidecar",
-      // `wrangler d1 create ghsidecar` で得た id をここに貼る(--local では placeholder で可)。
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "47f59419-a8cb-4537-8047-64b68174e7ca",
       "migrations_dir": "../../packages/core/src/db/migrations"
     }
   ],
   "kv_namespaces": [
-    { "binding": "TOKENS", "id": "REPLACE_WITH_TOKENS_KV_ID" },
-    { "binding": "CACHE", "id": "REPLACE_WITH_CACHE_KV_ID" },
-    { "binding": "LOCK", "id": "REPLACE_WITH_LOCK_KV_ID" }
+    { "binding": "TOKENS", "id": "badca286ba87486491a39ca5702d0a1a" },
+    { "binding": "CACHE", "id": "cba6bf607b654ff29c874fbaf96cbf88" },
+    { "binding": "LOCK", "id": "fa5e1021b35a4c6b9c485280394a013f" }
   ],
-  // pull(JST 06/13/22時 = UTC 21/04/13) と gh-push retry(*/30) を別スロットに(§12.2)。
-  "triggers": { "crons": ["0 21 * * *", "0 4 * * *", "0 13 * * *", "*/30 * * * *"] },
+  // cron 枠は account 合計5本制限 → 式は1本に集約(5分毎)。pull+push+stale を毎回実行(§12.2)。
+  // 同期頻度を変えたいときはこの周期だけ変更(枠は1のまま)。GH のデバイス同期遅延的に */5 が実効上限。
+  "triggers": { "crons": ["*/5 * * * *"] },
   "observability": { "enabled": true },
   "vars": {
     "ALLOWED_EMAIL": "tachibanayu24@gmail.com",

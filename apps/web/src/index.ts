@@ -22,19 +22,20 @@ app.route('/api', api);
 export default {
   fetch: app.fetch,
 
-  // daily batch(§12.2)。pull(日3回) と gh-push retry(*/30) を別スロットで処理。
-  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  // 単一 cron(*/5)で pull(GH→D1)+ push再送 + stale化 を毎回実行(§12.2)。
+  // cron 枠は account 合計5本制限のため「式」を1本に集約。同期頻度はこの1式の周期で決まる(枠は1のまま)。
+  // pull は cursor 増分なので高頻度でも軽量(差分のみ)。通常 push は記録時に inline 送信、ここは失敗再送の保険。
+  async scheduled(
+    _controller: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<void> {
     const app = makeContext(env);
-    if (controller.cron === '*/30 * * * *') {
-      // 軽量スロット: 失敗/未送の GH push を少数ずつ再送。
-      ctx.waitUntil(retryPendingPushes(app, { max: 20 }).then(() => undefined));
-      return;
-    }
-    // pull スロット: GH→D1 reconcile(own-write 除外, 冪等 upsert)+ 放置セッションの stale 化。
     ctx.waitUntil(
       (async () => {
         await staleAbandonedSessions(app.db);
-        await runDailyPull(app);
+        await runDailyPull(app); // GH→D1 reconcile(own-write 除外・冪等・cursor 増分)
+        await retryPendingPushes(app, { max: 20 }); // 失敗/未送 push の再送
       })(),
     );
   },
