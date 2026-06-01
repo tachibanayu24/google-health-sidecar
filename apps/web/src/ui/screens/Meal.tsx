@@ -5,6 +5,7 @@ import { Card } from '../components/Card';
 import { Sheet } from '../components/Overlay';
 import { api, type FoodSuggestion, type MealPreset } from '../lib/api';
 import { jstHourNow } from '../lib/datetime';
+import { invalidateMeals } from '../lib/invalidate';
 import { round, saltFromSodiumMg, sodiumMgFromSalt } from '../lib/units';
 
 const MEAL_TYPES = [
@@ -143,8 +144,7 @@ export function MealScreen({
       });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['today'] });
-      qc.invalidateQueries({ queryKey: ['trends'] });
+      invalidateMeals(qc);
       onSaved();
     },
   });

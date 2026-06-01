@@ -15,14 +15,10 @@ import { Card } from '../components/Card';
 import { NutrientBars } from '../components/NutrientBars';
 import { ErrorBox, Loading } from '../components/state';
 import { api, type BodyReading, type NutritionTarget, type Today } from '../lib/api';
-import { jstDayOfWeek, todayJst } from '../lib/datetime';
+import { formatDateForDisplay, jstDayOfWeek, shiftDate, todayJst } from '../lib/datetime';
+import { invalidateAfterFlush } from '../lib/invalidate';
 import { flushOutbox, pendingCount, subscribeOutbox } from '../lib/outbox';
 import { round } from '../lib/units';
-
-function shiftDate(date: string, delta: number): string {
-  const t = Date.parse(`${date}T00:00:00Z`) + delta * 86_400_000;
-  return new Date(t).toISOString().slice(0, 10);
-}
 
 /** ホーム = 今日のグランス + 日付ナビ(選択日に各グランスを整合)。詰め込みは排除。 */
 export function HomeScreen({
@@ -132,7 +128,7 @@ function DateNav({
         <ChevronLeft className="h-5 w-5" strokeWidth={2.4} />
       </button>
       <button type="button" onClick={onToday} className="flex items-baseline gap-2">
-        <span className="stat text-2xl">{isToday ? '今日' : date.slice(5).replace('-', '/')}</span>
+        <span className="stat text-2xl">{isToday ? '今日' : formatDateForDisplay(date)}</span>
         <span className="text-sm font-semibold text-muted">({wd})</span>
       </button>
       <button
@@ -401,11 +397,7 @@ function OutboxBanner() {
     setSending(true);
     const r = await flushOutbox();
     setSending(false);
-    if (r.sent > 0) {
-      for (const key of ['today', 'trends', 'recent-workouts', 'muscle-volume', 'prs']) {
-        qc.invalidateQueries({ queryKey: [key] });
-      }
-    }
+    if (r.sent > 0) invalidateAfterFlush(qc);
   };
   return (
     <div className="flex items-center gap-2 rounded-xl border border-line bg-paper px-3 py-2.5 text-sm">

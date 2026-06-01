@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { Card } from '../components/Card';
 import { ErrorBox, Loading } from '../components/state';
 import { api } from '../lib/api';
+import { invalidateSettings } from '../lib/invalidate';
 
 type Phase = 'bulk' | 'cut' | 'maintain';
 
@@ -20,15 +21,9 @@ export function SettingsScreen() {
       <UnitsCard
         unit={settings.unit_preference}
         formula={settings.e1rm_formula}
-        onSaved={() => qc.invalidateQueries({ queryKey: ['settings'] })}
+        onSaved={() => invalidateSettings(qc)}
       />
-      <TargetsCard
-        target={nutritionTarget}
-        onSaved={() => {
-          qc.invalidateQueries({ queryKey: ['settings'] });
-          qc.invalidateQueries({ queryKey: ['today'] });
-        }}
-      />
+      <TargetsCard target={nutritionTarget} onSaved={() => invalidateSettings(qc)} />
       <Card title="連携" right={<Gauge className="h-4 w-4 text-faint" strokeWidth={2.2} />}>
         <p className="text-sm text-muted">
           Google Health 連携(体重・睡眠の取り込み / ワークアウト・食事の書き出し)は接続済み。

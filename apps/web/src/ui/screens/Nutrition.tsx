@@ -5,12 +5,7 @@ import { Card } from '../components/Card';
 import { NutrientBars } from '../components/NutrientBars';
 import { Loading } from '../components/state';
 import { api, type TodayMeal } from '../lib/api';
-import { jstDayOfWeek, todayJst } from '../lib/datetime';
-
-function shiftDate(date: string, delta: number): string {
-  const t = Date.parse(`${date}T00:00:00Z`) + delta * 86_400_000;
-  return new Date(t).toISOString().slice(0, 10);
-}
+import { formatDateForDisplay, jstDayOfWeek, shiftDate, todayJst } from '../lib/datetime';
 
 // meal_type の表示順(朝→夜)+ 日本語ラベル。
 export const MEAL_ORDER = [
@@ -90,7 +85,7 @@ export function NutritionScreen({
             onClick={() => onDateChange(todayJst())}
             className="min-w-14 text-center text-sm font-semibold"
           >
-            {isToday ? '今日' : `${date.slice(5).replace('-', '/')}`}
+            {isToday ? '今日' : formatDateForDisplay(date)}
             <span className="ml-1 text-xs text-muted">({wd})</span>
           </button>
           <button

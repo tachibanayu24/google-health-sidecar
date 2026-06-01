@@ -6,6 +6,8 @@ import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { NutrientBars } from '../components/NutrientBars';
 import { Empty, Loading } from '../components/state';
 import { api } from '../lib/api';
+import { formatDateForDisplay } from '../lib/datetime';
+import { invalidateMeals } from '../lib/invalidate';
 import { saltFromSodiumMg } from '../lib/units';
 import { mealTypeJa } from './Nutrition';
 
@@ -31,8 +33,7 @@ export function MealCategoryDetail({
     mutationFn: api.deleteMeal,
     onSuccess: () => {
       setConfirm(null);
-      qc.invalidateQueries({ queryKey: ['today', date] });
-      qc.invalidateQueries({ queryKey: ['trends'] });
+      invalidateMeals(qc);
     },
   });
   if (today.isLoading) return <Loading />;
@@ -71,7 +72,7 @@ export function MealCategoryDetail({
         </button>
         <h1 className="font-display text-lg font-bold tracking-tight">{mealTypeJa(mealType)}</h1>
         <span className="ml-auto text-sm font-semibold text-muted">
-          {date.slice(5).replace('-', '/')}
+          {formatDateForDisplay(date)}
         </span>
       </div>
 

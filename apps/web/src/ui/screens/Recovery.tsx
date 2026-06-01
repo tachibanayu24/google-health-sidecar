@@ -8,6 +8,7 @@ import { Sheet } from '../components/Overlay';
 import { Empty, ErrorBox, Loading } from '../components/state';
 import { api, type SleepSummary } from '../lib/api';
 import { epochToJstHhmm } from '../lib/datetime';
+import { invalidateBody } from '../lib/invalidate';
 import { round } from '../lib/units';
 
 /**
@@ -184,8 +185,7 @@ function WeightLogger() {
     mutationFn: () =>
       api.logWeight({ entryValue: w, entryUnit: 'kg', bodyFatPct: bf ?? undefined }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['today'] });
-      qc.invalidateQueries({ queryKey: ['trends'] });
+      invalidateBody(qc);
       setOpen(false);
       setW(null);
       setBf(null);

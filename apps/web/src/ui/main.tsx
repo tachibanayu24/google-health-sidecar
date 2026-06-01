@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 import { router } from './App';
 import { LoginGate } from './LoginGate';
+import { invalidateAfterFlush } from './lib/invalidate';
 import { flushOutbox } from './lib/outbox';
 import './index.css';
 
@@ -15,11 +16,7 @@ const queryClient = new QueryClient({
 // 送信できたら関連クエリを無効化して最新化。iOS は Background Sync 非対応なので JS 主導。
 function flushAndRefresh(): void {
   flushOutbox().then((r) => {
-    if (r.sent > 0) {
-      for (const key of ['today', 'trends', 'recent-workouts', 'muscle-volume', 'prs']) {
-        queryClient.invalidateQueries({ queryKey: [key] });
-      }
-    }
+    if (r.sent > 0) invalidateAfterFlush(queryClient);
   });
 }
 window.addEventListener('online', flushAndRefresh);

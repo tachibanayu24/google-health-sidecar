@@ -10,6 +10,7 @@ import {
   epochToDatetimeLocal,
   nowDatetimeLocal,
 } from '../lib/datetime';
+import { invalidateWorkouts } from '../lib/invalidate';
 import { MUSCLE_GROUPS, MUSCLE_TO_SLUG, SLUG_TO_MUSCLE } from '../lib/muscles';
 
 interface SetRow {
@@ -209,11 +210,7 @@ export function RecordScreen({
       });
     },
     onSuccess: (r) => {
-      qc.invalidateQueries({ queryKey: ['today'] });
-      qc.invalidateQueries({ queryKey: ['muscle-volume'] });
-      qc.invalidateQueries({ queryKey: ['trends'] });
-      qc.invalidateQueries({ queryKey: ['recent-workouts'] });
-      qc.removeQueries({ queryKey: ['workout'] }); // 履歴の読取ビュー詳細キャッシュ(編集前)を破棄
+      invalidateWorkouts(qc);
       // PR があれば祝福を一瞬見せてから Home へ。無ければ即遷移(alert は使わない)。
       if (r.newPrs.length > 0) setTimeout(onSaved, 1600);
       else onSaved();

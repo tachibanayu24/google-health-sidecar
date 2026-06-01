@@ -9,6 +9,7 @@ import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { Empty, ErrorBox, Loading } from '../components/state';
 import { api, type Exercise, type MuscleVolume, type RecentSession } from '../lib/api';
 import { epochToJstMonthDay } from '../lib/datetime';
+import { invalidateWorkouts } from '../lib/invalidate';
 
 const NAME_JA: Record<string, string> = {
   chest: '胸',
@@ -480,10 +481,7 @@ function RecentWorkouts({ onEdit }: { onEdit: (id: string) => void }) {
     mutationFn: api.deleteWorkout,
     onSuccess: () => {
       setConfirm(null);
-      qc.invalidateQueries({ queryKey: ['recent-workouts'] });
-      qc.invalidateQueries({ queryKey: ['trends'] });
-      qc.invalidateQueries({ queryKey: ['muscle-volume'] });
-      qc.invalidateQueries({ queryKey: ['today'] });
+      invalidateWorkouts(qc);
     },
   });
   const sessions = q.data?.sessions ?? [];

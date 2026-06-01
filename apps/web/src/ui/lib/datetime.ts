@@ -30,6 +30,13 @@ export const jstHourNow = (): number => dayjs().tz(JST).hour();
 /** 'YYYY-MM-DD' → 曜日番号(0=日..6=土, JST 基準)。 */
 export const jstDayOfWeek = (dateStr: string): number => dayjs.tz(dateStr, JST).day();
 
+/** 'YYYY-MM-DD' を delta 日ずらす(日付の純粋な加減算・UTC基準で安全)。 */
+export const shiftDate = (date: string, delta: number): string =>
+  new Date(Date.parse(`${date}T00:00:00Z`) + delta * 86_400_000).toISOString().slice(0, 10);
+
+/** 'YYYY-MM-DD' → 'MM/DD'(リスト等の短い表示)。 */
+export const formatDateForDisplay = (date: string): string => date.slice(5).replace('-', '/');
+
 // ---- datetime-local <input> 用(ローカル壁時計 = JST として解釈) ----
 
 /** 現在時刻を datetime-local 値 'YYYY-MM-DDTHH:mm'(JST)で。 */
