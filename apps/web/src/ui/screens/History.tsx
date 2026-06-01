@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Search, Trash2, Trophy } from 'lucide-react';
+import { ChevronDown, ChevronRight, Pencil, Search, Trash2, Trophy } from 'lucide-react';
 import { useState } from 'react';
 import {
   Bar,
@@ -13,7 +13,8 @@ import {
   YAxis,
 } from 'recharts';
 import { Card } from '../components/Card';
-import { api, type Exercise } from '../lib/api';
+import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
+import { api, type Exercise, type RecentSession } from '../lib/api';
 import { epochToJstMonthDay } from '../lib/datetime';
 import { ErrorBox, Loading } from './Home';
 
@@ -241,15 +242,15 @@ function PrList() {
   );
 }
 
-// ============ 最近のワークアウト(#1: 一覧 + 削除) ============
+// ============ 最近のワークアウト(一覧 + 展開で読み取り + 削除確認) ============
 function RecentWorkouts({ onEdit }: { onEdit: (id: string) => void }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['recent-workouts'], queryFn: api.recentWorkouts });
-  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<{ id: string; label: string } | null>(null);
   const del = useMutation({
     mutationFn: api.deleteWorkout,
     onSuccess: () => {
-      setConfirmId(null);
+      setConfirm(null);
       qc.invalidateQueries({ queryKey: ['recent-workouts'] });
       qc.invalidateQueries({ queryKey: ['trends'] });
       qc.invalidateQueries({ queryKey: ['muscle-volume'] });
@@ -262,62 +263,119 @@ function RecentWorkouts({ onEdit }: { onEdit: (id: string) => void }) {
       {sessions.length === 0 ? (
         <Empty note="ワークアウトを記録するとここに一覧が出ます。" />
       ) : (
-        <ul className="space-y-1.5 text-sm">
-          {sessions.map((s) => (
-            <li
+        <ul className="text-sm">
+          {sessions.map((s, i) => (
+            <WorkoutSessionRow
               key={s.id}
-              className="flex items-center justify-between gap-2 border-b border-line py-1.5 last:border-0"
-            >
-              <span className="min-w-0">
-                <span className="font-semibold">{s.title || 'ワークアウト'}</span>
-                <span className="ml-2 text-[11px] text-faint">
-                  {mmdd(s.date)} · {s.exercises}種目 {s.sets}set ·{' '}
-                  {Math.round(s.total_volume_kg).toLocaleString()}kg
-                </span>
-              </span>
-              {confirmId === s.id ? (
-                <span className="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => del.mutate(s.id)}
-                    disabled={del.isPending}
-                    className="rounded-md bg-accent px-2 py-1 text-xs font-bold text-card disabled:opacity-50"
-                  >
-                    削除
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmId(null)}
-                    className="text-xs font-semibold text-muted"
-                  >
-                    取消
-                  </button>
-                </span>
-              ) : (
-                <span className="flex shrink-0 items-center gap-1">
-                  <button
-                    type="button"
-                    aria-label="編集"
-                    onClick={() => onEdit(s.id)}
-                    className="p-1 text-faint active:text-accent"
-                  >
-                    <Pencil className="h-3.5 w-3.5" strokeWidth={2.2} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="削除"
-                    onClick={() => setConfirmId(s.id)}
-                    className="p-1 text-faint active:text-accent"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />
-                  </button>
-                </span>
-              )}
-            </li>
+              session={s}
+              initiallyOpen={i === 0}
+              onEdit={onEdit}
+              onAskDelete={(sess) =>
+                setConfirm({
+                  id: sess.id,
+                  label: `${mmdd(sess.date)} ${sess.title || 'ワークアウト'}(${sess.exercises}種目 ${sess.sets}set)`,
+                })
+              }
+            />
           ))}
         </ul>
       )}
+      {confirm && (
+        <DeleteConfirmModal
+          kind="workout"
+          targetLabel={confirm.label}
+          isPending={del.isPending}
+          onConfirm={() => del.mutate(confirm.id)}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
     </Card>
+  );
+}
+
+/** セッション1行: タップで展開 → getWorkout を遅延フェッチして種目×セットを読み取り表示。 */
+function WorkoutSessionRow({
+  session: s,
+  initiallyOpen,
+  onEdit,
+  onAskDelete,
+}: {
+  session: RecentSession;
+  initiallyOpen: boolean;
+  onEdit: (id: string) => void;
+  onAskDelete: (s: RecentSession) => void;
+}) {
+  const [open, setOpen] = useState(initiallyOpen);
+  const detail = useQuery({
+    queryKey: ['workout', s.id],
+    queryFn: () => api.getWorkout(s.id),
+    enabled: open,
+    staleTime: 5 * 60_000,
+  });
+  return (
+    <li className="border-b border-line py-2 last:border-0">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-2 text-left"
+      >
+        <span className="min-w-0">
+          <span className="font-semibold">{s.title || 'ワークアウト'}</span>
+          <span className="mt-0.5 block text-[11px] text-faint">
+            {mmdd(s.date)} · {s.exercises}種目 {s.sets}set ·{' '}
+            {Math.round(s.total_volume_kg).toLocaleString()}kg
+          </span>
+        </span>
+        {open ? (
+          <ChevronDown className="h-4 w-4 shrink-0 text-faint" strokeWidth={2.4} />
+        ) : (
+          <ChevronRight className="h-4 w-4 shrink-0 text-faint" strokeWidth={2.4} />
+        )}
+      </button>
+
+      {open && (
+        <div className="mt-2 border-l-2 border-line/50 pl-3">
+          {detail.isLoading && <p className="text-[11px] text-faint">読み込み中…</p>}
+          {detail.data?.exercises.map((ex) => (
+            <div key={ex.exerciseId} className="mt-2 first:mt-0">
+              <div className="text-sm font-medium text-ink">{ex.name_ja ?? ex.name_en}</div>
+              {ex.sets.map((set, i) => (
+                <div
+                  // biome-ignore lint/suspicious/noArrayIndexKey: 読み取り専用の静的リスト(並べ替え/挿入なし)
+                  key={`${ex.exerciseId}:${i}`}
+                  className="tnum text-[11px] leading-relaxed text-faint"
+                >
+                  {set.setType === 'warmup' && (
+                    <span className="mr-1 rounded bg-paper px-1 text-[9px] font-bold">W</span>
+                  )}
+                  {i + 1}: {set.entryValue ?? '—'}
+                  {set.entryUnit} × {set.reps ?? '—'}reps
+                  {set.rpe != null ? ` RPE${set.rpe}` : ''}
+                </div>
+              ))}
+            </div>
+          ))}
+          <div className="mt-2.5 flex items-center gap-1">
+            <button
+              type="button"
+              aria-label="編集"
+              onClick={() => onEdit(s.id)}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-muted active:text-accent"
+            >
+              <Pencil className="h-3.5 w-3.5" strokeWidth={2.2} /> 編集
+            </button>
+            <button
+              type="button"
+              aria-label="削除"
+              onClick={() => onAskDelete(s)}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-muted active:text-accent"
+            >
+              <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} /> 削除
+            </button>
+          </div>
+        </div>
+      )}
+    </li>
   );
 }
 
