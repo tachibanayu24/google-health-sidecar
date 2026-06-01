@@ -7,7 +7,11 @@
 > - ✅ ②GHトークン: 取得済(`tools/.gh-tokens.json`, gitignore)。**access_token は失効しても `_token.ts` が refresh_token で自動更新**するので bootstrap は初回1回でよい
 > - ✅ ③nutrition write: **200 OK 実機確認** → `FEATURE_GH_NUTRITION_PUSH=true` 化済
 > - ✅ ④read mapper: weight/body-fat/sleep/resting-hr/hrv/oxygen/respiratory/steps を実データで確定(§17.5)。残: VO2max(データ無)・skin-temp(ID不明)
-> - ⬜ ⑤Cloudflare デプロイ: **未実施**(オーナーの `wrangler login` + リソース作成が必要)
+> - ✅ ⑤Cloudflare デプロイ: **完了(2026-06-01)** → https://ghsidecar-web.tachibanayu24.workers.dev
+>   - account_id `2ed52fafd3387679d9b97beadf46abee` / D1 `ghsidecar`(migrations 3件適用)/ KV TOKENS・CACHE・LOCK
+>   - secrets: GOOGLE_CLIENT_ID・GOOGLE_CLIENT_SECRET・SESSION_SIGNING_KEY 投入済
+>   - cron `*/5`(1式に集約。無料プランは account 合計5本上限)/ PUBLIC_ORIGIN 設定済 / KV に gh:refresh_token seed 済
+>   - 残: **GCP OAuth に本番 redirect URI 登録**(下記)→ ログイン動作確認
 
 ## ① GCP(オーナー作業)
 - Google Health API を有効化。

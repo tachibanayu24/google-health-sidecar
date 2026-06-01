@@ -31,6 +31,8 @@
   "vars": {
     "ALLOWED_EMAIL": "tachibanayu24@gmail.com",
     // nutrition write は実機 200 OK 確認済(oauth:check)→ 有効化(§5.2)
-    "FEATURE_GH_NUTRITION_PUSH": "true"
+    "FEATURE_GH_NUTRITION_PUSH": "true",
+    // OAuth redirect_uri を本番URLに固定(GCP 登録値と完全一致, §6.1)
+    "PUBLIC_ORIGIN": "https://ghsidecar-web.tachibanayu24.workers.dev"
   }
 }
