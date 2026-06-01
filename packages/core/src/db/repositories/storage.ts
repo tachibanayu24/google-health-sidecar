@@ -88,7 +88,7 @@ export async function upsertGhSleep(db: Db, p: GhSleepPoint): Promise<void> {
     `INSERT INTO sleep_logs
        (id, date, start_at, end_at, total_min, deep_min, light_min, rem_min, awake_min, efficiency, source, gh_external_id, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'google_health', ?, ?, ?)
-     ON CONFLICT (gh_external_id) DO UPDATE SET
+     ON CONFLICT (gh_external_id) WHERE gh_external_id IS NOT NULL DO UPDATE SET
        date=excluded.date, start_at=excluded.start_at, end_at=excluded.end_at, total_min=excluded.total_min,
        deep_min=excluded.deep_min, light_min=excluded.light_min, rem_min=excluded.rem_min,
        awake_min=excluded.awake_min, efficiency=excluded.efficiency, updated_at=excluded.updated_at`,
