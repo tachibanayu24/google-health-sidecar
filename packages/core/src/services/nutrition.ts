@@ -1,6 +1,6 @@
 import { insertStmt, runBatch, type Stmt } from '../db/batch-helpers';
 import { ulid } from '../db/ids';
-import { bumpPresetUse, deleteMealRow, insertMealPreset } from '../db/repositories/meals';
+import { bumpPresetUse, insertMealPreset } from '../db/repositories/meals';
 import {
   markPushFailed,
   markPushSynced,
@@ -168,7 +168,13 @@ export async function deleteMeal(
       /* best-effort: GH 削除に失敗しても D1 正本は削除する */
     }
   }
-  await ctx.db.run("DELETE FROM gh_sync_state WHERE entity_type='meal' AND entity_id=?", mealId);
-  await deleteMealRow(ctx.db, mealId);
+  // §8.5: 台帳と本体の削除を単一 batch で原子的に(中断時の孤児 entity_id を防ぐ)。meal_items は CASCADE。
+  await runBatch(ctx.db, [
+    {
+      sql: "DELETE FROM gh_sync_state WHERE entity_type='meal' AND entity_id=?",
+      binds: [mealId],
+    },
+    { sql: 'DELETE FROM meals WHERE id=?', binds: [mealId] },
+  ]);
   return { deleted: true, ghDeleted };
 }

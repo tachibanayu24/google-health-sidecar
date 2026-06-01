@@ -8,7 +8,6 @@ import {
 import { getSettings } from '../db/repositories/settings';
 import { markPushFailed, markPushSynced, pendingPushStmt } from '../db/repositories/sync';
 import {
-  deleteSessionRow,
   getExerciseHistoryRows,
   getWindowSets,
   type WindowSetRow,
@@ -314,11 +313,14 @@ export async function deleteWorkout(
       /* best-effort: GH 失敗でも D1 正本は削除 */
     }
   }
-  await ctx.db.run(
-    "DELETE FROM gh_sync_state WHERE entity_type='workout' AND entity_id=?",
-    sessionId,
-  );
-  await deleteSessionRow(ctx.db, sessionId);
+  // §8.5: 台帳と本体を単一 batch で原子的に削除(workout_exercises/sets は CASCADE)。
+  await runBatch(ctx.db, [
+    {
+      sql: "DELETE FROM gh_sync_state WHERE entity_type='workout' AND entity_id=?",
+      binds: [sessionId],
+    },
+    { sql: 'DELETE FROM workout_sessions WHERE id=?', binds: [sessionId] },
+  ]);
   return { deleted: true, ghDeleted };
 }
 

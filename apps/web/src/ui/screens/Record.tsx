@@ -226,8 +226,9 @@ export function RecordScreen({
       qc.invalidateQueries({ queryKey: ['muscle-volume'] });
       qc.invalidateQueries({ queryKey: ['trends'] });
       qc.invalidateQueries({ queryKey: ['recent-workouts'] });
-      onSaved();
-      if (r.newPrs.length) alert(`保存 ${r.totalVolumeKg}kg · 🎉 PR更新 ${r.newPrs.length}件`);
+      // PR があれば祝福を一瞬見せてから Home へ。無ければ即遷移(alert は使わない)。
+      if (r.newPrs.length > 0) setTimeout(onSaved, 1600);
+      else onSaved();
     },
   });
 

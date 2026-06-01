@@ -110,10 +110,15 @@ function BottomNav({
   return (
     <nav className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-line bg-card/95 backdrop-blur-md">
       <div className="mx-auto grid max-w-md grid-cols-5 items-stretch px-2">
-        <NavTab Icon={House} label="Home" active={view === 'home'} onClick={() => onTab('home')} />
+        <NavTab
+          Icon={House}
+          label="ホーム"
+          active={view === 'home'}
+          onClick={() => onTab('home')}
+        />
         <NavTab
           Icon={TrendingUp}
-          label="Trends"
+          label="推移"
           active={view === 'history'}
           onClick={() => onTab('history')}
         />
@@ -131,13 +136,13 @@ function BottomNav({
         </div>
         <NavTab
           Icon={PersonStanding}
-          label="Muscles"
+          label="部位"
           active={view === 'muscle'}
           onClick={() => onTab('muscle')}
         />
         <NavTab
           Icon={Settings}
-          label="Settings"
+          label="設定"
           active={view === 'settings'}
           onClick={() => onTab('settings')}
         />
