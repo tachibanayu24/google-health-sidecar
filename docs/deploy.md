@@ -2,6 +2,13 @@
 
 接続フェーズの実行順。① はオーナー(GCP/Cloudflare)、②③ は CLI、④ で実データ検証 → 必要なら mapper 修正、⑤ 本番デプロイ。
 
+> **接続フェーズ進捗(2026-06-01 時点)**
+> - ✅ ①GCP: スコープ実在・テストユーザー登録・OAuth 同意済
+> - ✅ ②GHトークン: 取得済(`tools/.gh-tokens.json`, gitignore)。**access_token は失効しても `_token.ts` が refresh_token で自動更新**するので bootstrap は初回1回でよい
+> - ✅ ③nutrition write: **200 OK 実機確認** → `FEATURE_GH_NUTRITION_PUSH=true` 化済
+> - ✅ ④read mapper: weight/body-fat/sleep/resting-hr/hrv/oxygen/respiratory/steps を実データで確定(§17.5)。残: VO2max(データ無)・skin-temp(ID不明)
+> - ⬜ ⑤Cloudflare デプロイ: **未実施**(オーナーの `wrangler login` + リソース作成が必要)
+
 ## ① GCP(オーナー作業)
 - Google Health API を有効化。
 - OAuth 同意画面を **In production** に publish(refresh token の7日失効回避)。
@@ -49,13 +56,15 @@ pnpm exec wrangler secret put SESSION_SIGNING_KEY
 # pnpm exec wrangler secret put ALLOWED_SUB      # 初回ログイン後の Google subject(任意, 厳格化)
 # vars: wrangler.jsonc に PUBLIC_ORIGIN=https://<domain>、FEATURE_GH_NUTRITION_PUSH=(④の結果)
 #       ★DEV_AUTH_BYPASS は本番 vars に入れない(localhost限定ガードもあるが二重で)
-# GH トークンを remote KV(TOKENS)へ(②の出力)
-pnpm exec wrangler kv key put --remote --binding=TOKENS "gh:refresh_token" "<refresh>"
-pnpm exec wrangler kv key put --remote --binding=TOKENS "gh:access_token"  "<access>"
-pnpm exec wrangler kv key put --remote --binding=TOKENS "gh:expires_at"    "<unixsec>"
+# GH トークンを remote KV(TOKENS)へ。必須は refresh_token のみ。
+# expires_at=0 を入れておけば初回アクセス時に access_token を lazy refresh する(②の access は1hで失効するため)。
+pnpm exec wrangler kv key put --remote --binding=TOKENS "gh:refresh_token" "$(node -e 'console.log(require("../../tools/.gh-tokens.json").refresh_token)')"
+pnpm exec wrangler kv key put --remote --binding=TOKENS "gh:expires_at" "0"
 # デプロイ(vite build + wrangler deploy)
 pnpm deploy
 ```
+- account 一覧権限の無いトークンの場合は `wrangler.jsonc` に `"account_id": "<id>"` を追加するか `CLOUDFLARE_ACCOUNT_ID` を export。
+- KV キー名は `packages/core/src/auth/tokenStore.ts`(`gh:access_token`/`gh:refresh_token`/`gh:expires_at`)と一致。
 - cron(`wrangler.jsonc` triggers)で daily pull(日3回)+ gh-push retry(30分毎)が自動実行。
 - デプロイ後、`https://<domain>/auth/login` から Google ログイン(dev bypass 無し)で動作確認。
 
