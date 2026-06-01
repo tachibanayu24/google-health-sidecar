@@ -7,6 +7,7 @@ export * from './db/client';
 export * from './db/ids';
 export * from './db/repositories/index';
 export * from './domain/enums';
+export * from './domain/inputs';
 export * from './domain/metrics';
 export * from './domain/models';
 export * from './providers/google-health/provider';

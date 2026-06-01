@@ -21,14 +21,14 @@ import {
   getSleepByDate,
   getTrends,
   jstDaysAgo,
-  type LogMealInput,
+  LogMealInputSchema,
   type LogWeightInput,
   listMealPresets,
   logMeal,
   logWeight,
   type MealItemInput,
   makeContext,
-  type SaveWorkoutInput,
+  SaveWorkoutInputSchema,
   type SetNutritionTargetInput,
   saltGFromSodiumMg,
   saveMealPreset,
@@ -194,11 +194,11 @@ api.get('/today', async (c) => {
 
 api.post('/workouts', async (c) => {
   const ctx = makeContext(c.env);
-  const body = (await c.req.json()) as SaveWorkoutInput;
-  if (!Array.isArray(body?.exercises) || body.exercises.length === 0) {
-    return c.json({ error: 'exercises required' }, 400);
+  const parsed = SaveWorkoutInputSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ error: 'invalid_input', issues: parsed.error.issues.slice(0, 5) }, 400);
   }
-  const result = await saveWorkout(ctx, body);
+  const result = await saveWorkout(ctx, parsed.data);
   return c.json(result, 201);
 });
 
@@ -341,11 +341,11 @@ api.delete('/meal-presets/:id', async (c) => {
 
 api.post('/meals', async (c) => {
   const ctx = makeContext(c.env);
-  const body = (await c.req.json()) as LogMealInput;
-  if (!body?.mealType || !Array.isArray(body.items) || body.items.length === 0) {
-    return c.json({ error: 'mealType and items required' }, 400);
+  const parsed = LogMealInputSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ error: 'invalid_input', issues: parsed.error.issues.slice(0, 5) }, 400);
   }
-  const result = await logMeal(ctx, body);
+  const result = await logMeal(ctx, parsed.data);
   return c.json(result, 201);
 });
 
