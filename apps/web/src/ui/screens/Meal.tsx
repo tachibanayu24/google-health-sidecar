@@ -23,6 +23,7 @@ interface Item {
   fatG: number | null;
   carbsG: number | null;
   saltG: number | null; // 食塩相当量(g)。保存時に sodium(mg)へ換算。
+  fiberG: number | null; // 食物繊維(g)。
 }
 const newItem = (init?: Partial<Item>): Item => ({
   key: crypto.randomUUID(),
@@ -32,6 +33,7 @@ const newItem = (init?: Partial<Item>): Item => ({
   fatG: null,
   carbsG: null,
   saltG: null,
+  fiberG: null,
   ...init,
 });
 
@@ -71,6 +73,7 @@ export function MealScreen({
           fatG: Math.round(i.fat_g),
           carbsG: Math.round(i.carbs_g),
           saltG: i.sodium_mg != null ? round(saltFromSodiumMg(i.sodium_mg), 1) : null,
+          fiberG: i.fiber_g != null ? round(i.fiber_g, 1) : null,
         }),
       ),
     );
@@ -92,6 +95,7 @@ export function MealScreen({
           fatG: i.fatG != null ? Math.round(i.fatG) : null,
           carbsG: i.carbsG != null ? Math.round(i.carbsG) : null,
           saltG: i.sodiumMg != null ? round(saltFromSodiumMg(i.sodiumMg), 1) : null,
+          fiberG: i.fiberG != null ? round(i.fiberG, 1) : null,
         }),
       ),
     );
@@ -104,8 +108,9 @@ export function MealScreen({
       f: a.f + (it.fatG ?? 0),
       c: a.c + (it.carbsG ?? 0),
       salt: a.salt + (it.saltG ?? 0),
+      fiber: a.fiber + (it.fiberG ?? 0),
     }),
-    { kcal: 0, p: 0, f: 0, c: 0, salt: 0 },
+    { kcal: 0, p: 0, f: 0, c: 0, salt: 0, fiber: 0 },
   );
 
   const valid = items.filter((it) => it.foodName.trim() && it.caloriesKcal != null);
@@ -118,6 +123,7 @@ export function MealScreen({
       fatG: it.fatG ?? undefined,
       carbsG: it.carbsG ?? undefined,
       sodiumMg: it.saltG != null ? Math.round(sodiumMgFromSalt(it.saltG)) : undefined,
+      fiberG: it.fiberG ?? undefined,
     }));
 
   const reqId = useState(() => crypto.randomUUID())[0]; // 冪等キー(この記録ドラフト1回ぶん)
@@ -240,6 +246,7 @@ export function MealScreen({
           <M label="F" v={Math.round(total.f)} />
           <M label="C" v={Math.round(total.c)} />
           <M label="塩g" v={round(total.salt, 1)} />
+          <M label="繊g" v={round(total.fiber, 1)} />
         </div>
       </div>
 
@@ -393,6 +400,7 @@ function ItemCard({
       fatG: Math.round(s.fat_g),
       carbsG: Math.round(s.carbs_g),
       saltG: s.sodium_mg != null ? round(saltFromSodiumMg(s.sodium_mg), 1) : null,
+      fiberG: s.fiber_g != null ? round(s.fiber_g, 1) : null,
     });
     setOpen(false);
   }
@@ -442,7 +450,7 @@ function ItemCard({
           </button>
         )}
       </div>
-      <div className="mt-3 grid grid-cols-5 gap-1.5">
+      <div className="mt-3 grid grid-cols-6 gap-1">
         <Field
           label="kcal"
           value={item.caloriesKcal}
@@ -452,6 +460,7 @@ function ItemCard({
         <Field label="F" value={item.fatG} onChange={(v) => onChange({ fatG: v })} />
         <Field label="C" value={item.carbsG} onChange={(v) => onChange({ carbsG: v })} />
         <Field label="塩g" value={item.saltG} onChange={(v) => onChange({ saltG: v })} />
+        <Field label="繊g" value={item.fiberG} onChange={(v) => onChange({ fiberG: v })} />
       </div>
     </Card>
   );

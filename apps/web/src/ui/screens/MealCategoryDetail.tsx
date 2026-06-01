@@ -1,22 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import {
-  PolarAngleAxis,
-  PolarGrid,
-  PolarRadiusAxis,
-  Radar,
-  RadarChart,
-  ResponsiveContainer,
-} from 'recharts';
 import { Card } from '../components/Card';
-import { CHART } from '../components/chart';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
+import { NutrientBars } from '../components/NutrientBars';
 import { Empty, Loading } from '../components/state';
 import { api } from '../lib/api';
+import { saltFromSodiumMg } from '../lib/units';
 import { mealTypeJa } from './Nutrition';
 
-/** 食事カテゴリの詳細(タップで開く)。マクロバランスをレーダーチャートで可視化 + 品目別内訳。 */
+/** 食事カテゴリの詳細(タップで開く)。栄養素を対目標バーで可視化(全画面共通の NutrientBars)+ 品目別内訳。 */
 export function MealCategoryDetail({
   mealType,
   date,
@@ -32,6 +25,7 @@ export function MealCategoryDetail({
 }) {
   const qc = useQueryClient();
   const today = useQuery({ queryKey: ['today', date], queryFn: () => api.today(date) });
+  const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
   const [confirm, setConfirm] = useState<{ id: string; label: string } | null>(null);
   const del = useMutation({
     mutationFn: api.deleteMeal,
@@ -51,19 +45,18 @@ export function MealCategoryDetail({
       p: a.p + it.protein_g,
       f: a.f + it.fat_g,
       c: a.c + it.carbs_g,
+      sodium: a.sodium + (it.sodium_mg ?? 0),
+      fiber: a.fiber + (it.fiber_g ?? 0),
     }),
-    { kcal: 0, p: 0, f: 0, c: 0 },
+    { kcal: 0, p: 0, f: 0, c: 0, sodium: 0, fiber: 0 },
   );
-  // マクロを「カロリー寄与の割合」でレーダー化(P/C=4kcal/g, F=9kcal/g)。形で偏りが直感的に分かる。
-  const pK = tot.p * 4;
-  const fK = tot.f * 9;
-  const cK = tot.c * 4;
-  const totK = pK + fK + cK || 1;
-  const radar = [
-    { axis: 'P', value: Math.round((pK / totK) * 100) },
-    { axis: 'F', value: Math.round((fK / totK) * 100) },
-    { axis: 'C', value: Math.round((cK / totK) * 100) },
-  ];
+  const nutrients = {
+    p: tot.p,
+    f: tot.f,
+    c: tot.c,
+    salt_g: Math.round(saltFromSodiumMg(tot.sodium) * 10) / 10,
+    fiber_g: Math.round(tot.fiber * 10) / 10,
+  };
 
   return (
     <div className="mx-auto max-w-md space-y-4">
@@ -95,44 +88,19 @@ export function MealCategoryDetail({
         </Card>
       ) : (
         <>
-          {/* マクロバランス レーダー + 合計 */}
-          <Card title="マクロバランス">
-            <div className="flex items-center gap-2">
-              <div className="h-40 flex-1">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart data={radar} outerRadius="72%">
-                    <PolarGrid stroke={CHART.line} />
-                    <PolarAngleAxis dataKey="axis" tick={{ fill: CHART.faint, fontSize: 12 }} />
-                    <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-                    <Radar
-                      dataKey="value"
-                      stroke={CHART.accent}
-                      fill={CHART.accent}
-                      fillOpacity={0.25}
-                      strokeWidth={2}
-                    />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="shrink-0 space-y-2 pr-2">
-                <MacroLegend
-                  color="var(--color-protein)"
-                  label="P"
-                  g={tot.p}
-                  pct={radar[0]!.value}
-                />
-                <MacroLegend color="var(--color-fat)" label="F" g={tot.f} pct={radar[1]!.value} />
-                <MacroLegend color="var(--color-carb)" label="C" g={tot.c} pct={radar[2]!.value} />
-              </div>
-            </div>
-            <div className="mt-2 flex items-baseline justify-center gap-1 border-t border-line/60 pt-2">
+          {/* 栄養素(対目標バー・全画面共通)。寄与%を副情報で併記。 */}
+          <Card title="栄養素(対目標)">
+            <NutrientBars
+              values={nutrients}
+              target={settings.data?.nutritionTarget ?? null}
+              showContribution
+            />
+            <div className="mt-3 flex items-baseline justify-center gap-1 border-t border-line/60 pt-2.5">
               <span className="stat text-2xl leading-none">
                 {Math.round(tot.kcal).toLocaleString()}
               </span>
               <span className="text-sm text-muted">kcal</span>
-              <span className="ml-2 text-[11px] text-faint">
-                {items.length}品 · カロリー寄与で算出
-              </span>
+              <span className="ml-2 text-[11px] text-faint">{items.length}品</span>
             </div>
           </Card>
 
@@ -221,30 +189,6 @@ export function MealCategoryDetail({
           onCancel={() => setConfirm(null)}
         />
       )}
-    </div>
-  );
-}
-
-function MacroLegend({
-  color,
-  label,
-  g,
-  pct,
-}: {
-  color: string;
-  label: string;
-  g: number;
-  pct: number;
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: color }} />
-      <span className="text-[11px] font-bold" style={{ color }}>
-        {label}
-      </span>
-      <span className="tnum text-[11px] text-muted">
-        {Math.round(g)}g<span className="ml-1 text-faint">{pct}%</span>
-      </span>
     </div>
   );
 }

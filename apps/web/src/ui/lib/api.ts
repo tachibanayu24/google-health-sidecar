@@ -176,6 +176,7 @@ export interface MealItemInput {
   fatG?: number;
   carbsG?: number;
   sodiumMg?: number;
+  fiberG?: number;
 }
 export interface MealPreset {
   id: string;
@@ -240,6 +241,7 @@ export const api = {
         fat_g: number;
         carbs_g: number;
         sodium_mg: number | null;
+        fiber_g: number | null;
       }>;
     }>(`/meals/${encodeURIComponent(id)}`),
   deleteMeal: (id: string) =>

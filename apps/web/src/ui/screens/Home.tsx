@@ -11,12 +11,12 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Card } from '../components/Card';
+import { NutrientBars } from '../components/NutrientBars';
 import { ErrorBox, Loading } from '../components/state';
 import { api, type BodyReading, type NutritionTarget, type Today } from '../lib/api';
 import { todayJst } from '../lib/datetime';
 import { flushOutbox, pendingCount, subscribeOutbox } from '../lib/outbox';
 import { round } from '../lib/units';
-import { Bar } from './Nutrition';
 
 /** ホーム = 今日のグランス(常に当日)。過去日の振り返りは各専用画面で。詰め込みを排除。 */
 export function HomeScreen({
@@ -190,10 +190,11 @@ function NutritionGlance({
           <span className="text-xs text-accent">目標未設定</span>
         )}
       </div>
-      <div className="mt-3 space-y-1.5">
-        <Bar label="P" v={pfc.p} t={target?.target_protein_g} varName="--color-protein" />
-        <Bar label="F" v={pfc.f} t={target?.target_fat_g} varName="--color-fat" />
-        <Bar label="C" v={pfc.c} t={target?.target_carbs_g} varName="--color-carb" />
+      <div className="mt-3">
+        <NutrientBars
+          values={{ p: pfc.p, f: pfc.f, c: pfc.c, salt_g: pfc.salt_g, fiber_g: pfc.fiber_g }}
+          target={target}
+        />
       </div>
     </GlanceCard>
   );
@@ -255,6 +256,7 @@ function RecoveryGlance({
   const rhr = metric('resting_hr');
   const hrv = metric('hrv_rmssd');
   const steps = metric('steps');
+  const spo2 = metric('spo2_avg');
   return (
     <GlanceCard title="回復" Icon={HeartPulse} onOpen={onOpen}>
       <div className="flex items-baseline justify-between">
@@ -274,9 +276,10 @@ function RecoveryGlance({
           )}
         </div>
       </div>
-      <div className="mt-2 flex gap-3 text-[11px] text-muted tnum">
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted tnum">
         {rhr != null && <span>RHR {round(rhr, 0)}</span>}
         {hrv != null && <span>HRV {round(hrv, 0)}</span>}
+        {spo2 != null && <span>SpO₂ {round(spo2, 0)}%</span>}
         {steps != null && <span>{Math.round(steps).toLocaleString()}歩</span>}
       </div>
     </GlanceCard>

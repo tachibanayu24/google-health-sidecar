@@ -117,6 +117,7 @@ function TargetsCard({
     target_fat_g: number;
     target_carbs_g: number;
     target_salt_g: number;
+    target_fiber_g: number;
   } | null;
   onSaved: () => void;
 }) {
@@ -126,6 +127,7 @@ function TargetsCard({
   const [f, setF] = useState(String(Math.round(target?.target_fat_g ?? 60)));
   const [c, setC] = useState(String(Math.round(target?.target_carbs_g ?? 200)));
   const [salt, setSalt] = useState(String(target?.target_salt_g ?? 6));
+  const [fiber, setFiber] = useState(String(target?.target_fiber_g ?? 20));
   const [saved, setSaved] = useState(false);
 
   // 別ソースで target が更新されたら同期。
@@ -137,6 +139,7 @@ function TargetsCard({
     setF(String(Math.round(target.target_fat_g)));
     setC(String(Math.round(target.target_carbs_g)));
     setSalt(String(target.target_salt_g));
+    setFiber(String(target.target_fiber_g));
   }, [target]);
 
   const m = useMutation({
@@ -159,6 +162,7 @@ function TargetsCard({
       fatG: Number(f) || 0,
       carbsG: Number(c) || 0,
       saltG: Number(salt) || 6,
+      fiberG: Number(fiber) || 20,
     });
 
   return (
@@ -181,6 +185,7 @@ function TargetsCard({
         <NumField label="タンパク質" unit="g" value={p} onChange={setP} />
         <NumField label="脂質" unit="g" value={f} onChange={setF} />
         <NumField label="炭水化物" unit="g" value={c} onChange={setC} />
+        <NumField label="食物繊維" unit="g" value={fiber} onChange={setFiber} />
         <div className="flex flex-col justify-end pb-1">
           <span className="text-[11px] text-faint">PFC概算</span>
           <span className="tnum text-sm font-semibold text-muted">{Math.round(pfcKcal)} kcal</span>

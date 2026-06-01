@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useMemo } from 'react';
 import { Card } from '../components/Card';
+import { NutrientBars } from '../components/NutrientBars';
 import { Loading } from '../components/state';
 import { api, type TodayMeal } from '../lib/api';
 import { jstDayOfWeek, todayJst } from '../lib/datetime';
@@ -56,7 +57,7 @@ export function NutritionScreen({
   if (today.isLoading) return <Loading />;
   const t = today.data;
   const target = settings.data?.nutritionTarget ?? null;
-  const pfc = t?.pfc ?? { kcal: 0, p: 0, f: 0, c: 0, salt_g: 0 };
+  const pfc = t?.pfc ?? { kcal: 0, p: 0, f: 0, c: 0, salt_g: 0, fiber_g: 0 };
   const kcal = Math.round(pfc.kcal);
   const remain = target ? Math.round(target.target_kcal - kcal) : null;
   const pct = target ? Math.min(100, (kcal / target.target_kcal) * 100) : 0;
@@ -142,21 +143,12 @@ export function NutritionScreen({
         )}
       </Card>
 
-      {/* マクロ */}
-      <Card title="マクロ">
-        <div className="space-y-2.5">
-          <Bar label="Protein" v={pfc.p} t={target?.target_protein_g} varName="--color-protein" />
-          <Bar label="Fat" v={pfc.f} t={target?.target_fat_g} varName="--color-fat" />
-          <Bar label="Carbs" v={pfc.c} t={target?.target_carbs_g} varName="--color-carb" />
-          <Bar
-            label="食塩"
-            v={pfc.salt_g}
-            t={target?.target_salt_g ?? 6}
-            varName="--color-muted"
-            overWarn
-            unit="g"
-          />
-        </div>
+      {/* 栄養素(対目標バー・全画面共通) */}
+      <Card title="栄養素(対目標)">
+        <NutrientBars
+          values={{ p: pfc.p, f: pfc.f, c: pfc.c, salt_g: pfc.salt_g, fiber_g: pfc.fiber_g }}
+          target={target}
+        />
       </Card>
 
       <MealsCard meals={t?.meals ?? []} onOpenCategory={(mt) => onOpenCategory(mt, date)} />
@@ -181,51 +173,8 @@ export function NutritionScreen({
   );
 }
 
-// ============ マクロ目標バー(P/F/C/食塩)。Home の NutritionGlance でも再利用。 ============
-export function Bar({
-  label,
-  v,
-  t,
-  varName,
-  unit = 'g',
-  overWarn = false,
-}: {
-  label: string;
-  v: number;
-  t?: number;
-  varName: string;
-  unit?: string;
-  overWarn?: boolean;
-}) {
-  const pct = t && t > 0 ? Math.min(100, (v / t) * 100) : 0;
-  const over = t != null && v > t;
-  const barColor = overWarn && over ? 'var(--color-accent)' : `var(${varName})`;
-  return (
-    <div>
-      <div className="mb-1 flex items-center justify-between text-xs">
-        <span className="font-semibold" style={{ color: barColor }}>
-          {label}
-        </span>
-        <span
-          className={`tnum ${overWarn && over ? 'font-semibold text-accent-ink' : 'text-muted'}`}
-        >
-          {Math.round(v * 10) / 10}
-          {t ? ` / ${Math.round(t)}${unit}` : unit}
-          {over && !overWarn ? ` (+${Math.round(v - t)})` : ''}
-        </span>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-line">
-        <div
-          className="h-full rounded-full transition-[width] duration-500"
-          style={{ width: `${pct}%`, backgroundColor: barColor }}
-        />
-      </div>
-    </div>
-  );
-}
-
-// ============ 食事ログ(meal_type グルーピング + 品目別 PFC + カテゴリ小計 + 削除確認) ============
-/** 食事区分のサマリ一覧。各行タップで MealCategoryDetail(レーダー+内訳)へ。 */
+// ============ 食事ログ(meal_type 区分サマリ) ============
+/** 食事区分のサマリ一覧。各行タップで MealCategoryDetail(対目標バー+内訳)へ。 */
 function MealsCard({
   meals,
   onOpenCategory,

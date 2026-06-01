@@ -24,6 +24,7 @@
   --color-protein: #c2410c;
   --color-fat: #b7791f;
   --color-carb: #1d6f6f;
+  --color-fiber: #3b6fb0; /* 食物繊維(Carbのティールと区別する落ち着いた青) */
 }
 
 html,
