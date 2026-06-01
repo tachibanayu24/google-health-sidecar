@@ -336,6 +336,15 @@ function WorkoutSessionRow({
       {open && (
         <div className="mt-2 border-l-2 border-line/50 pl-3">
           {detail.isLoading && <p className="text-[11px] text-faint">読み込み中…</p>}
+          {detail.error && (
+            <button
+              type="button"
+              onClick={() => detail.refetch()}
+              className="text-[11px] font-semibold text-accent-ink underline"
+            >
+              読み込みに失敗。タップで再試行
+            </button>
+          )}
           {detail.data?.exercises.map((ex) => (
             <div key={ex.exerciseId} className="mt-2 first:mt-0">
               <div className="text-sm font-medium text-ink">{ex.name_ja ?? ex.name_en}</div>

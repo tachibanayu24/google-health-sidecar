@@ -217,6 +217,7 @@ export function RecordScreen({
       qc.invalidateQueries({ queryKey: ['muscle-volume'] });
       qc.invalidateQueries({ queryKey: ['trends'] });
       qc.invalidateQueries({ queryKey: ['recent-workouts'] });
+      qc.removeQueries({ queryKey: ['workout'] }); // 履歴の読取ビュー詳細キャッシュ(編集前)を破棄
       // PR があれば祝福を一瞬見せてから Home へ。無ければ即遷移(alert は使わない)。
       if (r.newPrs.length > 0) setTimeout(onSaved, 1600);
       else onSaved();

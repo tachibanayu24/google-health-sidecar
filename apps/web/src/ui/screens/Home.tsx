@@ -342,7 +342,8 @@ function MealsCard({
                                       onClick={() =>
                                         setConfirm({
                                           id: m.id,
-                                          label: `${mealTypeJa(m.meal_type)} / ${m.items[0]?.food_name ?? '食事'} (${mealKcal}kcal)`,
+                                          // 複数品目ミールは「他N品」を明示(ミール単位削除=全品目が消えるため)。
+                                          label: `${mealTypeJa(m.meal_type)} / ${m.items[0]?.food_name ?? '食事'}${m.items.length > 1 ? ` 他${m.items.length - 1}品` : ''} (${mealKcal}kcal)`,
                                         })
                                       }
                                       className="p-1 text-faint active:text-accent"

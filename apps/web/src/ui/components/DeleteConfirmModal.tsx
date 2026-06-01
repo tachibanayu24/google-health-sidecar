@@ -31,11 +31,11 @@ export function DeleteConfirmModal({
             : 'この操作は取り消せません。'}
         </p>
         <div className="mt-4 flex gap-2">
+          {/* キャンセルは常に押せる(処理が固まっても閉じられる)。閉じても進行中の削除は中断しない=無害。 */}
           <button
             type="button"
             onClick={onCancel}
-            disabled={isPending}
-            className="flex-1 rounded-xl border border-line py-2.5 text-sm font-semibold text-muted disabled:opacity-50"
+            className="flex-1 rounded-xl border border-line py-2.5 text-sm font-semibold text-muted"
           >
             キャンセル
           </button>
