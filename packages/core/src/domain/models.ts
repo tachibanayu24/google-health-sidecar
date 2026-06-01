@@ -53,6 +53,7 @@ export const NutritionTarget = z.object({
   target_fat_g: z.number(),
   target_carbs_g: z.number(),
   target_salt_g: z.number(), // 食塩相当量の上限目標(§9.4)。DBは NOT NULL DEFAULT 6
+  target_fiber_g: z.number(), // 食物繊維の目標(下限)。DBは NOT NULL DEFAULT 20(migration 0009)
   created_at: Unix,
 });
 export type NutritionTarget = z.infer<typeof NutritionTarget>;

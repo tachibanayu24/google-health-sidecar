@@ -46,6 +46,7 @@ export async function setNutritionTargetRow(
     fatG: number;
     carbsG: number;
     saltG: number;
+    fiberG: number;
   },
 ): Promise<void> {
   const existing = await db.raw<{ id: string }>(
@@ -54,18 +55,19 @@ export async function setNutritionTargetRow(
   );
   if (existing[0]?.id) {
     await db.run(
-      'UPDATE nutrition_targets SET phase=?, target_kcal=?, target_protein_g=?, target_fat_g=?, target_carbs_g=?, target_salt_g=? WHERE id=?',
+      'UPDATE nutrition_targets SET phase=?, target_kcal=?, target_protein_g=?, target_fat_g=?, target_carbs_g=?, target_salt_g=?, target_fiber_g=? WHERE id=?',
       input.phase,
       input.kcal,
       input.proteinG,
       input.fatG,
       input.carbsG,
       input.saltG,
+      input.fiberG,
       existing[0].id,
     );
   } else {
     await db.run(
-      'INSERT INTO nutrition_targets (id, date_from, phase, target_kcal, target_protein_g, target_fat_g, target_carbs_g, target_salt_g) VALUES (?,?,?,?,?,?,?,?)',
+      'INSERT INTO nutrition_targets (id, date_from, phase, target_kcal, target_protein_g, target_fat_g, target_carbs_g, target_salt_g, target_fiber_g) VALUES (?,?,?,?,?,?,?,?,?)',
       ulid(),
       input.dateFrom,
       input.phase,
@@ -74,6 +76,7 @@ export async function setNutritionTargetRow(
       input.fatG,
       input.carbsG,
       input.saltG,
+      input.fiberG,
     );
   }
 }

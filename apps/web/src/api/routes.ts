@@ -109,6 +109,7 @@ api.get('/foods/autocomplete', async (c) => {
     fat_g: number;
     carbs_g: number;
     sodium_mg: number | null;
+    fiber_g: number | null;
   }> = [];
   for (const it of items) {
     if (seen.has(it.food_name)) continue;
@@ -120,6 +121,7 @@ api.get('/foods/autocomplete', async (c) => {
       fat_g: it.fat_g,
       carbs_g: it.carbs_g,
       sodium_mg: it.sodium_mg,
+      fiber_g: it.fiber_g,
     });
   }
   return c.json({ foods });
@@ -173,16 +175,18 @@ api.get('/today', async (c) => {
         f: a.f + it.fat_g,
         c: a.c + it.carbs_g,
         sodiumMg: a.sodiumMg + (it.sodium_mg ?? 0),
+        fiber: a.fiber + (it.fiber_g ?? 0),
       }),
-      { kcal: 0, p: 0, f: 0, c: 0, sodiumMg: 0 },
+      { kcal: 0, p: 0, f: 0, c: 0, sodiumMg: 0, fiber: 0 },
     );
-  // 表示は食塩相当量(g)。GHには sodium(mg)で保存。
+  // 表示は食塩相当量(g)。GHには sodium(mg)で保存。食物繊維はそのまま g。
   const pfc = {
     kcal: agg.kcal,
     p: agg.p,
     f: agg.f,
     c: agg.c,
     salt_g: Math.round(saltGFromSodiumMg(agg.sodiumMg) * 10) / 10,
+    fiber_g: Math.round(agg.fiber * 10) / 10,
   };
   return c.json({
     date: d,

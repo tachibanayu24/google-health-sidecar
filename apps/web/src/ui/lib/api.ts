@@ -55,6 +55,7 @@ export interface NutritionTarget {
   target_fat_g: number;
   target_carbs_g: number;
   target_salt_g: number;
+  target_fiber_g: number;
 }
 export interface Exercise {
   id: string;
@@ -99,6 +100,8 @@ export interface TodayMeal {
     protein_g: number;
     fat_g: number;
     carbs_g: number;
+    sodium_mg: number | null;
+    fiber_g: number | null;
   }>;
 }
 export interface SleepSummary {
@@ -119,7 +122,7 @@ export interface BodyReading {
 }
 export interface Today {
   date: string;
-  pfc: { kcal: number; p: number; f: number; c: number; salt_g: number };
+  pfc: { kcal: number; p: number; f: number; c: number; salt_g: number; fiber_g: number };
   meals: TodayMeal[];
   inProgress: { id: string; title: string | null; started_at: number } | null;
   body: BodyReading;
@@ -139,6 +142,7 @@ export interface FoodSuggestion {
   fat_g: number;
   carbs_g: number;
   sodium_mg: number | null;
+  fiber_g: number | null;
 }
 export interface Trends {
   days: number;
@@ -196,6 +200,7 @@ export const api = {
     fatG: number;
     carbsG: number;
     saltG?: number;
+    fiberG?: number;
   }) => req<{ ok: true }>('/nutrition-targets', { method: 'PUT', body: JSON.stringify(body) }),
   searchExercises: (q: string, muscle?: string) =>
     req<{ exercises: Exercise[] }>(

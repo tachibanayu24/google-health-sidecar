@@ -28,6 +28,7 @@ export interface SetNutritionTargetInput {
   fatG: number;
   carbsG: number;
   saltG?: number;
+  fiberG?: number;
   /** 適用開始日(既定=今日)。過去と異なれば新フェーズ行、同日なら上書き。 */
   dateFrom?: string;
 }
@@ -44,5 +45,6 @@ export async function setNutritionTarget(
     fatG: input.fatG,
     carbsG: input.carbsG,
     saltG: input.saltG ?? 6,
+    fiberG: input.fiberG ?? 20,
   });
 }
