@@ -5,7 +5,7 @@ import {
   deleteWorkout,
   getActiveNutritionTarget,
   getAllSyncRuns,
-  getBodyMetricsByDate,
+  getBodyForDate,
   getDailyMetricsByDate,
   getExerciseHistory,
   getGhAuthError,
@@ -153,7 +153,7 @@ api.get('/today', async (c) => {
   const [meals, inProgress, body, sleep, daily] = await Promise.all([
     getMealsByDate(ctx.db, d),
     getInProgressSession(ctx.db),
-    getBodyMetricsByDate(ctx.db, d),
+    getBodyForDate(ctx.db, d),
     getSleepByDate(ctx.db, d),
     getDailyMetricsByDate(ctx.db, d),
   ]);

@@ -52,6 +52,38 @@ export async function getBodyMetricById(db: Db, id: string): Promise<BodyMetric 
   return db.one(BodyMetric, 'SELECT * FROM body_metrics WHERE id = ?', id);
 }
 
+export interface BodyReading {
+  weightKg: number | null;
+  bodyFatPct: number | null;
+  source: string | null;
+  prevWeightKg: number | null; // 直近(前日以前)の体重=増減表示用
+}
+
+/** その日付の体組成を1測定にマージ(weight行とbody_fat行が別でも合成)+ 直近の前体重。device優先。 */
+export async function getBodyForDate(db: Db, date: string): Promise<BodyReading> {
+  const dev = "CASE source WHEN 'google_health' THEN 0 ELSE 1 END";
+  const [w, f, prev] = await Promise.all([
+    db.raw<{ weight_kg: number; source: string }>(
+      `SELECT weight_kg, source FROM body_metrics WHERE date=? AND weight_kg IS NOT NULL ORDER BY ${dev}, measured_at DESC LIMIT 1`,
+      date,
+    ),
+    db.raw<{ body_fat_pct: number }>(
+      `SELECT body_fat_pct FROM body_metrics WHERE date=? AND body_fat_pct IS NOT NULL AND body_fat_pct > 0 ORDER BY ${dev}, measured_at DESC LIMIT 1`,
+      date,
+    ),
+    db.raw<{ weight_kg: number }>(
+      'SELECT weight_kg FROM body_metrics WHERE date < ? AND weight_kg IS NOT NULL ORDER BY date DESC, measured_at DESC LIMIT 1',
+      date,
+    ),
+  ]);
+  return {
+    weightKg: w[0]?.weight_kg ?? null,
+    bodyFatPct: f[0]?.body_fat_pct ?? null,
+    source: w[0]?.source ?? null,
+    prevWeightKg: prev[0]?.weight_kg ?? null,
+  };
+}
+
 export async function getLatestWeight(db: Db): Promise<BodyMetric | null> {
   return db.one(
     BodyMetric,
@@ -67,13 +99,15 @@ export interface SleepSummaryRow {
   rem_min: number | null;
   awake_min: number | null;
   efficiency: number | null;
+  start_at: number;
+  end_at: number;
 }
 
-/** その日付の睡眠(複数あれば end_at 最新)。 */
+/** その日付の主睡眠(複数行あれば最長=主睡眠を採用。昼寝に負けないよう total_min DESC)。 */
 export async function getSleepByDate(db: Db, date: string): Promise<SleepSummaryRow | null> {
   const rows = await db.raw<SleepSummaryRow>(
-    `SELECT total_min, deep_min, light_min, rem_min, awake_min, efficiency
-     FROM sleep_logs WHERE date = ? ORDER BY end_at DESC LIMIT 1`,
+    `SELECT total_min, deep_min, light_min, rem_min, awake_min, efficiency, start_at, end_at
+     FROM sleep_logs WHERE date = ? ORDER BY total_min DESC LIMIT 1`,
     date,
   );
   return rows[0] ?? null;

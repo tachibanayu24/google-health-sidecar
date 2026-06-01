@@ -272,6 +272,8 @@ function extractSleep(p: Record<string, unknown>): Record<string, number | null>
     minutesAsleep != null && minutesInBed && minutesInBed > 0
       ? Math.round((minutesAsleep / minutesInBed) * 1000) / 10
       : null;
+  // 就寝/起床は interval(start/end)。end_sec が無い古い応答は store 側で start+total で補完。
+  const interval = sleep.interval as Record<string, unknown> | undefined;
   return {
     total_min: minutesAsleep,
     deep_min: stageMin('DEEP'),
@@ -279,5 +281,7 @@ function extractSleep(p: Record<string, unknown>): Record<string, number | null>
     rem_min: stageMin('REM'),
     awake_min: stageMin('AWAKE'),
     efficiency,
+    start_sec: interval ? iso8601ToSec(interval.startTime) || null : null,
+    end_sec: interval ? iso8601ToSec(interval.endTime) || null : null,
   };
 }

@@ -79,13 +79,21 @@ export interface SleepSummary {
   rem_min: number | null;
   awake_min: number | null;
   efficiency: number | null;
+  start_at: number;
+  end_at: number;
+}
+export interface BodyReading {
+  weightKg: number | null;
+  bodyFatPct: number | null;
+  source: string | null;
+  prevWeightKg: number | null;
 }
 export interface Today {
   date: string;
   pfc: { kcal: number; p: number; f: number; c: number; salt_g: number };
   meals: TodayMeal[];
   inProgress: { id: string; title: string | null; started_at: number } | null;
-  body: Array<{ source: string; weight_kg: number | null; body_fat_pct: number | null }>;
+  body: BodyReading;
   sleep: SleepSummary | null;
   daily: Array<{ metric: string; value: number; unit: string }>;
 }

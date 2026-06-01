@@ -94,10 +94,13 @@ async function store(ctx: AppContext, dt: ReadDataType, p: ProviderDataPoint): P
     await upsertDailyMetric(ctx.db, point);
   } else if (dt.store.kind === 'sleep') {
     const e = p.extra ?? {};
+    const startAt = e.start_sec ?? p.timeSec ?? nowSec();
+    // 起床時刻: GH interval.end を優先。無ければ start + 総睡眠分で近似(end==start 破損を防止)。
+    const endAt = e.end_sec ?? startAt + (e.total_min ?? 0) * 60;
     await upsertGhSleep(ctx.db, {
       date,
-      startAtSec: p.timeSec || nowSec(),
-      endAtSec: p.timeSec || nowSec(),
+      startAtSec: startAt,
+      endAtSec: endAt,
       totalMin: e.total_min ?? 0,
       deepMin: e.deep_min ?? null,
       lightMin: e.light_min ?? null,
