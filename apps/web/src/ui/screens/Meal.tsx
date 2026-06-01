@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bookmark, Check, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Card } from '../components/Card';
+import { Sheet } from '../components/Overlay';
 import { api, type FoodSuggestion, type MealPreset } from '../lib/api';
 import { jstHourNow } from '../lib/datetime';
 import { round, saltFromSodiumMg, sodiumMgFromSalt } from '../lib/units';
@@ -314,49 +314,39 @@ function PresetSaveSheet({
   pending: boolean;
   count: number;
 }) {
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <button
-        type="button"
-        aria-label="閉じる"
-        onClick={onClose}
-        className="absolute inset-0 bg-ink/40 backdrop-blur-[2px]"
-      />
-      <div className="rise relative w-full max-w-md rounded-t-3xl bg-card px-5 pb-8 pt-5 shadow-[0_-12px_40px_-12px] shadow-ink/30">
-        <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-line" />
-        <div className="mb-1 flex items-center gap-2 font-display text-base font-bold">
-          <Bookmark className="h-4 w-4 text-accent" strokeWidth={2.4} /> プリセットとして保存
-        </div>
-        <p className="mb-3 text-xs text-muted">現在の{count}品をまとめて呼び出せるようにします。</p>
-        <input
-          // biome-ignore lint/a11y/noAutofocus: ボトムシートを開いた直後に名前入力へフォーカスするのは妥当
-          autoFocus
-          value={name}
-          onChange={(e) => onName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && onSave()}
-          placeholder="プリセット名(例: 朝の定番)"
-          className="w-full rounded-xl border border-line bg-paper px-3 py-2.5 text-sm font-semibold outline-none placeholder:font-normal placeholder:text-faint focus:border-accent focus:bg-card"
-        />
-        <div className="mt-4 flex gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 rounded-xl border border-line py-2.5 text-sm font-semibold text-muted"
-          >
-            キャンセル
-          </button>
-          <button
-            type="button"
-            disabled={!name.trim() || pending}
-            onClick={onSave}
-            className="flex-1 rounded-xl bg-accent py-2.5 text-sm font-bold text-card disabled:opacity-40"
-          >
-            {pending ? '保存中…' : '保存'}
-          </button>
-        </div>
+  return (
+    <Sheet onClose={onClose}>
+      <div className="mb-1 flex items-center gap-2 font-display text-base font-bold">
+        <Bookmark className="h-4 w-4 text-accent" strokeWidth={2.4} /> プリセットとして保存
       </div>
-    </div>,
-    document.body,
+      <p className="mb-3 text-xs text-muted">現在の{count}品をまとめて呼び出せるようにします。</p>
+      <input
+        // biome-ignore lint/a11y/noAutofocus: ボトムシートを開いた直後に名前入力へフォーカスするのは妥当
+        autoFocus
+        value={name}
+        onChange={(e) => onName(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && onSave()}
+        placeholder="プリセット名(例: 朝の定番)"
+        className="w-full rounded-xl border border-line bg-paper px-3 py-2.5 text-sm font-semibold outline-none placeholder:font-normal placeholder:text-faint focus:border-accent focus:bg-card"
+      />
+      <div className="mt-4 flex gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex-1 rounded-xl border border-line py-2.5 text-sm font-semibold text-muted"
+        >
+          キャンセル
+        </button>
+        <button
+          type="button"
+          disabled={!name.trim() || pending}
+          onClick={onSave}
+          className="flex-1 rounded-xl bg-accent py-2.5 text-sm font-bold text-card disabled:opacity-40"
+        >
+          {pending ? '保存中…' : '保存'}
+        </button>
+      </div>
+    </Sheet>
   );
 }
 

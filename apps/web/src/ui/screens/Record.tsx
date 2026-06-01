@@ -35,11 +35,7 @@ const newSet = (init?: Partial<SetRow>): SetRow => ({
   ...init,
 });
 
-// セット種別は「本番 / ウォームアップ」の2状態のみ。warmup は総量・PR から除外(§8.x)。
-const SET_TYPE_META: Record<SetRow['setType'], { abbr: string; cls: string }> = {
-  main: { abbr: '本', cls: 'bg-ink text-card' },
-  warmup: { abbr: 'W', cls: 'bg-paper text-faint border border-line' },
-};
+// セット種別は「本番 / ウォームアップ」の2状態のみ(本番チェックで表現)。warmup は総量・PR から除外(§8.x)。
 
 export function RecordScreen({
   onSaved,
@@ -295,7 +291,7 @@ export function RecordScreen({
             </div>
           </div>
           <div className="mt-2 grid grid-cols-[1.6rem_1fr_1fr_1fr] gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-faint">
-            <span>型</span>
+            <span>本番</span>
             <span>{unit}</span>
             <span>Reps</span>
             <span>RPE</span>
@@ -303,16 +299,25 @@ export function RecordScreen({
           <div className="mt-1 space-y-1.5">
             {it.sets.map((s, si) => (
               <div key={s.key} className="grid grid-cols-[1.6rem_1fr_1fr_1fr] items-center gap-2">
-                <button
-                  type="button"
-                  aria-label="本番/ウォームアップ切替"
-                  onClick={() =>
-                    updateSet(ei, si, { setType: s.setType === 'warmup' ? 'main' : 'warmup' })
-                  }
-                  className={`flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold ${SET_TYPE_META[s.setType].cls}`}
+                {/* 本番セットのチェック。チェック=総量・PRに計上、外す=ウォームアップ。 */}
+                <label
+                  className={`flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border transition-colors ${
+                    s.setType === 'main'
+                      ? 'border-ink bg-ink text-card'
+                      : 'border-line text-transparent'
+                  }`}
                 >
-                  {SET_TYPE_META[s.setType].abbr}
-                </button>
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    aria-label="本番セット"
+                    checked={s.setType === 'main'}
+                    onChange={() =>
+                      updateSet(ei, si, { setType: s.setType === 'main' ? 'warmup' : 'main' })
+                    }
+                  />
+                  <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                </label>
                 <NumInput
                   value={s.entryValue}
                   onChange={(v) => updateSet(ei, si, { entryValue: v })}
@@ -334,8 +339,8 @@ export function RecordScreen({
 
       {items.length > 0 && (
         <p className="px-1 text-[11px] leading-snug text-muted">
-          先頭のボタンをタップで <span className="font-bold text-ink">本</span>=本番 ⇄{' '}
-          <span className="font-bold">W</span>=ウォームアップ を切替(W は総量・PR に含めません)。
+          <span className="font-bold text-ink">本番</span> にチェックが入ったセットだけ総量・PR
+          に計上します(外すとウォームアップ)。
         </p>
       )}
 

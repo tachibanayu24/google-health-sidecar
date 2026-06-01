@@ -1,4 +1,4 @@
-import { Dumbbell, HeartPulse, House, Plus, Settings, Utensils, X } from 'lucide-react';
+import { Dumbbell, HeartPulse, House, Plus, Settings, Utensils } from 'lucide-react';
 import { useRef, useState } from 'react';
 import {
   createBrowserRouter,
@@ -9,6 +9,7 @@ import {
   useParams,
   useSearchParams,
 } from 'react-router-dom';
+import { Modal, Sheet } from './components/Overlay';
 import { todayJst } from './lib/datetime';
 import { HomeScreen } from './screens/Home';
 import { MealScreen } from './screens/Meal';
@@ -179,17 +180,11 @@ function Layout() {
 
 type Tab = 'home' | 'training' | 'body' | 'settings';
 
-/** 未保存の記録から離脱しようとしたときの破棄確認(データ消失防止)。 */
+/** 未保存の記録から離脱しようとしたときの破棄確認(データ消失防止)。共通 Modal を使う。 */
 function DiscardGuard({ onDiscard, onCancel }: { onDiscard: () => void; onCancel: () => void }) {
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center px-8">
-      <button
-        type="button"
-        aria-label="閉じる"
-        onClick={onCancel}
-        className="absolute inset-0 bg-ink/45 backdrop-blur-[2px]"
-      />
-      <div className="rise relative w-full max-w-xs rounded-2xl bg-card p-5 text-center shadow-[0_20px_50px_-12px] shadow-ink/40">
+    <Modal onClose={onCancel}>
+      <div className="text-center">
         <h2 className="font-display text-base font-bold">記録を破棄しますか?</h2>
         <p className="mt-1.5 text-sm text-muted">入力中の内容は保存されていません。</p>
         <div className="mt-4 flex gap-2">
@@ -209,7 +204,7 @@ function DiscardGuard({ onDiscard, onCancel }: { onDiscard: () => void; onCancel
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -303,26 +298,13 @@ function LogChooser({
   onPick: (v: 'record' | 'meal') => void;
 }) {
   return (
-    <div className="fixed inset-0 z-30 flex items-end">
-      <button
-        type="button"
-        aria-label="閉じる"
-        onClick={onClose}
-        className="absolute inset-0 bg-ink/40 backdrop-blur-[2px]"
-      />
-      <div className="safe-bottom rise relative mx-auto w-full max-w-md rounded-t-3xl border border-line bg-paper p-5 pb-8">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-display text-lg font-bold tracking-tight">何を記録する?</h2>
-          <button type="button" aria-label="閉じる" onClick={onClose} className="p-1 text-faint">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <ChooserButton Icon={Dumbbell} label="ワークアウト" onClick={() => onPick('record')} />
-          <ChooserButton Icon={Utensils} label="食事" onClick={() => onPick('meal')} />
-        </div>
+    <Sheet onClose={onClose}>
+      <h2 className="mb-3 font-display text-lg font-bold tracking-tight">何を記録する?</h2>
+      <div className="grid grid-cols-2 gap-3">
+        <ChooserButton Icon={Dumbbell} label="ワークアウト" onClick={() => onPick('record')} />
+        <ChooserButton Icon={Utensils} label="食事" onClick={() => onPick('meal')} />
       </div>
-    </div>
+    </Sheet>
   );
 }
 
