@@ -19,7 +19,11 @@ export const GH_SCOPES = {
 /** OIDC ログイン(系統A)用の最小スコープ。 */
 export const OIDC_SCOPES = ['openid', 'email'] as const;
 
-/** Pattern B(系統B)で要求するスコープ集合。nutritionWrite は flag に応じて足す。 */
+/**
+ * Pattern B(系統B)で要求するスコープ集合。
+ * nutritionRead は GH 既存の食事を取り込む(pull)ために常時要求(§5.2)。
+ * nutritionWrite はアプリ→GH 書き出し flag に応じて足す。
+ */
 export function ghScopeSet(opts: { nutritionPush: boolean }): string[] {
   const s: string[] = [
     GH_SCOPES.activityWrite,
@@ -27,6 +31,7 @@ export function ghScopeSet(opts: { nutritionPush: boolean }): string[] {
     GH_SCOPES.activityRead,
     GH_SCOPES.metricsRead,
     GH_SCOPES.sleepRead,
+    GH_SCOPES.nutritionRead, // GH の食事を pull するため(read)
   ];
   if (opts.nutritionPush) s.push(GH_SCOPES.nutritionWrite);
   return s;
