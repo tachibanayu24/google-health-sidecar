@@ -57,6 +57,10 @@ describe('buildNutritionPayload', () => {
     }) as Record<string, any>;
     expect(p.nutritionLog.foodDisplayName).toBe('鶏胸肉'); // ★foodDisplayName
     expect(p.nutritionLog.mealType).toBe('LUNCH');
+    // GH は start<end 必須(同時刻は 400)
+    expect(Date.parse(p.nutritionLog.interval.endTime)).toBeGreaterThan(
+      Date.parse(p.nutritionLog.interval.startTime),
+    );
     expect(p.nutritionLog.energy.kcal).toBe(330); // ★EnergyQuantity
     expect(p.nutritionLog.totalCarbohydrate.grams).toBe(2); // ★top-level WeightQuantity
     expect(p.nutritionLog.totalFat.grams).toBe(4);

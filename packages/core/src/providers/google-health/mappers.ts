@@ -73,7 +73,8 @@ export function buildNutritionPayload(input: NutritionPushInput): Record<string,
     nutrients.push({ nutrient: 'SODIUM', quantity: g(input.sodiumMg / 1000) }); // mg → g
   }
   const nutritionLog: Record<string, unknown> = {
-    interval: { startTime: rfc3339(input.atSec), endTime: rfc3339(input.atSec) },
+    // 食事は瞬時イベントだが GH は start<end 必須 → 終端を +60s(実機 400 回避)
+    interval: { startTime: rfc3339(input.atSec), endTime: rfc3339(input.atSec + 60) },
     mealType: input.mealType,
     foodDisplayName: input.foodDisplayName,
     energy: { kcal: input.kcal }, // EnergyQuantity
