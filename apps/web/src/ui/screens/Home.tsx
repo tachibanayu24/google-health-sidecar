@@ -5,7 +5,6 @@ import {
   ChevronRight,
   Dumbbell,
   Flame,
-  Footprints,
   HeartPulse,
   Moon,
   Scale,
@@ -236,7 +235,7 @@ const METRIC_META: Record<string, { label: string; Icon: typeof HeartPulse; unit
   spo2_avg: { label: 'SpO₂', Icon: Activity, unit: '%' },
   resp_rate: { label: '呼吸数', Icon: Wind, unit: '/min' },
   vo2max: { label: 'VO₂max', Icon: Activity },
-  steps: { label: '歩数', Icon: Footprints, unit: '歩' },
+  // steps は日次合計の集計対応まで非表示(GH は分単位 interval, §5.4)。
 };
 
 function SensingCard({ daily }: { daily: Array<{ metric: string; value: number; unit: string }> }) {
