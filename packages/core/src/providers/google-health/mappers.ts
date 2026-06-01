@@ -17,10 +17,12 @@ import type {
  *    dailyRestingHeartRate / dailyHeartRateVariability / dailyOxygenSaturation / dailyVo2Max)
  *  - 重量 = weight.weightGrams(double, kg×1000)、体脂肪 = bodyFat.percentage
  *  - exercise は displayName/activeDuration/notes が top-level、calories は metricsSummary.caloriesKcal
- *  - nutrition は nutritionLog.foodName / mealType(enum) / caloriesKcal
- *  - int64(steps.count, beatsPerMinute)は JSON 文字列で返る → 文字列も数値化して受理
+ *  - nutrition は nutritionLog.foodDisplayName / mealType(enum) / energy{kcal} / totalCarbohydrate・totalFat{grams} /
+ *    nutrients[]{nutrient(enum), quantity:{grams}}(TOTAL_FAT/CARBOHYDRATES は enum 非対応→top-level)
+ *  - int64(steps.count, beatsPerMinute, sleep stage minutes)は JSON 文字列で返る → 文字列も数値化して受理
  *  - daily 系の時刻は構造化 Date {year,month,day}、weight/bodyFat は sampleTime.physicalTime、
- *    steps/sleep は interval.startTime(RFC3339)
+ *    steps/sleep は interval.startTime(RFC3339)。oxygen=averagePercentage / respiratory=breathsPerMinute /
+ *    sleep の stagesSummary は summary 配下
  */
 
 function rfc3339(sec: number): string {
@@ -55,27 +57,30 @@ export function buildExercisePayload(input: ExercisePushInput): Record<string, u
 }
 
 /** nutrition-log create(anonymous food, immutable → 編集は delete+create, §5.2)。
- *  ⚠ nutrients[] の正確な形は要トークン検証(openItem)。foodName/mealType/caloriesKcal は確定。 */
+ *  実機 discovery 確定形: foodDisplayName / mealType(enum) / energy=EnergyQuantity{kcal} /
+ *  totalCarbohydrate・totalFat=WeightQuantity{grams} / nutrients[]=NutrientQuantity{nutrient,quantity:{grams}}。
+ *  ⚠ NutrientQuantity の nutrient enum に TOTAL_FAT/CARBOHYDRATES は無い → 炭水/脂質は top-level field へ。 */
 export function buildNutritionPayload(input: NutritionPushInput): Record<string, unknown> {
+  const g = (grams: number) => ({ grams });
   const nutrients: Array<{ nutrient: string; quantity: { grams: number } }> = [];
-  const add = (n: string, g?: number) => {
-    if (g != null) nutrients.push({ nutrient: n, quantity: { grams: g } });
+  const add = (n: string, grams?: number) => {
+    if (grams != null) nutrients.push({ nutrient: n, quantity: g(grams) });
   };
   add('PROTEIN', input.proteinG);
-  add('TOTAL_FAT', input.fatG);
-  add('CARBOHYDRATES', input.carbsG);
   add('DIETARY_FIBER', input.fiberG);
   add('SUGAR', input.sugarG);
   if (input.sodiumMg != null) {
-    nutrients.push({ nutrient: 'SODIUM', quantity: { grams: input.sodiumMg / 1000 } });
+    nutrients.push({ nutrient: 'SODIUM', quantity: g(input.sodiumMg / 1000) }); // mg → g
   }
   const nutritionLog: Record<string, unknown> = {
     interval: { startTime: rfc3339(input.atSec), endTime: rfc3339(input.atSec) },
     mealType: input.mealType,
-    foodName: input.foodDisplayName, // ★foodDisplayName ではなく foodName
-    caloriesKcal: input.kcal,
+    foodDisplayName: input.foodDisplayName,
+    energy: { kcal: input.kcal }, // EnergyQuantity
     nutrients,
   };
+  if (input.carbsG != null) nutritionLog.totalCarbohydrate = g(input.carbsG); // WeightQuantity
+  if (input.fatG != null) nutritionLog.totalFat = g(input.fatG);
   return { dataSource: dataSource(), nutritionLog };
 }
 
@@ -162,9 +167,11 @@ function extractValue(dataType: string, p: Record<string, unknown>): number | nu
     case 'daily-heart-rate-variability':
       return asNum(field(p.dailyHeartRateVariability, 'averageHeartRateVariabilityMilliseconds'));
     case 'daily-oxygen-saturation':
-      return asNum(field(p.dailyOxygenSaturation, 'percentage'));
+      return asNum(field(p.dailyOxygenSaturation, 'averagePercentage')); // ★averagePercentage(実機確認)
     case 'daily-vo2-max':
       return asNum(field(p.dailyVo2Max, 'vo2MaxMlPerKgPerMinute'));
+    case 'daily-respiratory-rate':
+      return asNum(field(p.dailyRespiratoryRate, 'breathsPerMinute')); // ★breathsPerMinute(実機確認)
     default:
       return null; // sleep は extra、未知は null
   }
@@ -202,18 +209,21 @@ function extractTimeSec(dataType: string, p: Record<string, unknown>): number {
       return dateObjToSec(field(p.dailyOxygenSaturation, 'date'));
     case 'daily-vo2-max':
       return dateObjToSec(field(p.dailyVo2Max, 'date'));
+    case 'daily-respiratory-rate':
+      return dateObjToSec(field(p.dailyRespiratoryRate, 'date'));
     default:
       return 0;
   }
 }
 
-/** Sleep: summary.minutesAsleep / minutesInSleepPeriod + stagesSummary[]{type,minutes}。efficiency は導出。 */
+/** Sleep: summary.minutesAsleep / minutesInSleepPeriod + summary.stagesSummary[]{type,minutes}。efficiency は導出。
+ *  実機 discovery 確定: stagesSummary は summary 配下、StageSummary={type(enum),minutes(int64文字列),count}。 */
 function extractSleep(p: Record<string, unknown>): Record<string, number | null> {
   const sleep = (p.sleep ?? {}) as Record<string, unknown>;
   const summary = (sleep.summary ?? {}) as Record<string, unknown>;
   const minutesAsleep = asNum(summary.minutesAsleep);
   const minutesInBed = asNum(summary.minutesInSleepPeriod);
-  const stages = Array.isArray(sleep.stagesSummary) ? (sleep.stagesSummary as unknown[]) : [];
+  const stages = Array.isArray(summary.stagesSummary) ? (summary.stagesSummary as unknown[]) : [];
   const stageMin = (type: string): number | null => {
     for (const s of stages) {
       if (field(s, 'type') === type) return asNum(field(s, 'minutes'));

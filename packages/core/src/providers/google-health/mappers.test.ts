@@ -42,19 +42,28 @@ describe('buildExercisePayload', () => {
 });
 
 describe('buildNutritionPayload', () => {
-  it('nutritionLog.foodName / mealType enum / caloriesKcal、sodium は mg→g', () => {
+  it('foodDisplayName / mealType enum / energy{kcal} / 炭水・脂質は top-level、sodium は mg→g', () => {
     const p = buildNutritionPayload({
       atSec: 1_700_000_000,
       mealType: 'LUNCH',
       foodDisplayName: '鶏胸肉',
       kcal: 330,
       proteinG: 60,
+      fatG: 4,
+      carbsG: 2,
+      fiberG: 1,
       sodiumMg: 500,
       clientTag: 'meal_1',
     }) as Record<string, any>;
-    expect(p.nutritionLog.foodName).toBe('鶏胸肉'); // ★foodName
+    expect(p.nutritionLog.foodDisplayName).toBe('鶏胸肉'); // ★foodDisplayName
     expect(p.nutritionLog.mealType).toBe('LUNCH');
-    expect(p.nutritionLog.caloriesKcal).toBe(330);
+    expect(p.nutritionLog.energy.kcal).toBe(330); // ★EnergyQuantity
+    expect(p.nutritionLog.totalCarbohydrate.grams).toBe(2); // ★top-level WeightQuantity
+    expect(p.nutritionLog.totalFat.grams).toBe(4);
+    const names = p.nutritionLog.nutrients.map((n: any) => n.nutrient);
+    expect(names).toContain('PROTEIN');
+    expect(names).toContain('DIETARY_FIBER');
+    expect(names).not.toContain('TOTAL_FAT'); // enum 非対応 → top-level に逃がす
     const sodium = p.nutritionLog.nutrients.find((n: any) => n.nutrient === 'SODIUM');
     expect(sodium.quantity.grams).toBeCloseTo(0.5, 6);
   });
@@ -129,10 +138,10 @@ describe('mapDataPoint: 値は typed sub-object 配下', () => {
     expect(dp.value).toBe(42.5);
   });
 
-  it('daily-oxygen-saturation: percentage / daily-vo2-max: vo2MaxMlPerKgPerMinute', () => {
+  it('daily-oxygen-saturation: averagePercentage / vo2-max / respiratory: breathsPerMinute', () => {
     expect(
       mapDataPoint('daily-oxygen-saturation', {
-        dailyOxygenSaturation: { percentage: 97.2, date: { year: 2026, month: 5, day: 30 } },
+        dailyOxygenSaturation: { averagePercentage: 97.2, date: { year: 2026, month: 5, day: 30 } },
       }).value,
     ).toBe(97.2);
     expect(
@@ -140,6 +149,11 @@ describe('mapDataPoint: 値は typed sub-object 配下', () => {
         dailyVo2Max: { vo2MaxMlPerKgPerMinute: 48.1, date: { year: 2026, month: 5, day: 30 } },
       }).value,
     ).toBe(48.1);
+    const resp = mapDataPoint('daily-respiratory-rate', {
+      dailyRespiratoryRate: { breathsPerMinute: 13.8, date: { year: 2026, month: 5, day: 30 } },
+    });
+    expect(resp.value).toBe(13.8);
+    expect(resp.timeSec).toBe(Math.floor(Date.UTC(2026, 4, 30) / 1000));
   });
 
   it('sleep: summary.minutesAsleep + stagesSummary + efficiency 導出', () => {
@@ -147,13 +161,17 @@ describe('mapDataPoint: 値は typed sub-object 配下', () => {
       name: 'sl1',
       sleep: {
         interval: { startTime: '2026-05-29T23:00:00Z' },
-        summary: { minutesAsleep: 432, minutesInSleepPeriod: 480 },
-        stagesSummary: [
-          { type: 'DEEP', minutes: 80 },
-          { type: 'LIGHT', minutes: 250 },
-          { type: 'REM', minutes: 102 },
-          { type: 'AWAKE', minutes: 48 },
-        ],
+        summary: {
+          minutesAsleep: 432,
+          minutesInSleepPeriod: 480,
+          // ★stagesSummary は summary 配下、minutes は int64 文字列
+          stagesSummary: [
+            { type: 'DEEP', minutes: '80' },
+            { type: 'LIGHT', minutes: '250' },
+            { type: 'REM', minutes: '102' },
+            { type: 'AWAKE', minutes: '48' },
+          ],
+        },
       },
     });
     expect(dp.extra?.total_min).toBe(432);
@@ -164,14 +182,13 @@ describe('mapDataPoint: 値は typed sub-object 配下', () => {
 });
 
 describe('parseReconcileResponse', () => {
-  it('ReconciledDataPoint(dataPointName + data ラッパー)', () => {
+  it('実 reconcile 形(dataPointName + 値は直下)', () => {
+    // 実機確認: reconcile も値は data ラッパー無しで直下、id=dataPointName
     const { points, cursor } = parseReconcileResponse('weight', {
       dataPoints: [
         {
           dataPointName: 'users/me/.../dp_a',
-          data: {
-            weight: { weightGrams: '70000', sampleTime: { physicalTime: '2026-05-30T07:00:00Z' } },
-          },
+          weight: { weightGrams: '70000', sampleTime: { physicalTime: '2026-05-30T07:00:00Z' } },
         },
       ],
       nextPageToken: 'tok',
@@ -182,9 +199,18 @@ describe('parseReconcileResponse', () => {
     expect(cursor).toBe('tok');
   });
 
-  it('list 形(値が直下・name)も後方互換で読める', () => {
+  it('daily(dataPointName 無し)も読める', () => {
+    const { points } = parseReconcileResponse('daily-resting-heart-rate', {
+      dataPoints: [
+        { dailyRestingHeartRate: { beatsPerMinute: '60', date: { year: 2026, month: 6, day: 1 } } },
+      ],
+    });
+    expect(points[0]?.value).toBe(60);
+  });
+
+  it('data ラッパー形(将来差分)も防御的に読める', () => {
     const { points } = parseReconcileResponse('weight', {
-      dataPoints: [{ name: 'dp_b', weight: { weightGrams: '68000' } }],
+      dataPoints: [{ dataPointName: 'dp_b', data: { weight: { weightGrams: '68000' } } }],
     });
     expect(points[0]?.id).toBe('dp_b');
     expect(points[0]?.value).toBe(68);

@@ -27,6 +27,8 @@ export interface ReadDataType {
   /** reconcile の値オブジェクトキー(camelCase)。filter のプレフィックス & data 配下の抽出キー。 */
   valueField: string;
   timeShape: TimeShape;
+  /** interval系 filter の時刻フィールド(既定 start_time。sleep は end_time のみ有効=実機確認)。 */
+  intervalTimeField?: 'start_time' | 'end_time';
   store:
     | { kind: 'body_metric'; field: 'weight_kg' | 'body_fat_pct' }
     | { kind: 'sleep' }
@@ -48,7 +50,13 @@ export const READ_DATATYPES: ReadDataType[] = [
     timeShape: 'sample',
     store: { kind: 'body_metric', field: 'body_fat_pct' },
   },
-  { ghDataType: 'sleep', valueField: 'sleep', timeShape: 'interval', store: { kind: 'sleep' } },
+  {
+    ghDataType: 'sleep',
+    valueField: 'sleep',
+    timeShape: 'interval',
+    intervalTimeField: 'end_time', // sleep は interval.start_time が filter member 不可(実機400)→ end_time
+    store: { kind: 'sleep' },
+  },
   {
     ghDataType: 'daily-resting-heart-rate',
     valueField: 'dailyRestingHeartRate',
@@ -111,7 +119,10 @@ export function buildReadFilter(dt: ReadDataType, sinceSec: number, untilSec: nu
   if (dt.timeShape === 'date') {
     return `${f}.date >= "${ymd(sinceSec)}" AND ${f}.date < "${ymd(untilSec + 86_400)}"`;
   }
-  const path = dt.timeShape === 'sample' ? 'sample_time.physical_time' : 'interval.start_time';
+  const path =
+    dt.timeShape === 'sample'
+      ? 'sample_time.physical_time'
+      : `interval.${dt.intervalTimeField ?? 'start_time'}`;
   return `${f}.${path} >= "${rfc3339(sinceSec)}" AND ${f}.${path} < "${rfc3339(untilSec)}"`;
 }
 
