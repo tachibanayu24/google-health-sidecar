@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Card } from '../components/Card';
 import { Loading } from '../components/state';
 import { api, type TodayMeal } from '../lib/api';
@@ -37,19 +37,21 @@ export function mealTypeJa(t: string): string {
 export function NutritionScreen({
   date,
   onBack,
+  onDateChange,
   onRecordMeal,
   onOpenSettings,
   onOpenCategory,
 }: {
   date: string;
   onBack: () => void;
+  onDateChange: (date: string) => void;
   onRecordMeal: () => void;
   onOpenSettings: () => void;
   onOpenCategory: (mealType: string, date: string) => void;
 }) {
-  const [d, setD] = useState(date); // 画面内で日付を前後できる(過去の食事振り返り)
-  const isToday = d === todayJst();
-  const today = useQuery({ queryKey: ['today', d], queryFn: () => api.today(d) });
+  // 日付は URL(?d=)が唯一の真実。ステッパーは onDateChange で URL を更新 → 戻る/進むも整合(state drift なし)。
+  const isToday = date === todayJst();
+  const today = useQuery({ queryKey: ['today', date], queryFn: () => api.today(date) });
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
   if (today.isLoading) return <Loading />;
   const t = today.data;
@@ -58,7 +60,7 @@ export function NutritionScreen({
   const kcal = Math.round(pfc.kcal);
   const remain = target ? Math.round(target.target_kcal - kcal) : null;
   const pct = target ? Math.min(100, (kcal / target.target_kcal) * 100) : 0;
-  const wd = ['日', '月', '火', '水', '木', '金', '土'][jstDayOfWeek(d)];
+  const wd = ['日', '月', '火', '水', '木', '金', '土'][jstDayOfWeek(date)];
 
   return (
     <div className="mx-auto max-w-md space-y-4">
@@ -77,23 +79,23 @@ export function NutritionScreen({
           <button
             type="button"
             aria-label="前日"
-            onClick={() => setD((x) => shiftDate(x, -1))}
+            onClick={() => onDateChange(shiftDate(date, -1))}
             className="flex h-8 w-8 items-center justify-center rounded-full text-muted active:bg-line/60"
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={2.4} />
           </button>
           <button
             type="button"
-            onClick={() => setD(todayJst())}
+            onClick={() => onDateChange(todayJst())}
             className="min-w-14 text-center text-sm font-semibold"
           >
-            {isToday ? '今日' : `${d.slice(5).replace('-', '/')}`}
+            {isToday ? '今日' : `${date.slice(5).replace('-', '/')}`}
             <span className="ml-1 text-xs text-muted">({wd})</span>
           </button>
           <button
             type="button"
             aria-label="翌日"
-            onClick={() => setD((x) => shiftDate(x, 1))}
+            onClick={() => onDateChange(shiftDate(date, 1))}
             disabled={isToday}
             className="flex h-8 w-8 items-center justify-center rounded-full text-muted active:bg-line/60 disabled:opacity-25"
           >
@@ -157,7 +159,7 @@ export function NutritionScreen({
         </div>
       </Card>
 
-      <MealsCard meals={t?.meals ?? []} onOpenCategory={(mt) => onOpenCategory(mt, d)} />
+      <MealsCard meals={t?.meals ?? []} onOpenCategory={(mt) => onOpenCategory(mt, date)} />
 
       <div className="flex gap-2">
         <button

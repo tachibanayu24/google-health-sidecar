@@ -58,13 +58,14 @@ function TrainingRoute() {
 }
 
 function NutritionRoute() {
-  const [sp] = useSearchParams();
+  const [sp, setSp] = useSearchParams();
   const navigate = useNavigate();
   const date = sp.get('d') ?? todayJst();
   return (
     <NutritionScreen
       date={date}
       onBack={() => navigate('/')}
+      onDateChange={(d) => setSp({ d }, { replace: true })}
       onRecordMeal={() => navigate('/meal')}
       onOpenSettings={() => navigate('/settings')}
       onOpenCategory={(mealType, d) => navigate(`/nutrition/${mealType}?d=${d}`)}
