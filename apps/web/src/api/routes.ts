@@ -12,6 +12,7 @@ import {
   getInProgressSession,
   getMealById,
   getMealItems,
+  getMealItemsForMeals,
   getMealsByDate,
   getMuscleVolume,
   getPushQueueStats,
@@ -158,9 +159,11 @@ api.get('/today', async (c) => {
     getSleepByDate(ctx.db, d),
     getDailyMetricsByDate(ctx.db, d),
   ]);
-  const mealsWithItems = await Promise.all(
-    meals.map(async (m) => ({ ...m, items: await getMealItems(ctx.db, m.id) })),
+  const itemsByMeal = await getMealItemsForMeals(
+    ctx.db,
+    meals.map((m) => m.id),
   );
+  const mealsWithItems = meals.map((m) => ({ ...m, items: itemsByMeal.get(m.id) ?? [] }));
   const agg = mealsWithItems
     .flatMap((m) => m.items)
     .reduce(

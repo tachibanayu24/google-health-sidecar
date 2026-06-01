@@ -62,6 +62,23 @@ export async function getMealItems(db: Db, mealId: string): Promise<MealItem[]> 
   return db.all(MealItemSchema, 'SELECT * FROM meal_items WHERE meal_id = ?', mealId);
 }
 
+/** 複数 meal の items を1クエリでまとめて取得し meal_id でグループ化(N+1 回避)。 */
+export async function getMealItemsForMeals(
+  db: Db,
+  mealIds: string[],
+): Promise<Map<string, MealItem[]>> {
+  const grouped = new Map<string, MealItem[]>(mealIds.map((id) => [id, []]));
+  if (mealIds.length === 0) return grouped;
+  const placeholders = mealIds.map(() => '?').join(',');
+  const rows = await db.all(
+    MealItemSchema,
+    `SELECT * FROM meal_items WHERE meal_id IN (${placeholders}) ORDER BY created_at`,
+    ...mealIds,
+  );
+  for (const r of rows) grouped.get(r.meal_id)?.push(r);
+  return grouped;
+}
+
 /** food_name オートコンプリート源(§9.4: 過去PFCの再利用)。同名は「最新行そのもの」を返す。 */
 export async function autocompleteFoods(db: Db, q: string, limit = 8): Promise<MealItem[]> {
   // bare-column 集約だと max(created_at) の行と他列が一致しないため、相関サブクエリで最新行を取る。

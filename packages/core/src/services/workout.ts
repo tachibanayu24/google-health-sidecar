@@ -1,7 +1,7 @@
 import { insertStmt, runBatch, type Stmt } from '../db/batch-helpers';
 import { ulid } from '../db/ids';
 import {
-  getExerciseMuscles,
+  getExerciseMusclesForExercises,
   listMuscleGroups,
   resolveExercise,
 } from '../db/repositories/exercises';
@@ -392,13 +392,14 @@ export async function getMuscleVolume(
     listMuscleGroups(ctx.db),
   ]);
 
-  // 種目→部位(role/contribution)を一括ロード。
+  // 種目→部位(role/contribution)を1クエリで一括ロード(N+1 回避)。
+  const exerciseIds = [...new Set(sets.map((s) => s.exercise_id))];
+  const linksByExercise = await getExerciseMusclesForExercises(ctx.db, exerciseIds);
   const muscleByExercise = new Map<
     string,
     Array<{ muscle: string; role: string; contribution: number }>
   >();
-  for (const exId of new Set(sets.map((s) => s.exercise_id))) {
-    const ms = await getExerciseMuscles(ctx.db, exId);
+  for (const [exId, ms] of linksByExercise) {
     muscleByExercise.set(
       exId,
       ms.map((m) => ({ muscle: m.muscle_group_id, role: m.role, contribution: m.contribution })),

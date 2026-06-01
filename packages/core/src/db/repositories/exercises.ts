@@ -53,6 +53,23 @@ export async function getExerciseMuscles(db: Db, exerciseId: string): Promise<Ex
   return db.all(ExerciseMuscle, 'SELECT * FROM exercise_muscles WHERE exercise_id = ?', exerciseId);
 }
 
+/** 複数種目の部位リンクを1クエリで取得し exercise_id でグループ化(N+1 回避)。 */
+export async function getExerciseMusclesForExercises(
+  db: Db,
+  exerciseIds: string[],
+): Promise<Map<string, ExerciseMuscle[]>> {
+  const grouped = new Map<string, ExerciseMuscle[]>(exerciseIds.map((id) => [id, []]));
+  if (exerciseIds.length === 0) return grouped;
+  const placeholders = exerciseIds.map(() => '?').join(',');
+  const rows = await db.all(
+    ExerciseMuscle,
+    `SELECT * FROM exercise_muscles WHERE exercise_id IN (${placeholders})`,
+    ...exerciseIds,
+  );
+  for (const r of rows) grouped.get(r.exercise_id)?.push(r);
+  return grouped;
+}
+
 export async function listMuscleGroups(db: Db): Promise<MuscleGroup[]> {
   return db.all(MuscleGroup, 'SELECT * FROM muscle_groups ORDER BY region, id');
 }
