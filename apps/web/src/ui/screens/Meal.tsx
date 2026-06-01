@@ -117,6 +117,7 @@ export function MealScreen({
       sodiumMg: it.saltG != null ? Math.round(sodiumMgFromSalt(it.saltG)) : undefined,
     }));
 
+  const reqId = useState(() => crypto.randomUUID())[0]; // 冪等キー(この記録ドラフト1回ぶん)
   const save = useMutation({
     mutationFn: async () => {
       // 編集 = 旧 meal を削除(GH datapoint も)→ 元の日時で再記録(GH anonymous food は immutable, §5.2)。
@@ -128,6 +129,7 @@ export function MealScreen({
         inputMethod: presetId ? 'preset' : 'manual',
         items: itemInputs(),
         presetId: presetId ?? undefined,
+        clientRequestId: editMealId ? undefined : reqId, // 新規記録のみ冪等(編集は毎回新規mealId)
       });
     },
     onSuccess: () => {

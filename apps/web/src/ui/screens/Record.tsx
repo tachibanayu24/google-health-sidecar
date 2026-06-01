@@ -195,6 +195,7 @@ export function RecordScreen({
   );
   const totalSets = items.reduce((a, it) => a + it.sets.length, 0);
 
+  const reqId = useState(() => crypto.randomUUID())[0]; // 冪等キー(このセッションドラフト1回ぶん)
   const save = useMutation({
     mutationFn: async () => {
       // 編集 = 旧セッション削除(GH datapoint も)→ 元の日付で再記録。
@@ -208,6 +209,7 @@ export function RecordScreen({
         bodyweightKg: bodyweight,
         startedAtSec: now - estDurationSec,
         endedAtSec: now,
+        clientRequestId: editWorkoutId ? undefined : reqId,
         exercises: items.map((it) => ({
           exerciseId: it.exercise.id,
           supersetGroup: it.supersetGroup,

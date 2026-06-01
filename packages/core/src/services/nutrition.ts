@@ -35,6 +35,8 @@ export interface LogMealInput {
   items: MealItemInput[];
   /** プリセット由来なら使用回数を加算(任意)。 */
   presetId?: string;
+  /** 冪等キー(client 生成 UUID)。オフライン再送/MCP リトライの二重登録を防止(§9.8)。 */
+  clientRequestId?: string;
 }
 
 /**
@@ -46,9 +48,18 @@ export async function logMeal(
   input: LogMealInput,
 ): Promise<{ mealId: string; ghPushed: boolean }> {
   const now = nowSec();
+  // 冪等: 同じ client_request_id の食事が既にあれば再登録しない(オフライン再送/MCPリトライ, §9.8)。
+  if (input.clientRequestId) {
+    const ex = await ctx.db.raw<{ id: string }>(
+      'SELECT id FROM meals WHERE client_request_id = ? LIMIT 1',
+      input.clientRequestId,
+    );
+    if (ex[0]) return { mealId: ex[0].id, ghPushed: false };
+  }
   const mealId = ulid();
   const date = input.date ?? todayJst();
   const loggedAt = input.loggedAtSec ?? now;
+  const inputMethod = input.presetId ? 'preset' : (input.inputMethod ?? 'manual');
 
   const stmts: Stmt[] = [
     insertStmt('meals', {
@@ -58,7 +69,8 @@ export async function logMeal(
       meal_type: input.mealType,
       note: input.note ?? null,
       photo_r2_key: null,
-      input_method: input.inputMethod ?? 'manual',
+      input_method: inputMethod,
+      client_request_id: input.clientRequestId ?? null,
       created_at: now,
       updated_at: now,
     }),
@@ -68,7 +80,7 @@ export async function logMeal(
       insertStmt('meal_items', {
         id: ulid(),
         meal_id: mealId,
-        preset_id: null,
+        preset_id: input.presetId ?? null,
         food_name: it.foodName,
         quantity: it.quantity ?? 1,
         unit: it.unit ?? 'serving',

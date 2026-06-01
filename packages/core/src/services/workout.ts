@@ -48,6 +48,8 @@ export interface SaveWorkoutInput {
   endedAtSec?: number;
   bodyweightKg?: number | null;
   status?: 'in_progress' | 'completed';
+  /** 冪等キー(client 生成 UUID)。オフライン再送/MCP リトライの二重登録を防止(§9.8)。 */
+  clientRequestId?: string;
   exercises: Array<{
     exerciseId: string;
     note?: string;
@@ -65,6 +67,14 @@ export async function saveWorkout(
   input: SaveWorkoutInput,
 ): Promise<{ sessionId: string; totalVolumeKg: number; newPrs: string[] }> {
   const now = nowSec();
+  // 冪等: 同じ client_request_id のセッションが既にあれば再登録しない(オフライン再送/MCPリトライ, §9.8)。
+  if (input.clientRequestId) {
+    const ex = await ctx.db.raw<{ id: string }>(
+      'SELECT id FROM workout_sessions WHERE client_request_id = ? LIMIT 1',
+      input.clientRequestId,
+    );
+    if (ex[0]) return { sessionId: ex[0].id, totalVolumeKg: 0, newPrs: [] };
+  }
   const date = input.date ?? todayJst();
   const startedAt = input.startedAtSec ?? now;
   const sessionId = ulid();
@@ -163,6 +173,7 @@ export async function saveWorkout(
       title: input.title ?? null,
       template_id: null,
       note: null,
+      client_request_id: input.clientRequestId ?? null,
       bodyweight_kg: bodyweightKg,
       total_volume_kg: Math.round(totalVolumeKg * 100) / 100,
       active_duration_sec: activeDurationSec,
