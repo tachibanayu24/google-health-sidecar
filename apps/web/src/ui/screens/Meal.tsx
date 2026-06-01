@@ -1,8 +1,8 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, Plus, Trash2 } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Bookmark, Check, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Card } from '../components/Card';
-import { api, type FoodSuggestion } from '../lib/api';
+import { api, type FoodSuggestion, type MealPreset } from '../lib/api';
 import { round, saltFromSodiumMg, sodiumMgFromSalt } from '../lib/units';
 
 const MEAL_TYPES = [
@@ -38,10 +38,30 @@ export function MealScreen({ onSaved }: { onSaved: () => void }) {
   const qc = useQueryClient();
   const [mealType, setMealType] = useState<string>(defaultMealType());
   const [items, setItems] = useState<Item[]>([newItem()]);
+  const [presetId, setPresetId] = useState<string | null>(null);
+
+  const presets = useQuery({ queryKey: ['meal-presets'], queryFn: api.mealPresets });
 
   const update = (k: string, patch: Partial<Item>) =>
     setItems((prev) => prev.map((it) => (it.key === k ? { ...it, ...patch } : it)));
   const remove = (k: string) => setItems((prev) => prev.filter((it) => it.key !== k));
+
+  function applyPreset(p: MealPreset) {
+    setMealType(p.defaultMealType);
+    setPresetId(p.id);
+    setItems(
+      p.items.map((i) =>
+        newItem({
+          foodName: i.foodName,
+          caloriesKcal: Math.round(i.caloriesKcal),
+          proteinG: i.proteinG != null ? Math.round(i.proteinG) : null,
+          fatG: i.fatG != null ? Math.round(i.fatG) : null,
+          carbsG: i.carbsG != null ? Math.round(i.carbsG) : null,
+          saltG: i.sodiumMg != null ? round(saltFromSodiumMg(i.sodiumMg), 1) : null,
+        }),
+      ),
+    );
+  }
 
   const total = items.reduce(
     (a, it) => ({
@@ -56,25 +76,39 @@ export function MealScreen({ onSaved }: { onSaved: () => void }) {
 
   const valid = items.filter((it) => it.foodName.trim() && it.caloriesKcal != null);
 
+  const itemInputs = () =>
+    valid.map((it) => ({
+      foodName: it.foodName.trim(),
+      caloriesKcal: it.caloriesKcal ?? 0,
+      proteinG: it.proteinG ?? undefined,
+      fatG: it.fatG ?? undefined,
+      carbsG: it.carbsG ?? undefined,
+      sodiumMg: it.saltG != null ? Math.round(sodiumMgFromSalt(it.saltG)) : undefined,
+    }));
+
   const save = useMutation({
     mutationFn: () =>
       api.logMeal({
         mealType,
-        inputMethod: 'manual',
-        items: valid.map((it) => ({
-          foodName: it.foodName.trim(),
-          caloriesKcal: it.caloriesKcal ?? 0,
-          proteinG: it.proteinG ?? undefined,
-          fatG: it.fatG ?? undefined,
-          carbsG: it.carbsG ?? undefined,
-          sodiumMg: it.saltG != null ? Math.round(sodiumMgFromSalt(it.saltG)) : undefined,
-        })),
+        inputMethod: presetId ? 'preset' : 'manual',
+        items: itemInputs(),
+        presetId: presetId ?? undefined,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['today'] });
       qc.invalidateQueries({ queryKey: ['trends'] });
       onSaved();
     },
+  });
+
+  const savePreset = useMutation({
+    mutationFn: (name: string) =>
+      api.saveMealPreset({ name, defaultMealType: mealType, items: itemInputs() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['meal-presets'] }),
+  });
+  const delPreset = useMutation({
+    mutationFn: api.deleteMealPreset,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['meal-presets'] }),
   });
 
   return (
@@ -93,6 +127,34 @@ export function MealScreen({ onSaved }: { onSaved: () => void }) {
           </button>
         ))}
       </div>
+
+      {presets.data && presets.data.presets.length > 0 && (
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
+          {presets.data.presets.map((p) => (
+            <span
+              key={p.id}
+              className="flex shrink-0 items-center gap-1 rounded-full border border-line bg-card py-1 pl-3 pr-1.5 text-xs font-semibold"
+            >
+              <button
+                type="button"
+                onClick={() => applyPreset(p)}
+                className="flex items-center gap-1"
+              >
+                <Bookmark className="h-3 w-3 text-accent" strokeWidth={2.4} />
+                {p.name}
+              </button>
+              <button
+                type="button"
+                aria-label="プリセット削除"
+                onClick={() => delPreset.mutate(p.id)}
+                className="text-faint active:text-accent"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {items.map((it) => (
         <ItemCard
@@ -137,6 +199,22 @@ export function MealScreen({ onSaved }: { onSaved: () => void }) {
       {save.error && (
         <p className="text-center text-sm text-accent-ink">{(save.error as Error).message}</p>
       )}
+
+      {valid.length > 0 && (
+        <button
+          type="button"
+          onClick={() => {
+            const name = window.prompt('プリセット名(例: 朝の定番)');
+            if (name?.trim()) savePreset.mutate(name.trim());
+          }}
+          disabled={savePreset.isPending}
+          className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-line py-2.5 text-sm font-semibold text-muted disabled:opacity-50"
+        >
+          <Bookmark className="h-4 w-4" strokeWidth={2.2} />
+          {savePreset.isSuccess ? 'プリセット保存しました' : 'プリセットとして保存'}
+        </button>
+      )}
+
       <p className="text-center text-[11px] text-faint">
         写真からの自動栄養計算は Claude(MCP)経由。ここは手入力 + 過去食の補完。
       </p>
