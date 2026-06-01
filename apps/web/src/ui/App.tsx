@@ -1,28 +1,24 @@
-import {
-  Dumbbell,
-  House,
-  PersonStanding,
-  Plus,
-  Settings,
-  TrendingUp,
-  Utensils,
-  X,
-} from 'lucide-react';
+import { Dumbbell, HeartPulse, House, Plus, Settings, Utensils, X } from 'lucide-react';
 import { useState } from 'react';
-import { HistoryScreen } from './screens/History';
+import { todayJst } from './lib/datetime';
 import { HomeScreen } from './screens/Home';
 import { MealScreen } from './screens/Meal';
-import { MuscleScreen } from './screens/Muscle';
+import { NutritionScreen } from './screens/Nutrition';
 import { RecordScreen } from './screens/Record';
+import { RecoveryScreen } from './screens/Recovery';
 import { SettingsScreen } from './screens/Settings';
+import { TrainingScreen } from './screens/Training';
 
-type View = 'home' | 'history' | 'record' | 'meal' | 'muscle' | 'settings';
+type Tab = 'home' | 'training' | 'recovery' | 'settings';
+type View = Tab | 'record' | 'meal' | 'nutrition';
 
 export function App() {
   const [view, setView] = useState<View>('home');
   const [chooser, setChooser] = useState(false);
   const [editMealId, setEditMealId] = useState<string | null>(null);
   const [editWorkoutId, setEditWorkoutId] = useState<string | null>(null);
+  const [nutritionDate, setNutritionDate] = useState(todayJst());
+  const [mealReturn, setMealReturn] = useState<View>('home');
   const [dirty, setDirty] = useState(false);
   const [pendingNav, setPendingNav] = useState<{ run: () => void } | null>(null);
 
@@ -31,6 +27,17 @@ export function App() {
     if ((view === 'record' || view === 'meal') && dirty) setPendingNav({ run });
     else run();
   };
+  const openMeal = (id: string | null, ret: View) => {
+    setEditMealId(id);
+    setMealReturn(ret);
+    setDirty(false);
+    setView('meal');
+  };
+
+  const tab: Tab | null =
+    view === 'home' || view === 'training' || view === 'recovery' || view === 'settings'
+      ? view
+      : null;
 
   return (
     <div className="flex h-full flex-col">
@@ -39,19 +46,32 @@ export function App() {
         <div key={view} className="rise">
           {view === 'home' && (
             <HomeScreen
-              onGoRecord={() => setView('record')}
-              onEditMeal={(id) => {
-                setEditMealId(id);
-                setView('meal');
+              onOpenNutrition={(d) => {
+                setNutritionDate(d);
+                setView('nutrition');
               }}
+              onOpenTraining={() => setView('training')}
+              onOpenRecovery={() => setView('recovery')}
+              onResume={() => setView('record')}
             />
           )}
-          {view === 'history' && (
-            <HistoryScreen
+          {view === 'training' && (
+            <TrainingScreen
               onEditWorkout={(id) => {
                 setEditWorkoutId(id);
                 setView('record');
               }}
+            />
+          )}
+          {view === 'recovery' && <RecoveryScreen />}
+          {view === 'settings' && <SettingsScreen />}
+          {view === 'nutrition' && (
+            <NutritionScreen
+              date={nutritionDate}
+              onBack={() => setView('home')}
+              onRecordMeal={() => openMeal(null, 'nutrition')}
+              onEditMeal={(id) => openMeal(id, 'nutrition')}
+              onOpenSettings={() => setView('settings')}
             />
           )}
           {view === 'record' && (
@@ -72,12 +92,10 @@ export function App() {
               onSaved={() => {
                 setDirty(false);
                 setEditMealId(null);
-                setView('home');
+                setView(mealReturn);
               }}
             />
           )}
-          {view === 'muscle' && <MuscleScreen />}
-          {view === 'settings' && <SettingsScreen />}
         </div>
       </main>
 
@@ -88,9 +106,11 @@ export function App() {
             setChooser(false);
             guard(() => {
               setDirty(false);
-              if (v === 'meal') setEditMealId(null); // 新規記録なので編集状態をクリア
-              if (v === 'record') setEditWorkoutId(null);
-              setView(v);
+              if (v === 'meal') openMeal(null, 'home');
+              else {
+                setEditWorkoutId(null);
+                setView('record');
+              }
             });
           }}
         />
@@ -107,11 +127,7 @@ export function App() {
         />
       )}
 
-      <BottomNav
-        view={view}
-        onTab={(v) => guard(() => setView(v))}
-        onPlus={() => setChooser(true)}
-      />
+      <BottomNav tab={tab} onTab={(v) => guard(() => setView(v))} onPlus={() => setChooser(true)} />
     </div>
   );
 }
@@ -162,52 +178,44 @@ function Header() {
 }
 
 function BottomNav({
-  view,
+  tab,
   onTab,
   onPlus,
 }: {
-  view: View;
-  onTab: (v: View) => void;
+  tab: Tab | null;
+  onTab: (v: Tab) => void;
   onPlus: () => void;
 }) {
-  const plusActive = view === 'record' || view === 'meal';
   return (
     <nav className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-line bg-card/95 backdrop-blur-md">
       <div className="mx-auto grid max-w-md grid-cols-5 items-stretch px-2">
+        <NavTab Icon={House} label="ホーム" active={tab === 'home'} onClick={() => onTab('home')} />
         <NavTab
-          Icon={House}
-          label="ホーム"
-          active={view === 'home'}
-          onClick={() => onTab('home')}
-        />
-        <NavTab
-          Icon={TrendingUp}
-          label="推移"
-          active={view === 'history'}
-          onClick={() => onTab('history')}
+          Icon={Dumbbell}
+          label="トレーニング"
+          active={tab === 'training'}
+          onClick={() => onTab('training')}
         />
         <div className="flex items-center justify-center">
           <button
             type="button"
             aria-label="記録する"
             onClick={onPlus}
-            className={`-mt-6 flex h-14 w-14 items-center justify-center rounded-2xl text-card shadow-[0_8px_24px_-6px] shadow-accent/60 transition-transform active:scale-95 ${
-              plusActive ? 'bg-accent-ink' : 'bg-accent'
-            }`}
+            className="-mt-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent text-card shadow-[0_8px_24px_-6px] shadow-accent/60 transition-transform active:scale-95"
           >
             <Plus strokeWidth={2.5} className="h-7 w-7" />
           </button>
         </div>
         <NavTab
-          Icon={PersonStanding}
-          label="部位"
-          active={view === 'muscle'}
-          onClick={() => onTab('muscle')}
+          Icon={HeartPulse}
+          label="からだ"
+          active={tab === 'recovery'}
+          onClick={() => onTab('recovery')}
         />
         <NavTab
           Icon={Settings}
           label="設定"
-          active={view === 'settings'}
+          active={tab === 'settings'}
           onClick={() => onTab('settings')}
         />
       </div>
@@ -240,7 +248,13 @@ function NavTab({
   );
 }
 
-function LogChooser({ onClose, onPick }: { onClose: () => void; onPick: (v: View) => void }) {
+function LogChooser({
+  onClose,
+  onPick,
+}: {
+  onClose: () => void;
+  onPick: (v: 'record' | 'meal') => void;
+}) {
   return (
     <div className="fixed inset-0 z-30 flex items-end">
       <button

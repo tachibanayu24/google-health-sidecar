@@ -1,59 +1,62 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Activity,
   AlertTriangle,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CloudOff,
   Dumbbell,
   Flame,
-  Footprints,
   HeartPulse,
-  Moon,
-  Pencil,
   RefreshCw,
   Scale,
-  Trash2,
-  Utensils,
-  Wind,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { Card, Stat } from '../components/Card';
-import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
-import {
-  api,
-  type BodyReading,
-  type NutritionTarget,
-  type SleepSummary,
-  type TodayMeal,
-} from '../lib/api';
-import { epochToJstHhmm, jstDayOfWeek, todayJst } from '../lib/datetime';
+import { useEffect, useState } from 'react';
+import { Card } from '../components/Card';
+import { ErrorBox, Loading } from '../components/state';
+import { api, type BodyReading, type NutritionTarget, type Today } from '../lib/api';
+import { jstDayOfWeek, todayJst } from '../lib/datetime';
 import { flushOutbox, pendingCount, subscribeOutbox } from '../lib/outbox';
 import { round } from '../lib/units';
+import { Bar } from './Nutrition';
 
 function shiftDate(date: string, delta: number): string {
   const t = Date.parse(`${date}T00:00:00Z`) + delta * 86_400_000;
   return new Date(t).toISOString().slice(0, 10);
 }
-const hhmm = (sec: number) => epochToJstHhmm(sec);
 
+/** ホーム = 今日のグランス。詳細は各専用画面へ送る(詰め込みを排除)。 */
 export function HomeScreen({
-  onGoRecord,
-  onEditMeal,
+  onOpenNutrition,
+  onOpenTraining,
+  onOpenRecovery,
+  onResume,
 }: {
-  onGoRecord: () => void;
-  onEditMeal: (id: string) => void;
+  onOpenNutrition: (date: string) => void;
+  onOpenTraining: () => void;
+  onOpenRecovery: () => void;
+  onResume: () => void;
 }) {
   const [date, setDate] = useState(todayJst());
   const isToday = date === todayJst();
   const today = useQuery({ queryKey: ['today', date], queryFn: () => api.today(date) });
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
+  // TrainingGlance 用(トレーニング画面と queryKey 共有 → 二重取得回避)。
+  const recent = useQuery({
+    queryKey: ['recent-workouts'],
+    queryFn: api.recentWorkouts,
+    staleTime: 60_000,
+  });
+  const mv = useQuery({
+    queryKey: ['muscle-volume', 7],
+    queryFn: () => api.muscleVolume(7),
+    staleTime: 60_000,
+  });
 
   if (today.isLoading) return <Loading />;
   if (today.error) return <ErrorBox error={today.error} />;
   const t = today.data!;
-  const target = settings.data?.nutritionTarget;
+  const target = settings.data?.nutritionTarget ?? null;
+  const worked = (mv.data?.muscles ?? []).filter((m) => m.actual_sets > 0).length;
 
   return (
     <div className="mx-auto max-w-md space-y-4">
@@ -67,7 +70,7 @@ export function HomeScreen({
         onToday={() => setDate(todayJst())}
       />
 
-      <BodyCard body={t.body} />
+      <BodyStrip body={t.body} onOpen={onOpenRecovery} />
 
       {t.inProgress && isToday && (
         <Card accent>
@@ -80,7 +83,7 @@ export function HomeScreen({
             </div>
             <button
               type="button"
-              onClick={onGoRecord}
+              onClick={onResume}
               className="rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-card"
             >
               再開
@@ -89,449 +92,213 @@ export function HomeScreen({
         </Card>
       )}
 
-      <NutritionCard pfc={t.pfc} target={target ?? null} />
-      <MealsCard meals={t.meals} date={date} onEdit={onEditMeal} />
-      <SleepCard sleep={t.sleep} />
-      <SensingCard daily={t.daily} />
+      <NutritionGlance pfc={t.pfc} target={target} onOpen={() => onOpenNutrition(date)} />
+      <TrainingGlance
+        latest={recent.data?.sessions?.[0] ?? null}
+        worked={worked}
+        onOpen={onOpenTraining}
+      />
+      <RecoveryGlance sleep={t.sleep} daily={t.daily} onOpen={onOpenRecovery} />
     </div>
   );
 }
 
-// ============ 体組成(体重+体脂肪を1枚に統合・kg単体・前日比) ============
-function BodyCard({ body }: { body: BodyReading }) {
-  const { weightKg, bodyFatPct, source, prevWeightKg } = body;
+/** グランス用カード: 見出し+右に[詳細›]、カード全体タップで詳細画面へ。 */
+function GlanceCard({
+  title,
+  Icon,
+  onOpen,
+  children,
+}: {
+  title: string;
+  Icon: typeof Flame;
+  onOpen: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button type="button" onClick={onOpen} className="block w-full text-left">
+      <Card
+        title={title}
+        right={
+          <span className="flex items-center gap-1 text-faint">
+            <Icon className="h-4 w-4" strokeWidth={2.2} />
+            <ChevronRight className="h-4 w-4" strokeWidth={2.4} />
+          </span>
+        }
+      >
+        {children}
+      </Card>
+    </button>
+  );
+}
+
+// ============ 体組成ストリップ(薄型・タップで からだ) ============
+function BodyStrip({ body, onOpen }: { body: BodyReading; onOpen: () => void }) {
+  const { weightKg, bodyFatPct, prevWeightKg, source } = body;
   const diff =
     weightKg != null && prevWeightKg != null
       ? Math.round((weightKg - prevWeightKg) * 10) / 10
       : null;
   return (
-    <Card>
-      <div className="grid grid-cols-2 divide-x divide-line">
-        <div className="pr-4">
-          <div className="mb-1 flex items-center gap-1.5 text-faint">
-            <Scale className="h-3.5 w-3.5" strokeWidth={2.4} />
-            <span className="font-display text-[11px] font-bold uppercase tracking-[0.12em]">
-              体重
-            </span>
-          </div>
+    <button type="button" onClick={onOpen} className="block w-full text-left">
+      <Card>
+        <div className="flex items-center">
+          <Scale className="mr-3 h-5 w-5 text-faint" strokeWidth={2.2} />
           <div className="flex items-baseline gap-1">
-            <span className="stat text-3xl leading-none">
+            <span className="stat text-2xl leading-none">
               {weightKg != null ? round(weightKg, 1) : '—'}
             </span>
-            {weightKg != null && <span className="text-sm text-muted">kg</span>}
+            <span className="text-xs text-muted">kg</span>
           </div>
-          <div className="mt-1.5 flex items-center gap-2">
-            {diff != null && diff !== 0 && (
-              <span
-                className={`tnum text-[11px] font-semibold ${diff < 0 ? 'text-carb' : 'text-accent-ink'}`}
-              >
-                前日比 {diff > 0 ? '+' : ''}
-                {diff}kg
-              </span>
-            )}
-            {source && (
-              <span className="rounded-full bg-paper px-1.5 py-0.5 text-[10px] font-semibold text-faint">
-                {source === 'google_health' ? 'GH' : '手入力'}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="pl-4">
-          <div className="mb-1 font-display text-[11px] font-bold uppercase tracking-[0.12em] text-faint">
-            体脂肪
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="stat text-3xl leading-none">
+          {diff != null && diff !== 0 && (
+            <span
+              className={`tnum ml-2 text-[11px] font-semibold ${diff < 0 ? 'text-carb' : 'text-accent-ink'}`}
+            >
+              {diff > 0 ? '+' : ''}
+              {diff}
+            </span>
+          )}
+          <div className="ml-auto flex items-baseline gap-1">
+            <span className="stat text-xl leading-none" style={{ color: 'var(--color-fat)' }}>
               {bodyFatPct != null ? round(bodyFatPct, 1) : '—'}
             </span>
-            {bodyFatPct != null && <span className="text-sm text-muted">%</span>}
+            <span className="text-xs text-muted">%</span>
           </div>
-          {weightKg != null && bodyFatPct != null && (
-            <div className="mt-1.5 text-[11px] text-faint">
-              除脂肪 {round(weightKg * (1 - bodyFatPct / 100), 1)}kg
-            </div>
+          {source && (
+            <span className="ml-2 rounded-full bg-paper px-1.5 py-0.5 text-[9px] font-semibold text-faint">
+              {source === 'google_health' ? 'GH' : '手入力'}
+            </span>
           )}
+          <ChevronRight className="ml-1.5 h-4 w-4 text-faint" strokeWidth={2.4} />
         </div>
-      </div>
-    </Card>
+      </Card>
+    </button>
   );
 }
 
-// ============ 栄養(kcal残/超過 + P/F/C + 食塩 を同リズムのバーで) ============
-function NutritionCard({
+// ============ 栄養グランス(kcal + 残/超過 + PFC/塩 ミニバー) ============
+function NutritionGlance({
   pfc,
   target,
+  onOpen,
 }: {
-  pfc: { kcal: number; p: number; f: number; c: number; salt_g: number };
+  pfc: Today['pfc'];
   target: NutritionTarget | null;
+  onOpen: () => void;
 }) {
   const kcal = Math.round(pfc.kcal);
   const remain = target ? Math.round(target.target_kcal - kcal) : null;
   return (
-    <Card title="栄養" right={<Flame className="h-4 w-4 text-accent" strokeWidth={2.2} />}>
+    <GlanceCard title="栄養" Icon={Flame} onOpen={onOpen}>
       <div className="flex items-baseline justify-between">
-        <Stat value={kcal} unit="kcal" />
+        <div className="flex items-baseline gap-1">
+          <span className="stat text-3xl leading-none">{kcal.toLocaleString()}</span>
+          <span className="text-sm text-muted">kcal</span>
+        </div>
         {target ? (
           <span
             className={`text-sm font-semibold ${remain != null && remain < 0 ? 'text-accent-ink' : 'text-muted'}`}
           >
-            {remain != null && remain >= 0 ? `残り ${remain}` : `${Math.abs(remain!)} 超過`} kcal
+            {remain != null && remain >= 0 ? `残り ${remain}` : `${Math.abs(remain ?? 0)} 超過`}
           </span>
         ) : (
-          <span className="text-xs text-faint">目標未設定 → 設定</span>
+          <span className="text-xs text-accent">目標未設定</span>
         )}
       </div>
-      <div className="mt-4 space-y-2.5">
-        <Bar label="Protein" v={pfc.p} t={target?.target_protein_g} varName="--color-protein" />
-        <Bar label="Fat" v={pfc.f} t={target?.target_fat_g} varName="--color-fat" />
-        <Bar label="Carbs" v={pfc.c} t={target?.target_carbs_g} varName="--color-carb" />
-        <Bar
-          label="食塩"
-          v={pfc.salt_g}
-          t={target?.target_salt_g ?? 6}
-          varName="--color-muted"
-          overWarn
-          unit="g"
-        />
+      <div className="mt-3 space-y-1.5">
+        <Bar label="P" v={pfc.p} t={target?.target_protein_g} varName="--color-protein" />
+        <Bar label="F" v={pfc.f} t={target?.target_fat_g} varName="--color-fat" />
+        <Bar label="C" v={pfc.c} t={target?.target_carbs_g} varName="--color-carb" />
       </div>
-    </Card>
+    </GlanceCard>
   );
 }
 
-// ============ 今日の食事(独立カード。種目名つき) ============
-// meal_type の表示順(朝→夜)。
-const MEAL_ORDER = ['Breakfast', 'MorningSnack', 'Lunch', 'AfternoonSnack', 'Dinner', 'Anytime'];
-
-function MealsCard({
-  meals,
-  date,
-  onEdit,
+// ============ トレーニンググランス(直近WO + 刺激部位数) ============
+function TrainingGlance({
+  latest,
+  worked,
+  onOpen,
 }: {
-  meals: TodayMeal[];
-  date: string;
-  onEdit: (id: string) => void;
+  latest: {
+    date: string;
+    title: string | null;
+    exercises: number;
+    sets: number;
+    total_volume_kg: number;
+  } | null;
+  worked: number;
+  onOpen: () => void;
 }) {
-  const qc = useQueryClient();
-  const [expanded, setExpanded] = useState<Set<string>>(
-    () => new Set(['Breakfast', 'Lunch', 'Dinner']), // 主要3食は初期展開・間食は折畳
-  );
-  const [confirm, setConfirm] = useState<{ id: string; label: string } | null>(null);
-  const del = useMutation({
-    mutationFn: api.deleteMeal,
-    onSuccess: () => {
-      setConfirm(null);
-      qc.invalidateQueries({ queryKey: ['today', date] });
-      qc.invalidateQueries({ queryKey: ['trends'] });
-    },
-  });
-
-  // meal_type 別にグルーピングし、カテゴリ小計(kcal+PFC)を算出(API 変更不要・クライアント集計)。
-  const groups = useMemo(() => {
-    const byType = new Map<string, TodayMeal[]>();
-    for (const m of meals) {
-      const arr = byType.get(m.meal_type);
-      if (arr) arr.push(m);
-      else byType.set(m.meal_type, [m]);
-    }
-    return MEAL_ORDER.filter((t) => byType.has(t)).map((type) => {
-      const ms = byType.get(type)!;
-      let kcal = 0;
-      let p = 0;
-      let f = 0;
-      let c = 0;
-      let count = 0;
-      for (const m of ms)
-        for (const it of m.items) {
-          kcal += it.calories_kcal;
-          p += it.protein_g;
-          f += it.fat_g;
-          c += it.carbs_g;
-          count++;
-        }
-      return { type, meals: ms, kcal, p, f, c, count };
-    });
-  }, [meals]);
-
-  const toggle = (t: string) =>
-    setExpanded((prev) => {
-      const n = new Set(prev);
-      if (n.has(t)) n.delete(t);
-      else n.add(t);
-      return n;
-    });
-
   return (
-    <Card title="今日の食事" right={<Utensils className="h-4 w-4 text-faint" strokeWidth={2.2} />}>
-      {groups.length === 0 ? (
-        <p className="py-2 text-sm text-faint">まだ記録がありません。＋から食事を記録できます。</p>
-      ) : (
-        <div className="divide-y divide-line/60">
-          {groups.map((g) => {
-            const isOpen = expanded.has(g.type);
-            return (
-              <div key={g.type} className="py-1 first:pt-0 last:pb-0">
-                <button
-                  type="button"
-                  onClick={() => toggle(g.type)}
-                  className="flex w-full items-center justify-between gap-2 py-1"
-                >
-                  <span className="flex items-center gap-1.5">
-                    {isOpen ? (
-                      <ChevronDown className="h-4 w-4 text-faint" strokeWidth={2.4} />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-faint" strokeWidth={2.4} />
-                    )}
-                    <span className="text-sm font-semibold text-ink">{mealTypeJa(g.type)}</span>
-                    <span className="text-[11px] text-faint">{g.count}品</span>
-                  </span>
-                  <span className="tnum text-sm font-semibold text-ink">
-                    {Math.round(g.kcal)} kcal
-                  </span>
-                </button>
-
-                {isOpen && (
-                  <div className="mb-1 pl-5">
-                    <ul>
-                      {g.meals.flatMap((m) => {
-                        const isGh = m.source === 'google_health';
-                        const mealKcal = Math.round(
-                          m.items.reduce((a, i) => a + i.calories_kcal, 0),
-                        );
-                        return m.items.map((it, idx) => (
-                          <li
-                            // biome-ignore lint/suspicious/noArrayIndexKey: 読み取り専用の静的リスト(並べ替え/挿入なし)
-                            key={`${m.id}:${idx}`}
-                            className="flex items-start justify-between gap-2 border-b border-line/40 py-1.5 last:border-0"
-                          >
-                            <span className="flex min-w-0 flex-col">
-                              <span className="truncate text-sm text-ink">{it.food_name}</span>
-                              <span className="mt-0.5 flex gap-2 text-[10px] tnum">
-                                <span style={{ color: 'var(--color-protein)' }}>
-                                  P{Math.round(it.protein_g)}g
-                                </span>
-                                <span style={{ color: 'var(--color-fat)' }}>
-                                  F{Math.round(it.fat_g)}g
-                                </span>
-                                <span style={{ color: 'var(--color-carb)' }}>
-                                  C{Math.round(it.carbs_g)}g
-                                </span>
-                              </span>
-                            </span>
-                            <span className="flex shrink-0 items-center gap-1.5">
-                              <span className="tnum text-[11px] text-muted">
-                                {Math.round(it.calories_kcal)}
-                              </span>
-                              {idx === 0 &&
-                                (isGh ? (
-                                  <span className="rounded-full bg-paper px-1.5 py-0.5 text-[9px] font-semibold text-faint">
-                                    GH
-                                  </span>
-                                ) : (
-                                  <>
-                                    <button
-                                      type="button"
-                                      aria-label="編集"
-                                      onClick={() => onEdit(m.id)}
-                                      className="p-1 text-faint active:text-accent"
-                                    >
-                                      <Pencil className="h-3.5 w-3.5" strokeWidth={2.2} />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      aria-label="削除"
-                                      onClick={() =>
-                                        setConfirm({
-                                          id: m.id,
-                                          // 複数品目ミールは「他N品」を明示(ミール単位削除=全品目が消えるため)。
-                                          label: `${mealTypeJa(m.meal_type)} / ${m.items[0]?.food_name ?? '食事'}${m.items.length > 1 ? ` 他${m.items.length - 1}品` : ''} (${mealKcal}kcal)`,
-                                        })
-                                      }
-                                      className="p-1 text-faint active:text-accent"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />
-                                    </button>
-                                  </>
-                                ))}
-                            </span>
-                          </li>
-                        ));
-                      })}
-                    </ul>
-                    <div className="mt-1 flex items-center justify-between border-t border-line/60 pt-1.5">
-                      <span className="text-[11px] font-bold text-muted">
-                        {mealTypeJa(g.type)}計
-                      </span>
-                      <span className="tnum text-[10px] text-muted">
-                        {Math.round(g.kcal)}kcal · P{Math.round(g.p)} F{Math.round(g.f)} C
-                        {Math.round(g.c)}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+    <GlanceCard title="トレーニング" Icon={Dumbbell} onOpen={onOpen}>
+      {latest ? (
+        <div className="flex items-end justify-between">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-ink">
+              {latest.title || 'ワークアウト'}
+            </div>
+            <div className="mt-0.5 text-[11px] text-faint">
+              {latest.date.slice(5).replace('-', '/')} · {latest.exercises}種目 {latest.sets}set ·{' '}
+              {Math.round(latest.total_volume_kg).toLocaleString()}kg
+            </div>
+          </div>
+          <div className="shrink-0 text-right">
+            <span className="stat text-xl leading-none">{worked}</span>
+            <span className="text-xs text-muted">/16</span>
+            <div className="text-[10px] text-faint">7日 刺激部位</div>
+          </div>
         </div>
+      ) : (
+        <p className="text-sm text-faint">まだ記録がありません。＋から記録できます。</p>
       )}
-      {confirm && (
-        <DeleteConfirmModal
-          kind="meal"
-          targetLabel={confirm.label}
-          isPending={del.isPending}
-          onConfirm={() => del.mutate(confirm.id)}
-          onCancel={() => setConfirm(null)}
-        />
-      )}
-    </Card>
+    </GlanceCard>
   );
 }
 
-// ============ 睡眠(積層バー + 凡例 + 就寝→起床) ============
-const SLEEP_STAGES: Array<{ key: keyof SleepSummary; label: string; color: string }> = [
-  { key: 'deep_min', label: 'Deep', color: '#155e63' },
-  { key: 'rem_min', label: 'REM', color: '#6b63c9' },
-  { key: 'light_min', label: 'Light', color: '#4c9aa0' },
-  { key: 'awake_min', label: 'Awake', color: '#cbb89a' },
-];
-function SleepCard({ sleep }: { sleep: SleepSummary | null }) {
+// ============ 回復グランス(睡眠 + RHR/HRV/歩数) ============
+function RecoveryGlance({
+  sleep,
+  daily,
+  onOpen,
+}: {
+  sleep: Today['sleep'];
+  daily: Today['daily'];
+  onOpen: () => void;
+}) {
+  const metric = (m: string) => daily.find((d) => d.metric === m)?.value ?? null;
+  const rhr = metric('resting_hr');
+  const hrv = metric('hrv_rmssd');
+  const steps = metric('steps');
   return (
-    <Card title="睡眠" right={<Moon className="h-4 w-4 text-carb" strokeWidth={2.2} />}>
-      {sleep ? (
-        <div>
-          <div className="flex items-baseline gap-3">
-            <Stat value={Math.floor(sleep.total_min / 60)} unit="h" />
-            <Stat value={sleep.total_min % 60} unit="m" />
-            <div className="ml-auto text-right">
-              {sleep.end_at > sleep.start_at && (
-                <div className="tnum text-xs font-semibold text-muted">
-                  {hhmm(sleep.start_at)} → {hhmm(sleep.end_at)}
-                </div>
-              )}
+    <GlanceCard title="回復" Icon={HeartPulse} onOpen={onOpen}>
+      <div className="flex items-baseline justify-between">
+        <div className="flex items-baseline gap-1">
+          {sleep ? (
+            <>
+              <span className="stat text-2xl leading-none">{Math.floor(sleep.total_min / 60)}</span>
+              <span className="text-xs text-muted">h</span>
+              <span className="stat ml-1 text-2xl leading-none">{sleep.total_min % 60}</span>
+              <span className="text-xs text-muted">m</span>
               {sleep.efficiency != null && (
-                <div className="text-[11px] text-faint">効率 {sleep.efficiency}%</div>
+                <span className="ml-2 text-[11px] text-faint">効率 {sleep.efficiency}%</span>
               )}
-            </div>
-          </div>
-          <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-line">
-            {SLEEP_STAGES.map((s) => {
-              const min = (sleep[s.key] as number | null) ?? 0;
-              if (min <= 0) return null;
-              return (
-                <div
-                  key={s.label}
-                  style={{ flexGrow: min, backgroundColor: s.color }}
-                  title={`${s.label} ${min}m`}
-                />
-              );
-            })}
-          </div>
-          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
-            {SLEEP_STAGES.map((s) => {
-              const min = (sleep[s.key] as number | null) ?? null;
-              if (min == null) return null;
-              return (
-                <span key={s.label} className="flex items-center gap-1 text-muted">
-                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} />
-                  {s.label} {Math.floor(min / 60)}h{min % 60}m
-                </span>
-              );
-            })}
-          </div>
+            </>
+          ) : (
+            <span className="text-sm text-faint">睡眠データ待ち</span>
+          )}
         </div>
-      ) : (
-        <p className="py-2 text-sm text-faint">睡眠データなし(Google Health 同期待ち)。</p>
-      )}
-    </Card>
+      </div>
+      <div className="mt-2 flex gap-3 text-[11px] text-muted tnum">
+        {rhr != null && <span>RHR {round(rhr, 0)}</span>}
+        {hrv != null && <span>HRV {round(hrv, 0)}</span>}
+        {steps != null && <span>{Math.round(steps).toLocaleString()}歩</span>}
+      </div>
+    </GlanceCard>
   );
 }
 
-// ============ センシング(日次) ============
-const METRIC_META: Record<string, { label: string; Icon: typeof HeartPulse; unit?: string }> = {
-  resting_hr: { label: '安静時心拍', Icon: HeartPulse, unit: 'bpm' },
-  hrv_rmssd: { label: 'HRV', Icon: Activity, unit: 'ms' },
-  spo2_avg: { label: 'SpO₂', Icon: Activity, unit: '%' },
-  resp_rate: { label: '呼吸数', Icon: Wind, unit: '/min' },
-  vo2max: { label: 'VO₂max', Icon: Activity },
-  steps: { label: '歩数', Icon: Footprints, unit: '歩' },
-};
-function SensingCard({ daily }: { daily: Array<{ metric: string; value: number; unit: string }> }) {
-  const shown = daily.filter((d) => METRIC_META[d.metric]);
-  if (shown.length === 0) return null;
-  return (
-    <Card
-      title="センシング"
-      right={<HeartPulse className="h-4 w-4 text-accent" strokeWidth={2.2} />}
-    >
-      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-        {shown.map((d) => {
-          const meta = METRIC_META[d.metric]!;
-          const Icon = meta.Icon;
-          const val =
-            d.metric === 'steps' ? Math.round(d.value).toLocaleString() : round(d.value, 1);
-          return (
-            <div key={d.metric} className="flex items-center gap-2">
-              <Icon className="h-4 w-4 shrink-0 text-faint" strokeWidth={2.2} />
-              <div className="min-w-0">
-                <div className="text-[11px] text-faint">{meta.label}</div>
-                <div className="tnum text-sm font-semibold">
-                  {val}
-                  <span className="ml-0.5 text-[11px] font-normal text-muted">
-                    {meta.unit ?? d.unit}
-                  </span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
-
-// ============ 共通: 目標バー(P/F/C/食塩) ============
-function Bar({
-  label,
-  v,
-  t,
-  varName,
-  unit = 'g',
-  overWarn = false,
-}: {
-  label: string;
-  v: number;
-  t?: number;
-  varName: string;
-  unit?: string;
-  overWarn?: boolean;
-}) {
-  const pct = t && t > 0 ? Math.min(100, (v / t) * 100) : 0;
-  const over = t != null && v > t;
-  const barColor = overWarn && over ? 'var(--color-accent)' : `var(${varName})`;
-  return (
-    <div>
-      <div className="mb-1 flex items-center justify-between text-xs">
-        <span className="font-semibold" style={{ color: barColor }}>
-          {label}
-        </span>
-        <span
-          className={`tnum ${overWarn && over ? 'font-semibold text-accent-ink' : 'text-muted'}`}
-        >
-          {Math.round(v * 10) / 10}
-          {t ? ` / ${Math.round(t)}${unit}` : unit}
-          {over && !overWarn ? ` (+${Math.round(v - t)})` : ''}
-        </span>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-line">
-        <div
-          className="h-full rounded-full transition-[width] duration-500"
-          style={{ width: `${pct}%`, backgroundColor: barColor }}
-        />
-      </div>
-    </div>
-  );
-}
-
-// GH 同期ヘルス: 再認証要 or 同期エラーがあれば警告(黙殺防止)。
+// ============ 同期ヘルス + オフライン未送信 バナー ============
 function SyncHealthBanner() {
   const q = useQuery({ queryKey: ['sync-status'], queryFn: api.syncStatus, staleTime: 60_000 });
   if (!q.data) return null;
@@ -560,7 +327,6 @@ function SyncHealthBanner() {
   );
 }
 
-/** 未送信(オフライン退避)の件数を購読。 */
 function usePendingCount(): number {
   const [n, setN] = useState(0);
   useEffect(() => {
@@ -570,8 +336,6 @@ function usePendingCount(): number {
   }, []);
   return n;
 }
-
-/** オフラインで退避した記録の未送信バナー(手動送信 + 自動再送の案内)。 */
 function OutboxBanner() {
   const pending = usePendingCount();
   const qc = useQueryClient();
@@ -600,7 +364,7 @@ function OutboxBanner() {
         disabled={sending}
         className="flex shrink-0 items-center gap-1 rounded-lg bg-ink px-2.5 py-1.5 text-xs font-bold text-card disabled:opacity-50"
       >
-        <RefreshCw className={`h-3.5 w-3.5 ${sending ? 'animate-spin' : ''}`} strokeWidth={2.4} />
+        <RefreshCw className={`h-3.5 w-3.5 ${sending ? 'animate-spin' : ''}`} strokeWidth={2.4} />{' '}
         今すぐ送信
       </button>
     </div>
@@ -644,30 +408,6 @@ function DateNav({
       >
         <ChevronRight className="h-5 w-5" strokeWidth={2.4} />
       </button>
-    </div>
-  );
-}
-
-function mealTypeJa(t: string): string {
-  return (
-    {
-      Breakfast: '朝食',
-      MorningSnack: '午前間食',
-      Lunch: '昼食',
-      AfternoonSnack: '午後間食',
-      Dinner: '夕食',
-      Anytime: '間食',
-    }[t] ?? t
-  );
-}
-
-export function Loading() {
-  return <div className="py-24 text-center text-sm text-faint">読み込み中…</div>;
-}
-export function ErrorBox({ error }: { error: unknown }) {
-  return (
-    <div className="rounded-xl border border-accent/30 bg-accent-soft p-4 text-sm text-accent-ink">
-      エラー: {error instanceof Error ? error.message : String(error)}
     </div>
   );
 }
