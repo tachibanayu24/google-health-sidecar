@@ -310,6 +310,15 @@ function MuscleExercises({ muscle, name }: { muscle: string; name: string }) {
   return (
     <Card title={`「${name}」の種目`}>
       {q.isLoading && <p className="py-2 text-sm text-faint">読み込み中…</p>}
+      {q.error && (
+        <button
+          type="button"
+          onClick={() => q.refetch()}
+          className="py-2 text-sm font-semibold text-accent-ink underline"
+        >
+          読み込みに失敗。タップで再試行
+        </button>
+      )}
       {q.data?.exercises.length === 0 && <p className="py-2 text-sm text-faint">該当なし</p>}
       <ul className="space-y-1">
         {q.data?.exercises.map((ex) => (
@@ -407,7 +416,7 @@ function ExerciseTrend() {
                 tick={axisTick}
                 stroke={CHART.line}
                 width={40}
-                domain={['dataMin - 2', 'dataMax + 2']}
+                domain={[(min: number) => Math.floor(min - 2), (max: number) => Math.ceil(max + 2)]}
               />
               <Tooltip content={<TT unit="kg" />} />
               <Line

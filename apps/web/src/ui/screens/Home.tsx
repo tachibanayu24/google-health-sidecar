@@ -1,7 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
-  ChevronLeft,
   ChevronRight,
   CloudOff,
   Dumbbell,
@@ -14,17 +13,12 @@ import { useEffect, useState } from 'react';
 import { Card } from '../components/Card';
 import { ErrorBox, Loading } from '../components/state';
 import { api, type BodyReading, type NutritionTarget, type Today } from '../lib/api';
-import { jstDayOfWeek, todayJst } from '../lib/datetime';
+import { todayJst } from '../lib/datetime';
 import { flushOutbox, pendingCount, subscribeOutbox } from '../lib/outbox';
 import { round } from '../lib/units';
 import { Bar } from './Nutrition';
 
-function shiftDate(date: string, delta: number): string {
-  const t = Date.parse(`${date}T00:00:00Z`) + delta * 86_400_000;
-  return new Date(t).toISOString().slice(0, 10);
-}
-
-/** ホーム = 今日のグランス。詳細は各専用画面へ送る(詰め込みを排除)。 */
+/** ホーム = 今日のグランス(常に当日)。過去日の振り返りは各専用画面で。詰め込みを排除。 */
 export function HomeScreen({
   onOpenNutrition,
   onOpenTraining,
@@ -36,9 +30,7 @@ export function HomeScreen({
   onOpenRecovery: () => void;
   onResume: () => void;
 }) {
-  const [date, setDate] = useState(todayJst());
-  const isToday = date === todayJst();
-  const today = useQuery({ queryKey: ['today', date], queryFn: () => api.today(date) });
+  const today = useQuery({ queryKey: ['today'], queryFn: () => api.today() });
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
   // TrainingGlance 用(トレーニング画面と queryKey 共有 → 二重取得回避)。
   const recent = useQuery({
@@ -62,17 +54,10 @@ export function HomeScreen({
     <div className="mx-auto max-w-md space-y-4">
       <SyncHealthBanner />
       <OutboxBanner />
-      <DateNav
-        date={date}
-        isToday={isToday}
-        onPrev={() => setDate((d) => shiftDate(d, -1))}
-        onNext={() => setDate((d) => shiftDate(d, 1))}
-        onToday={() => setDate(todayJst())}
-      />
 
       <BodyStrip body={t.body} onOpen={onOpenRecovery} />
 
-      {t.inProgress && isToday && (
+      {t.inProgress && (
         <Card accent>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -92,7 +77,7 @@ export function HomeScreen({
         </Card>
       )}
 
-      <NutritionGlance pfc={t.pfc} target={target} onOpen={() => onOpenNutrition(date)} />
+      <NutritionGlance pfc={t.pfc} target={target} onOpen={() => onOpenNutrition(todayJst())} />
       <TrainingGlance
         latest={recent.data?.sessions?.[0] ?? null}
         worked={worked}
@@ -366,47 +351,6 @@ function OutboxBanner() {
       >
         <RefreshCw className={`h-3.5 w-3.5 ${sending ? 'animate-spin' : ''}`} strokeWidth={2.4} />{' '}
         今すぐ送信
-      </button>
-    </div>
-  );
-}
-
-function DateNav({
-  date,
-  isToday,
-  onPrev,
-  onNext,
-  onToday,
-}: {
-  date: string;
-  isToday: boolean;
-  onPrev: () => void;
-  onNext: () => void;
-  onToday: () => void;
-}) {
-  const wd = ['日', '月', '火', '水', '木', '金', '土'][jstDayOfWeek(date)];
-  return (
-    <div className="flex items-center justify-between">
-      <button
-        type="button"
-        aria-label="前日"
-        onClick={onPrev}
-        className="flex h-9 w-9 items-center justify-center rounded-full text-muted active:bg-line/60"
-      >
-        <ChevronLeft className="h-5 w-5" strokeWidth={2.4} />
-      </button>
-      <button type="button" onClick={onToday} className="flex items-baseline gap-2">
-        <span className="stat text-2xl">{isToday ? '今日' : date.slice(5).replace('-', '/')}</span>
-        <span className="text-sm font-semibold text-muted">({wd})</span>
-      </button>
-      <button
-        type="button"
-        aria-label="翌日"
-        onClick={onNext}
-        disabled={isToday}
-        className="flex h-9 w-9 items-center justify-center rounded-full text-muted active:bg-line/60 disabled:opacity-25"
-      >
-        <ChevronRight className="h-5 w-5" strokeWidth={2.4} />
       </button>
     </div>
   );

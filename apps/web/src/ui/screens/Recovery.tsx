@@ -153,7 +153,7 @@ function BodyComposition({
               yAxisId="w"
               tick={axisTick}
               stroke={CHART.line}
-              domain={['dataMin - 1', 'dataMax + 1']}
+              domain={[(min: number) => Math.floor(min - 1), (max: number) => Math.ceil(max + 1)]}
               width={34}
             />
             <YAxis yAxisId="f" orientation="right" tick={axisTick} stroke={CHART.line} width={28} />

@@ -19,6 +19,7 @@ export function App() {
   const [editWorkoutId, setEditWorkoutId] = useState<string | null>(null);
   const [nutritionDate, setNutritionDate] = useState(todayJst());
   const [mealReturn, setMealReturn] = useState<View>('home');
+  const [recordReturn, setRecordReturn] = useState<View>('home');
   const [dirty, setDirty] = useState(false);
   const [pendingNav, setPendingNav] = useState<{ run: () => void } | null>(null);
 
@@ -59,6 +60,7 @@ export function App() {
             <TrainingScreen
               onEditWorkout={(id) => {
                 setEditWorkoutId(id);
+                setRecordReturn('training');
                 setView('record');
               }}
             />
@@ -81,7 +83,8 @@ export function App() {
               onSaved={() => {
                 setDirty(false);
                 setEditWorkoutId(null);
-                setView('home');
+                setView(recordReturn);
+                setRecordReturn('home');
               }}
             />
           )}
@@ -109,6 +112,7 @@ export function App() {
               if (v === 'meal') openMeal(null, 'home');
               else {
                 setEditWorkoutId(null);
+                setRecordReturn('home');
                 setView('record');
               }
             });

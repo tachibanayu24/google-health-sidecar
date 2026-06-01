@@ -5,6 +5,12 @@ import { Card } from '../components/Card';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { Loading } from '../components/state';
 import { api, type TodayMeal } from '../lib/api';
+import { jstDayOfWeek, todayJst } from '../lib/datetime';
+
+function shiftDate(date: string, delta: number): string {
+  const t = Date.parse(`${date}T00:00:00Z`) + delta * 86_400_000;
+  return new Date(t).toISOString().slice(0, 10);
+}
 
 // meal_type の表示順(朝→夜)+ 日本語ラベル。
 export const MEAL_ORDER = [
@@ -42,7 +48,9 @@ export function NutritionScreen({
   onEditMeal: (id: string) => void;
   onOpenSettings: () => void;
 }) {
-  const today = useQuery({ queryKey: ['today', date], queryFn: () => api.today(date) });
+  const [d, setD] = useState(date); // 画面内で日付を前後できる(過去の食事振り返り)
+  const isToday = d === todayJst();
+  const today = useQuery({ queryKey: ['today', d], queryFn: () => api.today(d) });
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
   if (today.isLoading) return <Loading />;
   const t = today.data;
@@ -51,10 +59,11 @@ export function NutritionScreen({
   const kcal = Math.round(pfc.kcal);
   const remain = target ? Math.round(target.target_kcal - kcal) : null;
   const pct = target ? Math.min(100, (kcal / target.target_kcal) * 100) : 0;
+  const wd = ['日', '月', '火', '水', '木', '金', '土'][jstDayOfWeek(d)];
 
   return (
     <div className="mx-auto max-w-md space-y-4">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         <button
           type="button"
           aria-label="戻る"
@@ -64,9 +73,34 @@ export function NutritionScreen({
           <ChevronLeft className="h-5 w-5" strokeWidth={2.4} />
         </button>
         <h1 className="font-display text-lg font-bold tracking-tight">栄養</h1>
-        <span className="ml-auto text-sm font-semibold text-muted">
-          {date.slice(5).replace('-', '/')}
-        </span>
+        {/* 日付ステッパー(過去日の食事も確認可能) */}
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="前日"
+            onClick={() => setD((x) => shiftDate(x, -1))}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-muted active:bg-line/60"
+          >
+            <ChevronLeft className="h-4 w-4" strokeWidth={2.4} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setD(todayJst())}
+            className="min-w-14 text-center text-sm font-semibold"
+          >
+            {isToday ? '今日' : `${d.slice(5).replace('-', '/')}`}
+            <span className="ml-1 text-xs text-muted">({wd})</span>
+          </button>
+          <button
+            type="button"
+            aria-label="翌日"
+            onClick={() => setD((x) => shiftDate(x, 1))}
+            disabled={isToday}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-muted active:bg-line/60 disabled:opacity-25"
+          >
+            <ChevronRight className="h-4 w-4" strokeWidth={2.4} />
+          </button>
+        </div>
       </div>
 
       {/* kcal 残ヒーロー */}
@@ -124,7 +158,7 @@ export function NutritionScreen({
         </div>
       </Card>
 
-      <MealsCard meals={t?.meals ?? []} date={date} onEdit={onEditMeal} />
+      <MealsCard meals={t?.meals ?? []} date={d} onEdit={onEditMeal} />
 
       <div className="flex gap-2">
         <button
