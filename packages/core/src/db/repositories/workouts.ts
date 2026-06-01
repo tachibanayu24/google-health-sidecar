@@ -199,6 +199,40 @@ export async function deleteSessionRow(db: Db, id: string): Promise<void> {
   await db.run('DELETE FROM workout_sessions WHERE id = ?', id);
 }
 
+export interface SessionDetailRow {
+  id: string;
+  date: string;
+  title: string | null;
+  bodyweight_kg: number | null;
+  exercise_id: string;
+  name_en: string;
+  name_ja: string | null;
+  order_index: number;
+  superset_group: number | null;
+  set_index: number;
+  set_type: string;
+  entry_value: number | null;
+  entry_unit: string;
+  reps: number | null;
+  rpe: number | null;
+}
+
+/** セッション詳細(種目×セットを平坦行で)。in-place 編集のプレフィル用。 */
+export async function getSessionDetail(db: Db, id: string): Promise<SessionDetailRow[]> {
+  return db.raw<SessionDetailRow>(
+    `SELECT s.id, s.date, s.title, s.bodyweight_kg,
+            we.exercise_id, ex.name_en, ex.name_ja, we.order_index, we.superset_group,
+            ws.set_index, ws.set_type, ws.entry_value, ws.entry_unit, ws.reps, ws.rpe
+       FROM workout_sessions s
+       JOIN workout_exercises we ON we.session_id = s.id
+       JOIN exercises ex ON ex.id = we.exercise_id
+       LEFT JOIN workout_sets ws ON ws.workout_exercise_id = we.id
+      WHERE s.id = ?
+      ORDER BY we.order_index, ws.set_index`,
+    id,
+  );
+}
+
 export interface PrRow {
   exercise_id: string;
   name_ja: string | null;

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Plus, Search, Trophy, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Link2, Plus, Search, Trophy, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Card } from '../components/Card';
 import { api, type Exercise } from '../lib/api';
@@ -16,6 +16,7 @@ interface LoggedExercise {
   key: string;
   exercise: Exercise;
   last?: string;
+  supersetGroup: number | null;
   sets: SetRow[];
 }
 
@@ -39,7 +40,13 @@ const SET_TYPE_META: Record<SetRow['setType'], { abbr: string; cls: string }> = 
   amrap: { abbr: 'A', cls: 'bg-paper text-muted border border-line' },
 };
 
-export function RecordScreen({ onSaved }: { onSaved: () => void }) {
+export function RecordScreen({
+  onSaved,
+  editWorkoutId,
+}: {
+  onSaved: () => void;
+  editWorkoutId?: string | null;
+}) {
   const qc = useQueryClient();
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
   const [unit, setUnit] = useState<'kg' | 'lb'>('kg');
@@ -48,6 +55,45 @@ export function RecordScreen({ onSaved }: { onSaved: () => void }) {
   const [items, setItems] = useState<LoggedExercise[]>([]);
   const [search, setSearch] = useState('');
   const [muscle, setMuscle] = useState<string | null>(null);
+  const [editDate, setEditDate] = useState<string | null>(null);
+
+  // 編集モード: 既存セッションを読み込みプレフィル(保存時は旧削除+再記録で置換)。
+  const editQ = useQuery({
+    queryKey: ['workout', editWorkoutId],
+    queryFn: () => api.getWorkout(editWorkoutId!),
+    enabled: !!editWorkoutId,
+  });
+  useEffect(() => {
+    if (!editQ.data) return;
+    setTitle(editQ.data.session.title ?? '');
+    setBodyweight(editQ.data.session.bodyweightKg ?? null);
+    setEditDate(editQ.data.session.date);
+    setItems(
+      editQ.data.exercises.map((ex) => ({
+        key: crypto.randomUUID(),
+        exercise: {
+          id: ex.exerciseId,
+          name_en: ex.name_en,
+          name_ja: ex.name_ja,
+          category: '',
+          equipment: null,
+          load_basis: 'total',
+          is_bodyweight: false,
+          bw_factor: 1,
+          default_rep_range: null,
+        },
+        supersetGroup: ex.supersetGroup,
+        sets: ex.sets.map((s) =>
+          newSet({
+            setType: s.setType as SetRow['setType'],
+            entryValue: s.entryValue,
+            reps: s.reps,
+            rpe: s.rpe,
+          }),
+        ),
+      })),
+    );
+  }, [editQ.data]);
 
   // 主単位は settings 読込後に「一度だけ」初期化(ユーザー操作後は上書きしない)。
   const unitInit = useRef(false);
@@ -81,7 +127,34 @@ export function RecordScreen({ onSaved }: { onSaved: () => void }) {
     } catch {
       /* 履歴なしは無視 */
     }
-    setItems((prev) => [...prev, { key: crypto.randomUUID(), exercise: ex, last, sets: prefill }]);
+    setItems((prev) => [
+      ...prev,
+      { key: crypto.randomUUID(), exercise: ex, last, supersetGroup: null, sets: prefill },
+    ]);
+  }
+
+  function moveExercise(ei: number, dir: -1 | 1) {
+    setItems((prev) => {
+      const j = ei + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[ei], next[j]] = [next[j]!, next[ei]!];
+      return next;
+    });
+  }
+  function cycleSuperset(ei: number) {
+    // null → 1 → 2 → 3 → null(同一番号の隣接種目がスーパーセット)。
+    setItems((prev) =>
+      prev.map((it, i) =>
+        i !== ei
+          ? it
+          : {
+              ...it,
+              supersetGroup:
+                it.supersetGroup == null ? 1 : it.supersetGroup >= 3 ? null : it.supersetGroup + 1,
+            },
+      ),
+    );
   }
 
   function updateSet(ei: number, si: number, patch: Partial<SetRow>) {
@@ -122,17 +195,21 @@ export function RecordScreen({ onSaved }: { onSaved: () => void }) {
   const totalSets = items.reduce((a, it) => a + it.sets.length, 0);
 
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
+      // 編集 = 旧セッション削除(GH datapoint も)→ 元の日付で再記録。
+      if (editWorkoutId) await api.deleteWorkout(editWorkoutId);
       // ライブタイマーは持たないので、所要時間はセット数から概算(1セット≈3分、最低5分)。
       const now = Math.floor(Date.now() / 1000);
       const estDurationSec = Math.max(300, totalSets * 180);
       return api.saveWorkout({
         title: title || undefined,
+        date: editDate ?? undefined,
         bodyweightKg: bodyweight,
         startedAtSec: now - estDurationSec,
         endedAtSec: now,
         exercises: items.map((it) => ({
           exerciseId: it.exercise.id,
+          supersetGroup: it.supersetGroup,
           sets: it.sets.map((s) => ({
             setType: s.setType,
             entryValue: s.entryValue,
@@ -147,6 +224,7 @@ export function RecordScreen({ onSaved }: { onSaved: () => void }) {
       qc.invalidateQueries({ queryKey: ['today'] });
       qc.invalidateQueries({ queryKey: ['muscle-volume'] });
       qc.invalidateQueries({ queryKey: ['trends'] });
+      qc.invalidateQueries({ queryKey: ['recent-workouts'] });
       onSaved();
       if (r.newPrs.length) alert(`保存 ${r.totalVolumeKg}kg · 🎉 PR更新 ${r.newPrs.length}件`);
     },
@@ -166,21 +244,57 @@ export function RecordScreen({ onSaved }: { onSaved: () => void }) {
 
       {items.map((it, ei) => (
         <Card key={it.key}>
-          <div className="mb-1 flex items-start justify-between">
-            <div>
-              <div className="font-display text-base font-bold tracking-tight">
-                {it.exercise.name_ja ?? it.exercise.name_en}
+          <div className="mb-1 flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                {it.supersetGroup != null && (
+                  <span className="flex items-center gap-0.5 rounded bg-carb px-1.5 py-0.5 text-[10px] font-bold text-card">
+                    <Link2 className="h-3 w-3" strokeWidth={2.6} />
+                    SS{it.supersetGroup}
+                  </span>
+                )}
+                <div className="truncate font-display text-base font-bold tracking-tight">
+                  {it.exercise.name_ja ?? it.exercise.name_en}
+                </div>
               </div>
               {it.last && <div className="mt-0.5 text-[11px] text-faint">{it.last}</div>}
             </div>
-            <button
-              type="button"
-              aria-label="種目を削除"
-              onClick={() => removeExercise(ei)}
-              className="rounded-md p-1 text-faint hover:text-accent"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex shrink-0 items-center text-faint">
+              <button
+                type="button"
+                aria-label="スーパーセット"
+                onClick={() => cycleSuperset(ei)}
+                className={`rounded-md p-1 ${it.supersetGroup != null ? 'text-carb' : 'hover:text-ink'}`}
+              >
+                <Link2 className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="上へ"
+                onClick={() => moveExercise(ei, -1)}
+                disabled={ei === 0}
+                className="rounded-md p-1 hover:text-ink disabled:opacity-25"
+              >
+                <ChevronUp className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="下へ"
+                onClick={() => moveExercise(ei, 1)}
+                disabled={ei === items.length - 1}
+                className="rounded-md p-1 hover:text-ink disabled:opacity-25"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="種目を削除"
+                onClick={() => removeExercise(ei)}
+                className="rounded-md p-1 hover:text-accent"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <div className="mt-2 grid grid-cols-[1.6rem_1fr_1fr_1fr] gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-faint">
             <span>型</span>
@@ -301,7 +415,7 @@ export function RecordScreen({ onSaved }: { onSaved: () => void }) {
           '保存中…'
         ) : (
           <>
-            <Check className="h-5 w-5" strokeWidth={3} /> 保存する
+            <Check className="h-5 w-5" strokeWidth={3} /> {editWorkoutId ? '更新する' : '保存する'}
           </>
         )}
       </button>

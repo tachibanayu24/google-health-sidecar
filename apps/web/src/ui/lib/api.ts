@@ -197,6 +197,23 @@ export const api = {
       method: 'DELETE',
     }),
   recentWorkouts: () => req<{ sessions: RecentSession[] }>('/workouts/recent'),
+  getWorkout: (id: string) =>
+    req<{
+      session: { id: string; date: string; title: string | null; bodyweightKg: number | null };
+      exercises: Array<{
+        exerciseId: string;
+        name_en: string;
+        name_ja: string | null;
+        supersetGroup: number | null;
+        sets: Array<{
+          setType: string;
+          entryValue: number | null;
+          entryUnit: string;
+          reps: number | null;
+          rpe: number | null;
+        }>;
+      }>;
+    }>(`/workouts/${encodeURIComponent(id)}`),
   deleteWorkout: (id: string) =>
     req<{ deleted: boolean; ghDeleted: boolean }>(`/workouts/${encodeURIComponent(id)}`, {
       method: 'DELETE',

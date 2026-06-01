@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search, Trash2, Trophy } from 'lucide-react';
+import { Pencil, Search, Trash2, Trophy } from 'lucide-react';
 import { useState } from 'react';
 import {
   Bar,
@@ -24,7 +24,7 @@ const FAINT = '#a8a294';
 
 const mmdd = (d: string) => d.slice(5).replace('-', '/');
 
-export function HistoryScreen() {
+export function HistoryScreen({ onEditWorkout }: { onEditWorkout: (id: string) => void }) {
   const q = useQuery({ queryKey: ['trends', 90], queryFn: () => api.trends(90) });
   if (q.isLoading) return <Loading />;
   if (q.error) return <ErrorBox error={q.error} />;
@@ -113,7 +113,7 @@ export function HistoryScreen() {
 
       <ExerciseTrend />
       <PrList />
-      <RecentWorkouts />
+      <RecentWorkouts onEdit={onEditWorkout} />
     </div>
   );
 }
@@ -241,7 +241,7 @@ function PrList() {
 }
 
 // ============ 最近のワークアウト(#1: 一覧 + 削除) ============
-function RecentWorkouts() {
+function RecentWorkouts({ onEdit }: { onEdit: (id: string) => void }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['recent-workouts'], queryFn: api.recentWorkouts });
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -293,14 +293,24 @@ function RecentWorkouts() {
                   </button>
                 </span>
               ) : (
-                <button
-                  type="button"
-                  aria-label="削除"
-                  onClick={() => setConfirmId(s.id)}
-                  className="shrink-0 p-1 text-faint active:text-accent"
-                >
-                  <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />
-                </button>
+                <span className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    aria-label="編集"
+                    onClick={() => onEdit(s.id)}
+                    className="p-1 text-faint active:text-accent"
+                  >
+                    <Pencil className="h-3.5 w-3.5" strokeWidth={2.2} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="削除"
+                    onClick={() => setConfirmId(s.id)}
+                    className="p-1 text-faint active:text-accent"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />
+                  </button>
+                </span>
               )}
             </li>
           ))}

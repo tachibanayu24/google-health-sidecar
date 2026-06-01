@@ -22,6 +22,7 @@ export function App() {
   const [view, setView] = useState<View>('home');
   const [chooser, setChooser] = useState(false);
   const [editMealId, setEditMealId] = useState<string | null>(null);
+  const [editWorkoutId, setEditWorkoutId] = useState<string | null>(null);
 
   return (
     <div className="flex h-full flex-col">
@@ -37,8 +38,23 @@ export function App() {
               }}
             />
           )}
-          {view === 'history' && <HistoryScreen />}
-          {view === 'record' && <RecordScreen onSaved={() => setView('home')} />}
+          {view === 'history' && (
+            <HistoryScreen
+              onEditWorkout={(id) => {
+                setEditWorkoutId(id);
+                setView('record');
+              }}
+            />
+          )}
+          {view === 'record' && (
+            <RecordScreen
+              editWorkoutId={editWorkoutId}
+              onSaved={() => {
+                setEditWorkoutId(null);
+                setView('home');
+              }}
+            />
+          )}
           {view === 'meal' && (
             <MealScreen
               editMealId={editMealId}
@@ -59,6 +75,7 @@ export function App() {
           onPick={(v) => {
             setChooser(false);
             if (v === 'meal') setEditMealId(null); // 新規記録なので編集状態をクリア
+            if (v === 'record') setEditWorkoutId(null);
             setView(v);
           }}
         />

@@ -49,7 +49,12 @@ export interface SaveWorkoutInput {
   endedAtSec?: number;
   bodyweightKg?: number | null;
   status?: 'in_progress' | 'completed';
-  exercises: Array<{ exerciseId: string; note?: string; sets: SaveSetInput[] }>;
+  exercises: Array<{
+    exerciseId: string;
+    note?: string;
+    supersetGroup?: number | null;
+    sets: SaveSetInput[];
+  }>;
 }
 
 /**
@@ -95,7 +100,7 @@ export async function saveWorkout(
         session_id: sessionId,
         exercise_id: ex.exerciseId,
         order_index: exIdx,
-        superset_group: null,
+        superset_group: ex.supersetGroup ?? null,
         note: ex.note ?? null,
       }),
     );

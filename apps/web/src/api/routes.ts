@@ -16,6 +16,7 @@ import {
   getMuscleVolume,
   getRecentPrs,
   getRecentSessions,
+  getSessionDetail,
   getSettings,
   getSleepByDate,
   getTrends,
@@ -206,6 +207,71 @@ api.get('/workouts/recent', async (c) => {
   const limit = Math.min(60, Number(c.req.query('limit') ?? '30') || 30);
   const sessions = await getRecentSessions(ctx.db, limit);
   return c.json({ sessions });
+});
+
+api.get('/workouts/:id', async (c) => {
+  const ctx = makeContext(c.env);
+  const rows = await getSessionDetail(ctx.db, c.req.param('id'));
+  if (rows.length === 0) return c.json({ error: 'not found' }, 404);
+  const first = rows[0]!;
+  // 平坦行を 種目×セット に再構成。
+  const byEx = new Map<
+    string,
+    {
+      exerciseId: string;
+      name_en: string;
+      name_ja: string | null;
+      supersetGroup: number | null;
+      order: number;
+      sets: Array<{
+        setType: string;
+        entryValue: number | null;
+        entryUnit: string;
+        reps: number | null;
+        rpe: number | null;
+      }>;
+    }
+  >();
+  for (const r of rows) {
+    let e = byEx.get(r.exercise_id + ':' + r.order_index);
+    if (!e) {
+      e = {
+        exerciseId: r.exercise_id,
+        name_en: r.name_en,
+        name_ja: r.name_ja,
+        supersetGroup: r.superset_group,
+        order: r.order_index,
+        sets: [],
+      };
+      byEx.set(r.exercise_id + ':' + r.order_index, e);
+    }
+    if (r.set_index != null && r.entry_value != null) {
+      e.sets.push({
+        setType: r.set_type,
+        entryValue: r.entry_value,
+        entryUnit: r.entry_unit,
+        reps: r.reps,
+        rpe: r.rpe,
+      });
+    } else if (r.set_index != null) {
+      e.sets.push({
+        setType: r.set_type,
+        entryValue: r.entry_value,
+        entryUnit: r.entry_unit,
+        reps: r.reps,
+        rpe: r.rpe,
+      });
+    }
+  }
+  return c.json({
+    session: {
+      id: first.id,
+      date: first.date,
+      title: first.title,
+      bodyweightKg: first.bodyweight_kg,
+    },
+    exercises: [...byEx.values()].sort((a, b) => a.order - b.order),
+  });
 });
 
 api.delete('/workouts/:id', async (c) => {
