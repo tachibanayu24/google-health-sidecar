@@ -18,3 +18,13 @@ createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </StrictMode>,
 );
+
+// PWA: Service Worker 登録(本番のみ。dev=localhost は vite と干渉するため除外)。
+const isLocalDev = ['localhost', '127.0.0.1'].includes(location.hostname);
+if ('serviceWorker' in navigator && !isLocalDev) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      /* SW 登録失敗は致命的でない(オフライン機能のみ無効) */
+    });
+  });
+}
