@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  APP_DATA_ORIGIN,
   buildBodyPayload,
   buildExercisePayload,
   buildNutritionPayload,
@@ -27,8 +26,7 @@ describe('buildExercisePayload', () => {
     expect(p.exercise.activeDuration).toBe('3600s');
     expect(p.exercise.notes).toContain('[ghsidecar:session_abc]');
     expect(p.exercise.metricsSummary.caloriesKcal).toBe(320);
-    expect(p.dataSource.application.name).toBe(APP_DATA_ORIGIN);
-    expect(p.dataSource.recordingMethod).toBe('ACTIVELY_RECORDED');
+    expect(p.dataSource.recordingMethod).toBe('ACTIVELY_MEASURED');
   });
   it('calories 無しなら metricsSummary を含めない', () => {
     const p = buildExercisePayload({
@@ -71,7 +69,7 @@ describe('buildBodyPayload', () => {
       clientTag: 'bm_1',
     }) as Record<string, any>;
     expect(p.weight.weightGrams).toBe(72400); // ★grams
-    expect(p.dataSource.recordingMethod).toBe('ACTIVELY_RECORDED');
+    expect(p.dataSource.recordingMethod).toBe('ACTIVELY_MEASURED');
   });
   it('body-fat は percentage', () => {
     const p = buildBodyPayload({
@@ -166,18 +164,29 @@ describe('mapDataPoint: 値は typed sub-object 配下', () => {
 });
 
 describe('parseReconcileResponse', () => {
-  it('dataPoints[] + nextPageToken', () => {
+  it('ReconciledDataPoint(dataPointName + data ラッパー)', () => {
     const { points, cursor } = parseReconcileResponse('weight', {
       dataPoints: [
         {
-          name: 'a',
-          weight: { weightGrams: '70000', sampleTime: { physicalTime: '2026-05-30T07:00:00Z' } },
+          dataPointName: 'users/me/.../dp_a',
+          data: {
+            weight: { weightGrams: '70000', sampleTime: { physicalTime: '2026-05-30T07:00:00Z' } },
+          },
         },
       ],
       nextPageToken: 'tok',
     });
     expect(points).toHaveLength(1);
+    expect(points[0]?.id).toBe('users/me/.../dp_a');
     expect(points[0]?.value).toBe(70);
     expect(cursor).toBe('tok');
+  });
+
+  it('list 形(値が直下・name)も後方互換で読める', () => {
+    const { points } = parseReconcileResponse('weight', {
+      dataPoints: [{ name: 'dp_b', weight: { weightGrams: '68000' } }],
+    });
+    expect(points[0]?.id).toBe('dp_b');
+    expect(points[0]?.value).toBe(68);
   });
 });

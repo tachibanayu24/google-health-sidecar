@@ -76,11 +76,10 @@ export interface BodyPushInput {
 }
 
 export interface HealthProvider {
-  /** daily batch: 突合済ストリームを cursor から取得(§5.4)。 */
+  /** daily batch: 突合済ストリームを取得(§5.4)。filter は dataType 別に呼び出し側が組む(buildReadFilter)。 */
   reconcileDataPoints(
     ghDataType: string,
-    sinceSec: number,
-    untilSec: number,
+    filter: string,
     cursor: string | null,
   ): Promise<ReconcileResult>;
 

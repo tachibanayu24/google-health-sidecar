@@ -27,13 +27,13 @@ function rfc3339(sec: number): string {
   return new Date(sec * 1000).toISOString();
 }
 
-/** 自前 dataSource 識別子(reconcile own-write 判定の補助, §5.4)。主判定は gh_datapoint_id 一致。 */
+/** 自前識別子(own-write 判定の補助。主判定は gh_datapoint_id 一致)。 */
 export const APP_DATA_ORIGIN = 'ghsidecar';
-/** recordingMethod は GH enum(MANUAL は存在しない)。ユーザー/アプリ起点入力は ACTIVELY_RECORDED。 */
-const RECORDING_METHOD = 'ACTIVELY_RECORDED';
-/** application は Application object(正確な形は要トークン検証 §openItem)。best-effort で識別名を載せる。 */
+/** recordingMethod の GH enum 値(実機 400 で ACTIVELY_RECORDED は無効と判明 → 公式例の ACTIVELY_MEASURED)。 */
+const RECORDING_METHOD = 'ACTIVELY_MEASURED';
+/** dataSource。application の正確な形は未確定なので一旦付けない(任意・400回避)。own-write は gh_datapoint_id で判定。 */
 function dataSource(): Record<string, unknown> {
-  return { recordingMethod: RECORDING_METHOD, application: { name: APP_DATA_ORIGIN } };
+  return { recordingMethod: RECORDING_METHOD };
 }
 
 // ============ write payload(リクエスト形はこちらが握る → テスト可能) ============
@@ -129,17 +129,19 @@ function field(obj: unknown, key: string): unknown {
 
 export function mapDataPoint(dataType: string, raw: unknown): ProviderDataPoint {
   const p = (raw ?? {}) as Record<string, unknown>;
-  const ds = (p.dataSource ?? {}) as {
+  // reconcile = ReconciledDataPoint(id=dataPointName, 値は data 配下)。list/create は値が直下。両対応。
+  const c = (p.data ?? p) as Record<string, unknown>;
+  const ds = (p.dataSource ?? c.dataSource ?? {}) as {
     application?: { name?: string } | string;
     recordingMethod?: string;
   };
   const app = ds.application;
   const dataOrigin = typeof app === 'string' ? app : app?.name;
   return {
-    id: String(p.name ?? ''),
-    timeSec: extractTimeSec(dataType, p),
-    value: extractValue(dataType, p),
-    extra: dataType === 'sleep' ? extractSleep(p) : undefined,
+    id: String(p.dataPointName ?? p.name ?? ''),
+    timeSec: extractTimeSec(dataType, c),
+    value: extractValue(dataType, c),
+    extra: dataType === 'sleep' ? extractSleep(c) : undefined,
     dataOrigin,
     recordingMethod: ds.recordingMethod,
   };

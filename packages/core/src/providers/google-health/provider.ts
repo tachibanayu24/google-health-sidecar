@@ -16,11 +16,6 @@ import {
   parseReconcileResponse,
 } from './mappers';
 
-/** RFC3339 秒精度。 */
-function rfc3339(sec: number): string {
-  return new Date(sec * 1000).toISOString();
-}
-
 /**
  * Google Health API v4 プロバイダ(§5)。既定の HealthProvider 実装。
  * read response 形は要検証(discovery pin, §5.1)。write payload はこちらが握る。
@@ -33,12 +28,10 @@ export class GoogleHealthProvider implements HealthProvider {
 
   async reconcileDataPoints(
     ghDataType: string,
-    sinceSec: number,
-    untilSec: number,
+    filter: string,
     cursor: string | null,
   ): Promise<ReconcileResult> {
-    // reconcile = GET + query(discovery doc 確定, §5.1)。filter 構文は AIP-160。
-    const filter = `start_time >= "${rfc3339(sinceSec)}" AND start_time <= "${rfc3339(untilSec)}"`;
+    // reconcile = GET + query(discovery doc 確定, §5.1)。filter は呼び出し側が dataType 別に組む。
     const res = await this.client.reconcile(ghDataType, {
       filter,
       pageSize: '25',

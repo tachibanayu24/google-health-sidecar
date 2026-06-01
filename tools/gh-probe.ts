@@ -10,7 +10,7 @@
  *   (手動指定する場合は export GH_ACCESS_TOKEN=... も可)
  */
 import { GhClient } from '@ghs/core/providers/google-health/client';
-import { READ_DATATYPES } from '@ghs/core/providers/google-health/discovery-pin';
+import { buildReadFilter, READ_DATATYPES } from '@ghs/core/providers/google-health/discovery-pin';
 import { parseReconcileResponse } from '@ghs/core/providers/google-health/mappers';
 import { ProviderApiError } from '@ghs/core/util/errors';
 import { loadAccessToken } from './_token';
@@ -19,7 +19,6 @@ const token = loadAccessToken();
 const client = new GhClient(async () => token);
 const now = Math.floor(Date.now() / 1000);
 const since = now - 30 * 24 * 60 * 60;
-const rfc3339 = (s: number) => new Date(s * 1000).toISOString();
 
 function preview(obj: unknown, n = 700): string {
   const s = JSON.stringify(obj);
@@ -31,7 +30,7 @@ console.log('\n=== GH read probe (直近30日, reconcile) ===\n');
 for (const dt of READ_DATATYPES) {
   const tag = `${dt.ghDataType}${dt.unverified ? ' (要検証ID)' : ''}`;
   try {
-    const filter = `start_time >= "${rfc3339(since)}" AND start_time <= "${rfc3339(now)}"`;
+    const filter = buildReadFilter(dt, since, now);
     const raw = await client.reconcile(dt.ghDataType, { filter, pageSize: '5' });
     const parsed = parseReconcileResponse(dt.ghDataType, raw);
     console.log(`■ ${tag}`);

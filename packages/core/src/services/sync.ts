@@ -17,7 +17,11 @@ import {
 } from '../db/repositories/sync';
 import { getSessionPushData } from '../db/repositories/workouts';
 import { type DailyMetricKind, MEAL_TYPE_TO_GH } from '../domain/enums';
-import { READ_DATATYPES, type ReadDataType } from '../providers/google-health/discovery-pin';
+import {
+  buildReadFilter,
+  READ_DATATYPES,
+  type ReadDataType,
+} from '../providers/google-health/discovery-pin';
 import type { ProviderDataPoint } from '../providers/HealthProvider';
 import { jstDaysAgo, nowSec, toJstDateString } from '../util/date';
 import { errorMessage } from '../util/errors';
@@ -45,12 +49,12 @@ export async function runDailyPull(
         st?.last_synced_at ??
         Math.floor(Date.parse(`${jstDaysAgo(opts.backfillDays ?? 14)}T00:00:00Z`) / 1000);
       let cursor = st?.last_cursor ?? null;
+      const filter = buildReadFilter(dt, since, now);
       // ページングを cursor が尽きるまで(単一ユーザー1日分なら通常1ページ)。
       do {
         const { points, cursor: next } = await provider.reconcileDataPoints(
           dt.ghDataType,
-          since,
-          now,
+          filter,
           cursor,
         );
         for (const p of points) {
