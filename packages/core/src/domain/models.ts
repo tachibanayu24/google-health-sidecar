@@ -274,6 +274,7 @@ export const GhSyncState = z.object({
   last_pushed_at: Unix.nullable(),
   retry_count: z.number().int(),
   last_error: z.string().nullable(),
+  next_retry_at: Unix.nullable(),
   updated_at: Unix,
 });
 export type GhSyncState = z.infer<typeof GhSyncState>;

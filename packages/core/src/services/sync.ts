@@ -10,6 +10,7 @@ import {
   getPendingPushes,
   getSyncRun,
   isKnownOwnWrite,
+  markPushDeferred,
   markPushFailed,
   markPushSynced,
   markSyncError,
@@ -24,7 +25,7 @@ import {
 } from '../providers/google-health/discovery-pin';
 import type { ProviderDataPoint } from '../providers/HealthProvider';
 import { jstDaysAgo, nowSec, toJstDateString } from '../util/date';
-import { errorMessage } from '../util/errors';
+import { errorMessage, ProviderApiError, RateLimitError } from '../util/errors';
 import { type AppContext, getProvider } from './context';
 
 /**
@@ -236,7 +237,14 @@ export async function retryPendingPushes(
         synced++;
       }
     } catch (e) {
-      await markPushFailed(ctx.db, p.entity_type, p.entity_id, errorMessage(e));
+      if (e instanceof RateLimitError) {
+        // レート制限は一時的。retry_count を消費せず次 cron に先送り(dead_letter 化を防ぐ)。
+        await markPushDeferred(ctx.db, p.entity_type, p.entity_id, e.retryAfterSec);
+      } else {
+        // 403(scope不足/権限)・401・400 は恒久失敗 → 即 dead_letter。それ以外は指数バックオフ。
+        const permanent = e instanceof ProviderApiError && [400, 401, 403].includes(e.status);
+        await markPushFailed(ctx.db, p.entity_type, p.entity_id, errorMessage(e), { permanent });
+      }
       failed++;
     }
   }

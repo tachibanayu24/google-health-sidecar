@@ -14,6 +14,7 @@ import {
   getMealItems,
   getMealsByDate,
   getMuscleVolume,
+  getPushQueueStats,
   getRecentPrs,
   getRecentSessions,
   getSessionDetail,
@@ -288,9 +289,14 @@ api.get('/prs', async (c) => {
 
 api.get('/sync-status', async (c) => {
   const ctx = makeContext(c.env);
-  const [runs, authError] = await Promise.all([getAllSyncRuns(ctx.db), getGhAuthError(ctx.tokens)]);
+  const [runs, authError, pushQueue] = await Promise.all([
+    getAllSyncRuns(ctx.db),
+    getGhAuthError(ctx.tokens),
+    getPushQueueStats(ctx.db),
+  ]);
   return c.json({
     authError,
+    pushQueue, // { pending, failed, deadLetter } — app→GH push の滞留/恒久失敗
     runs: runs.map((r) => ({
       data_type: r.data_type,
       last_synced_at: r.last_synced_at,

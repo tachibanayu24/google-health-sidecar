@@ -141,6 +141,7 @@ export const SyncStatus = z.enum([
   'pending',
   'synced',
   'failed',
+  'dead_letter', // 恒久失敗(403/上限到達)。自動再試行の対象から外れる。
   'stale',
   'deleted_remote',
   'skipped_flag_off',

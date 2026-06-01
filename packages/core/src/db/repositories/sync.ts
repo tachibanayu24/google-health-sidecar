@@ -50,16 +50,42 @@ export async function markSyncError(db: Db, dataType: string, error: string): Pr
 }
 
 // ---------- gh_sync_state(D1→GH push 台帳, §7) ----------
+/** push の最大再試行回数。これを超えると dead_letter に隔離(無限リトライ防止, §12.2)。 */
+export const PUSH_MAX_RETRIES = 8;
+
+/** 再試行バックオフ秒(指数, 上限6h)。30分 cron で拾うので分〜時間オーダー。 */
+export function pushBackoffSec(retryCount: number): number {
+  return Math.min(2 ** retryCount * 300, 6 * 3600);
+}
+
+/** push 台帳の状態別件数(UI の同期ヘルス表示用)。dead_letter は手動対応が必要。 */
+export async function getPushQueueStats(
+  db: Db,
+): Promise<{ pending: number; failed: number; deadLetter: number }> {
+  const rows = await db.raw<{ sync_status: string; n: number }>(
+    `SELECT sync_status, count(*) AS n FROM gh_sync_state
+       WHERE sync_status IN ('pending','failed','dead_letter') GROUP BY sync_status`,
+  );
+  const by = (s: string) => rows.find((r) => r.sync_status === s)?.n ?? 0;
+  return { pending: by('pending'), failed: by('failed'), deadLetter: by('dead_letter') };
+}
+
 export async function getPendingPushes(db: Db, limit = 20): Promise<GhSyncState[]> {
+  // dead_letter は対象外。next_retry_at が未到来のものはバックオフ中なのでスキップ。
   return db.all(
     GhSyncState,
-    `SELECT * FROM gh_sync_state WHERE sync_status IN ('pending','failed') ORDER BY updated_at LIMIT ?`,
+    `SELECT * FROM gh_sync_state
+       WHERE sync_status IN ('pending','failed')
+         AND (next_retry_at IS NULL OR next_retry_at <= ?)
+       ORDER BY updated_at LIMIT ?`,
+    nowSec(),
     limit,
   );
 }
 
 /** push 対象を pending で登録(services が D1 batch 後に呼ぶ)。 */
 export function pendingPushStmt(entityType: SyncEntityType, entityId: string) {
+  // 再 push 時(conflict)も pending に戻し、retry_count/next_retry_at をリセットして即時対象に。
   return upsertStmt(
     'gh_sync_state',
     {
@@ -67,10 +93,11 @@ export function pendingPushStmt(entityType: SyncEntityType, entityId: string) {
       entity_id: entityId,
       sync_status: 'pending' as SyncStatus,
       retry_count: 0,
+      next_retry_at: null,
       updated_at: nowSec(),
     },
     ['entity_type', 'entity_id'],
-    ['sync_status', 'updated_at'],
+    ['sync_status', 'retry_count', 'next_retry_at', 'updated_at'],
   );
 }
 
@@ -96,16 +123,51 @@ export async function markPushSynced(
   );
 }
 
+/**
+ * push 失敗を記録(§12.2)。retry_count を加算し、恒久失敗(permanent=403等)または上限到達なら
+ * dead_letter に隔離(以後 cron 自動再試行の対象外)。それ以外は指数バックオフで next_retry_at を設定。
+ */
 export async function markPushFailed(
   db: Db,
   entityType: SyncEntityType,
   entityId: string,
   error: string,
+  opts: { permanent?: boolean } = {},
+): Promise<void> {
+  const rows = await db.raw<{ retry_count: number }>(
+    'SELECT retry_count FROM gh_sync_state WHERE entity_type=? AND entity_id=?',
+    entityType,
+    entityId,
+  );
+  const nextCount = (rows[0]?.retry_count ?? 0) + 1;
+  const dead = opts.permanent === true || nextCount >= PUSH_MAX_RETRIES;
+  const now = nowSec();
+  await db.run(
+    `UPDATE gh_sync_state SET sync_status=?, last_error=?, retry_count=?, next_retry_at=?, updated_at=?
+     WHERE entity_type=? AND entity_id=?`,
+    dead ? 'dead_letter' : 'failed',
+    error.slice(0, 500),
+    nextCount,
+    dead ? null : now + pushBackoffSec(nextCount),
+    now,
+    entityType,
+    entityId,
+  );
+}
+
+/**
+ * レート制限など一時的事由による push 先送り(§12.2)。retry_count は加算せず
+ * (dead_letter に近づけない)、next_retry_at だけ後ろにずらして次 cron に回す。
+ */
+export async function markPushDeferred(
+  db: Db,
+  entityType: SyncEntityType,
+  entityId: string,
+  retryAfterSec: number,
 ): Promise<void> {
   await db.run(
-    `UPDATE gh_sync_state SET sync_status='failed', last_error=?, retry_count=retry_count+1, updated_at=?
-     WHERE entity_type=? AND entity_id=?`,
-    error.slice(0, 500),
+    `UPDATE gh_sync_state SET next_retry_at=?, updated_at=? WHERE entity_type=? AND entity_id=?`,
+    nowSec() + Math.max(60, retryAfterSec),
     nowSec(),
     entityType,
     entityId,

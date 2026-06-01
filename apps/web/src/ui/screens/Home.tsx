@@ -437,15 +437,18 @@ function Bar({
 function SyncHealthBanner() {
   const q = useQuery({ queryKey: ['sync-status'], queryFn: api.syncStatus, staleTime: 60_000 });
   if (!q.data) return null;
-  const { authError, runs } = q.data;
+  const { authError, runs, pushQueue } = q.data;
   const failing = runs.filter((r) => r.consecutive_failures > 0 && r.last_error);
-  if (!authError && failing.length === 0) return null;
+  const dead = pushQueue?.deadLetter ?? 0;
+  if (!authError && failing.length === 0 && dead === 0) return null;
   const msg = authError
     ? 'GH 再認証が必要です。tools/oauth-bootstrap を再実行してください。'
-    : `GH 同期エラー: ${failing
-        .slice(0, 2)
-        .map((r) => r.data_type)
-        .join(', ')}${failing.length > 2 ? ` 他${failing.length - 2}` : ''}`;
+    : dead > 0
+      ? `GH への反映に${dead}件失敗(要対応)。権限/スコープを確認してください。`
+      : `GH 同期エラー: ${failing
+          .slice(0, 2)
+          .map((r) => r.data_type)
+          .join(', ')}${failing.length > 2 ? ` 他${failing.length - 2}` : ''}`;
   return (
     <div className="flex items-start gap-2 rounded-xl border border-accent/40 bg-accent-soft px-3 py-2.5 text-sm text-accent-ink">
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.4} />

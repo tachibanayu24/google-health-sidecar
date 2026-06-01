@@ -231,6 +231,7 @@ export const api = {
   syncStatus: () =>
     req<{
       authError: string | null;
+      pushQueue: { pending: number; failed: number; deadLetter: number };
       runs: Array<{
         data_type: string;
         last_synced_at: number | null;
