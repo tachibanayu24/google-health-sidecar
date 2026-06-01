@@ -7,7 +7,7 @@ import { axisTick, CHART, ChartFrame, mmdd, TT } from '../components/chart';
 import { Sheet } from '../components/Overlay';
 import { Empty, ErrorBox, Loading } from '../components/state';
 import { api, type SleepSummary } from '../lib/api';
-import { epochToJstHhmm } from '../lib/datetime';
+import { epochToJstHhmm, shiftDate } from '../lib/datetime';
 import { invalidateBody } from '../lib/invalidate';
 import { round } from '../lib/units';
 
@@ -66,10 +66,7 @@ function BodyComposition({
   const baseDate = latest?.date ?? null;
   const delta = (daysAgo: number): number | null => {
     if (curW == null || baseDate == null) return null;
-    const target = new Date(Date.parse(`${baseDate}T00:00:00Z`) - daysAgo * 86_400_000)
-      .toISOString()
-      .slice(0, 10);
-    const past = weightNear(series, target);
+    const past = weightNear(series, shiftDate(baseDate, -daysAgo));
     return past != null ? Math.round((curW - past) * 10) / 10 : null;
   };
   const wk = delta(7);
