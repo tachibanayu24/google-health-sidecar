@@ -13,7 +13,8 @@ const K_REFRESH = 'gh:refresh_token';
 const K_EXPIRES = 'gh:expires_at';
 const LOCK_KEY = 'gh:refresh_lock';
 const REFRESH_SKEW_SEC = 60;
-const LOCK_TTL_SEC = 30;
+// Cloudflare KV の expirationTtl 最小は 60s。ロックは refresh 完了で即 delete されるので 60 で十分。
+const LOCK_TTL_SEC = 60;
 
 export interface TokenStoreEnv {
   TOKENS: KVNamespace;
