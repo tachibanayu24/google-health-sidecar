@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Activity, Footprints, HeartPulse, Moon, Scale, Wind } from 'lucide-react';
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts';
 import { Card, Stat } from '../components/Card';
 import { axisTick, CHART, ChartFrame, mmdd, TT } from '../components/chart';
@@ -214,8 +215,8 @@ function WeightLogger() {
         <Scale className="h-3.5 w-3.5" strokeWidth={2.2} /> 記録
       </button>
     );
-  return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center">
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-end justify-center">
       <button
         type="button"
         aria-label="閉じる"
@@ -258,7 +259,8 @@ function WeightLogger() {
           {save.isPending ? '保存中…' : '保存'}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

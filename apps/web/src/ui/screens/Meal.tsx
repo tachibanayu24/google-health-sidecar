@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bookmark, Check, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Card } from '../components/Card';
 import { api, type FoodSuggestion, type MealPreset } from '../lib/api';
 import { jstHourNow } from '../lib/datetime';
@@ -313,7 +314,7 @@ function PresetSaveSheet({
   pending: boolean;
   count: number;
 }) {
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center">
       <button
         type="button"
@@ -354,7 +355,8 @@ function PresetSaveSheet({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

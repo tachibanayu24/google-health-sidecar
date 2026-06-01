@@ -1,6 +1,10 @@
+import { createPortal } from 'react-dom';
+
 /**
  * 削除確認モーダル(食事/ワークアウト共通)。App.tsx の DiscardGuard と同一スタイルの双子。
  * 各画面がローカル state で開閉を持ち、これを render する(グローバル Context 不要)。
+ * ※ document.body へ portal する。画面は .rise(transform アニメ)配下にあり、transform は
+ *   position:fixed の containing-block を作るため、portal しないとオーバーレイが画面全体を覆えない。
  */
 export function DeleteConfirmModal({
   kind,
@@ -15,8 +19,8 @@ export function DeleteConfirmModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center px-8">
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-8">
       <button
         type="button"
         aria-label="閉じる"
@@ -49,6 +53,7 @@ export function DeleteConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
