@@ -72,17 +72,34 @@
   - **食事→マクロレーダー詳細**(`MealCategoryDetail.tsx`): 栄養画面は区分サマリ一覧、各区分タップで詳細へ。マクロを **P/F/C のカロリー寄与% でレーダーチャート**可視化 + 品目別内訳 + 編集/削除。「タップ→可視化付き詳細」を体験の芯に。
   - 栄養の日付は **URL(?d=)単一ソース**化(内部 state drift を解消, `{replace}` で履歴を汚さない)。
   - 焦点 adversarial レビュー(3観点→検証)で確証バグ1件(日付 drift)を修正。
+- ✅ **可視化システム統一 + データUI仕上げ(2026-06-02, オーナーFB反映)**:
+  - **マクロ可視化をバーに一本化**: 共通 `NutrientBars`(P/F/C/塩/繊維, 対目標%)を新設し全画面で統一。MealCategoryDetail のレーダーを撤去 → 同一対象でのレーダー/バー混在を根絶。塩=超過のみ警告色、繊維=未捕捉時グレー、`--color-fiber` トークン追加。
+  - **食塩・食物繊維のデータ配線**: target_fiber_g(migration 0009)・/today pfc 集計・型・autocomplete・Meal入力(6列)・設定目標。食物繊維は GH の food log に実在(確認済)だが既存486件は初回バックフィルで取りこぼし → **バックフィルはせず運用以降で蓄積**(オーナー方針)。
+  - **からだ画面の目的を明確化**: ①体組成(週次/月次 変化ペース+除脂肪量+90日 dual line)②回復(睡眠+HRV+安静時心拍を1枚)③日次センシング。「計画通りか/回復できてるか」の2問に答えるダッシュボードへ。
+  - **Home に日付ナビ復活**(各グランスを選択日に整合)。**種目名は英語表示に統一**(ja併記廃止)。**セット種別=本番チェックボックス**(チェック=総量/PR計上)。
+  - **モーダル共通化**: `components/Overlay`(Modal/Sheet, body へ portal)。`.rise`(transform)による fixed 破綻=オーバーレイが全画面を覆わない不具合を一元解消(DeleteConfirm/DiscardGuard/LogChooser/WeightLogger/PresetSaveSheet を全置換)。
+- ✅ **ゼロベース品質リファクタ(2026-06-02, 監査WF 37件→安全分実行)**:
+  - 共有lib集約: `lib/datetime`(shiftDate/formatDateForDisplay)・`lib/invalidate`(invalidateMeals/Workouts/Body/Settings/AfterFlush)で散在ロジックをDRY化。
+  - 死蔵除去: getExerciseMuscles・BodyMeasurement型・supersetGroup契約(DB列は legacy 保持)。
+  - 型安全: プリセット items_json を safeParse(MealItemInputSchema を core に抽出・共有)。
+  - perf: recharts/react-body-highlighter を **code-split**(初期バンドル 880KB→405KB、recharts は該当画面訪問時のみ)。
+  - テスト: util/date の JST境界テスト追加(62→71)。
+  - 監査で**意図的に見送った項目**(理由付き): name_ja列drop(検索が利用)・sugar除去(表示要望あり・配線維持)・SetType enum 縮小(metrics/PrBasis/テストへ波及)・query-key 文字列の全面集中管理(churn過大・invalidateは集約済)・core barrel 縮小(import波及)。
 
 ## オーナー判断で不採用(2026-06-01)
 - ❌ **進捗写真(R2)** — 不要。
 - ❌ **食事写真入力UI** — 不要(写真からの栄養計算は将来 MCP 側で検討)。
 - ❌ **身体周径(body_measurements)** — 不要。実装分は revert 済(`3d4e146`)。
 
-## 今後の UX 改善(採用分・優先順)
-1. **品質・運用(CI除く)**: D1バックアップ・KV監視・ALLOWED_SUB・PKCE。
-   - ※ IA再構成・ログUX再設計・オフライン送信キュー・歩数日次集計・service層テスト・Zod は導入済。
-   - ❌ PWA インストール導線バナー: オーナー判断で不要。
-   - ※ オフライン**閲覧**(/api キャッシュ)は非対応(書込の取りこぼし防止を優先)。
+## 今後の残タスク(2026-06-02 時点・優先順)
+1. **消費カロリー・活動量の取り込み(オーナー希望・最重要)**: GH reconcile に energy 系 dataType(総消費/活動カロリー/距離/アクティブ分/心拍ゾーン)を追加 → 保存 → **エネルギー収支(摂取 vs 消費)**を可視化。GH dataType ID の実機検証を含むサーバ拡張。`get_daily_summary` には実在(例 5/31 caloriesOut 3115)。
+2. **皮膚温の取り込み**: Fitbit MCP に実在(夜間相対delta)。からだ画面の回復指標に追加。GH reconcile 経路で取れるか要検証。
+3. **糖質(sugar)の表示**: 入力配線は維持済。per-food は GH food log に無く daily のみ。手入力での捕捉UI + 表示を検討(優先度低)。
+4. **品質・運用(CI除く)**: D1バックアップ・KV監視・ALLOWED_SUB・PKCE。
+5. **(任意)サービス層テスト拡充**: logWeight / runDailyPull(own-write除外) / retryPendingPushes の統合テスト(監査 #5/#6)。
+   - ※ IA再構成・ログUX再設計・可視化統一・モーダル共通化・実ルーティング・オフライン送信キュー・歩数日次集計・code-split は導入済。
+   - ❌ PWA インストール導線バナー / 進捗写真 / 食事写真入力 / 身体周径: オーナー判断で不要。
+   - ※ オフライン**閲覧**(/api キャッシュ)・履歴バックフィルは非対応(運用以降のデータ蓄積を優先)。
    - ※ HRV/安静時心拍の「7日推移ライン」は専用API未整備のため当日値表示に留め(からだ画面)。必要なら /trends 拡張で段階導入。
 
 ### 不採用(オーナー判断, 2026-06-01)
