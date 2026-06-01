@@ -102,6 +102,19 @@ export interface Trends {
 export const api = {
   getSettings: () =>
     req<{ settings: Settings; nutritionTarget: NutritionTarget | null }>('/settings'),
+  updateSettings: (body: {
+    unitPreference: 'kg' | 'lb';
+    e1rmFormula: 'epley' | 'brzycki';
+    locale?: string;
+  }) => req<{ ok: true }>('/settings', { method: 'PATCH', body: JSON.stringify(body) }),
+  setNutritionTarget: (body: {
+    phase: 'bulk' | 'cut' | 'maintain';
+    kcal: number;
+    proteinG: number;
+    fatG: number;
+    carbsG: number;
+    saltG?: number;
+  }) => req<{ ok: true }>('/nutrition-targets', { method: 'PUT', body: JSON.stringify(body) }),
   searchExercises: (q: string, muscle?: string) =>
     req<{ exercises: Exercise[] }>(
       `/exercises/search?q=${encodeURIComponent(q)}${muscle ? `&muscle=${muscle}` : ''}`,

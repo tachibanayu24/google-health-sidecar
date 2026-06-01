@@ -16,9 +16,13 @@ import {
   logWeight,
   makeContext,
   type SaveWorkoutInput,
+  type SetNutritionTargetInput,
   saltGFromSodiumMg,
   saveWorkout,
   searchExercises,
+  setNutritionTarget,
+  type UpdateSettingsInput,
+  updateSettings,
 } from '@ghs/core';
 import { Hono } from 'hono';
 import type { HonoEnv } from '../env';
@@ -38,6 +42,33 @@ api.get('/settings', async (c) => {
     getActiveNutritionTarget(ctx.db),
   ]);
   return c.json({ settings, nutritionTarget: target });
+});
+
+api.patch('/settings', async (c) => {
+  const ctx = makeContext(c.env);
+  const body = (await c.req.json()) as UpdateSettingsInput;
+  if (
+    (body?.unitPreference !== 'kg' && body?.unitPreference !== 'lb') ||
+    (body?.e1rmFormula !== 'epley' && body?.e1rmFormula !== 'brzycki')
+  ) {
+    return c.json({ error: 'unitPreference(kg|lb) and e1rmFormula(epley|brzycki) required' }, 400);
+  }
+  await updateSettings(ctx, body);
+  return c.json({ ok: true });
+});
+
+api.put('/nutrition-targets', async (c) => {
+  const ctx = makeContext(c.env);
+  const body = (await c.req.json()) as SetNutritionTargetInput;
+  const nums = [body?.kcal, body?.proteinG, body?.fatG, body?.carbsG];
+  if (
+    !['bulk', 'cut', 'maintain'].includes(body?.phase) ||
+    nums.some((v) => typeof v !== 'number' || v < 0)
+  ) {
+    return c.json({ error: 'phase(bulk|cut|maintain) and non-negative kcal/PFC required' }, 400);
+  }
+  await setNutritionTarget(ctx, body);
+  return c.json({ ok: true });
 });
 
 api.get('/exercises/search', async (c) => {
