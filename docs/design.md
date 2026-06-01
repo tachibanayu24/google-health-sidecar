@@ -599,17 +599,19 @@ CREATE TABLE daily_metrics (
   PRIMARY KEY (date, metric)                       -- ★冪等: 同日同メトリックはupsert上書き
 );
 
--- ============ GH同期台帳(食事/ワークアウトのpush状態) ============
+-- ============ GH同期台帳(食事/ワークアウト/体重のpush状態) ============
+-- ※ 実スキーマは migration 0008 で再構築済(CHECK に dead_letter / body_metric_fat を追加, next_retry_at 列追加)。
 CREATE TABLE gh_sync_state (
-  entity_type    TEXT NOT NULL,                   -- 'workout'|'meal'|'body_metric'
+  entity_type    TEXT NOT NULL,                   -- 'workout'|'meal'|'body_metric'|'body_metric_fat'(体脂肪は別datapoint)
   entity_id      TEXT NOT NULL,                   -- workout_sessions.id / meals.id / body_metrics.id
   gh_datapoint_id TEXT,                            -- GHが返したdata point resource name
   gh_data_origin TEXT,                             -- 書込みdataSource識別(reconcileで自分の書込み判別)
-  sync_status    TEXT NOT NULL DEFAULT 'pending',  -- 'pending'|'synced'|'failed'|'stale'|'deleted_remote'|'skipped_flag_off'
+  sync_status    TEXT NOT NULL DEFAULT 'pending',  -- 'pending'|'synced'|'failed'|'dead_letter'|'stale'|'deleted_remote'|'skipped_flag_off'
   last_pushed_hash TEXT,                            -- pushしたpayloadのcontent hash(運動のpatch抑制用。食事は常にdelete+create)
   last_pushed_at INTEGER,
-  retry_count    INTEGER NOT NULL DEFAULT 0,
+  retry_count    INTEGER NOT NULL DEFAULT 0,       -- 上限(8)到達 or 403/401/400 で dead_letter に隔離(§12.2)
   last_error     TEXT,
+  next_retry_at  INTEGER,                          -- 指数バックオフの再試行時刻。未到来ならcronはスキップ(§12.2)
   updated_at     INTEGER NOT NULL DEFAULT (unixepoch()),
   PRIMARY KEY (entity_type, entity_id)
 );
@@ -821,6 +823,7 @@ UI(IndexedDBアウトボックス)と MCP(Claude経由)が同一の食事/ワー
 - manifest: `display:"standalone"`, `orientation:"portrait"`, アイコン192/512/maskable。
 - Service Worker: vite-plugin-pwa(generateSW)でアプリシェルprecache。
 - **オフライン下書き(必須級)**【判断】: ジムは電波弱、かつ食事/ワークアウトはauthoring元=取りこぼすと真実が消える。記録は IndexedDB アウトボックス→TanStack Query Mutationキュー→Background Sync(iOS未対応時は `online`イベント/起動時フラッシュfallback)。冪等キー(クライアントUUID)で重複送信を弾く。二経路重複は §8.7 の業務キー警告で補完。
+  - **サーバ側の冪等は実装済(2026-06-01)**: `meals`/`workout_sessions` に `client_request_id`(partial unique index, migration 0005)。`logMeal`/`saveWorkout` は書込前に既存チェックし、ヒットすれば既存 id を返す(再送・MCP リトライで二重登録しない)。web は記録ドラフト1回ぶんの UUID を送信。MCP も同 service を通るので 1 箇所で両対応。残るはクライアント側 IndexedDB 送信キューの実装のみ。
 - インストール導線: Android=`beforeinstallprompt`捕捉、iOS=非standalone検知して「共有→ホーム画面に追加」を一度案内。
 
 ### 9.9 kg/lb(要件8)
@@ -1003,6 +1006,13 @@ async scheduled(_controller, env, ctx) {
 }
 ```
 冪等性: `body_metrics/sleep_logs` は `UNIQUE(gh_external_id)`、`daily_metrics` は `PK(date,metric)` → 何度走っても同結果。日3回でも重複行が増えない。`mergeIntoStore` は dataType→格納先(§5.4マスタ表)で分岐し、`weight`+`body-fat` を同日 `body_metrics` 行へ upsert 合流する。
+
+**push 再送と dead-letter(実装, 2026-06-01)**: `retryPendingPushes` は `gh_sync_state` の `pending`/`failed` のうち `next_retry_at` 到来分だけを拾う。失敗時のエラー型で分岐する:
+- `RateLimitError`(429) → `markPushDeferred`: `retry_count` を消費せず `next_retry_at` だけ後ろ倒し(レート制限で dead_letter 化しない)。
+- `ProviderApiError` の 400/401/403(scope/権限など恒久要因)→ 即 `dead_letter`。
+- それ以外(一時障害)→ `retry_count++` し指数バックオフ(`min(2^n·300s, 6h)`)で `next_retry_at` を設定。`retry_count` が上限(8)に達したら `dead_letter`。
+
+`dead_letter` は自動再試行の対象外。件数は `/api/sync-status` の `pushQueue.deadLetter` に出し、Home の同期バナーが「GH への反映に N 件失敗(要対応)」と警告する(黙殺防止)。体脂肪は体重と別 datapoint なので `entity_type='body_metric_fat'` の独立台帳行で追跡し、片方の失敗がもう片方の `synced` を巻き戻さない(体重二重 push 防止)。
 
 ### 12.3 失敗時通知
 `consecutive_failures >= 3`(特にrefresh失敗 `invalid_grant`=無人Workerの致命傷)で **Cloudflare Email Routing or Slack/Discord webhook** に1通だけ送る(dedupe)。`sync_runs` テーブル自体がUIダッシュボードになる(「最終同期2h前/体重OK/睡眠ERROR」)。

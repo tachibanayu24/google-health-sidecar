@@ -35,6 +35,15 @@
 - ✅ **#3 Today/Home の食事操作**: 食事行から編集(再オープン→更新)/削除。
 - ✅ **#4 筋肉SVG相互作用 + チャート**: 部位行タップ→種目一覧、種目別 e1RM 推移チャート、自己ベスト(PR)一覧。
 - ✅ **GH 同期ヘルス可視化**: invalid_grant 再認証検知 + `/api/sync-status` + Home 警告バナー(黙殺防止)。
+- ✅ **アーキ/堅牢性ハードニング(2026-06-01, レビュー残対応)**:
+  - 冪等キー(`client_request_id`)を logMeal/saveWorkout に配線。web は per-draft UUID 送信、MCP も同 service 経由で二重登録防止(§9.8)。
+  - API 書込に Zod 検証(`domain/inputs.ts` を web+MCP 共通契約に)。不正入力は 500→400+issues。
+  - **push dead-letter 化**(`0007`/`0008`): retry 上限(8)or 403/401/400 で `dead_letter` 隔離、それ以外は指数バックオフ(`next_retry_at`, 上限6h)、RateLimit は retry_count 非消費で先送り。`/sync-status` に `pushQueue`、Home バナーが恒久失敗を警告。
+  - **body_fat push の独立追跡**: 体重/体脂肪を別台帳行(`body_metric_fat`)・別 try/catch に分離(旧: 体脂肪失敗が体重 synced を巻き戻し→体重二重 push する不具合を修正)。
+  - own-write echo 判定(`isKnownOwnWrite`)の空 origin 誤一致を防止・併用根拠を明文化。
+  - N+1 解消(meal_items / exercise_muscles を IN 一括取得)。
+  - UI 仕上げ: プリセット保存をボトムシート化(window.prompt 廃止)・合計 kcal 別格・セット種別凡例・離脱破棄ガード・部位図の近似注記。
+  - テスト 39→62件(Zod スキーマ + better-sqlite3 で D1 互換の service 統合テスト: 冪等/原子性/CASCADE/dead-letter)。
 - ✅ **ワークアウト強化2**: スーパーセット(SS tag)/ 種目並べ替え(↑↓)/ 過去セッション in-place 編集(History鉛筆)。
 - ✅ **skin-temp / steps の恒久除外を実機プローブで確定**(GH未提供 / 日次型なし)。
 
@@ -44,9 +53,9 @@
 - ❌ **身体周径(body_measurements)** — 不要。実装分は revert 済(`3d4e146`)。
 
 ## 今後の UX 改善(採用分・優先順)
-1. **PWA リッチ化**: オフライン下書き(IndexedDB アウトボックス + 冪等キー)、インストール導線バナー。← 着手
-2. **歩数の日次集計**: GH 分単位 interval を時刻ゲートで日次合計し Home に復帰(現状除外)。
-3. **品質・運用(CI除く)**: service層テスト・Zodバリデーション・D1バックアップ・KV監視・ALLOWED_SUB・PKCE。
+1. **PWA リッチ化**: オフライン下書き(IndexedDB アウトボックス)。冪等キー(`client_request_id`)はサーバ側で整備済なので、あとは SW/IndexedDB の送信キュー実装のみ。インストール導線バナー。
+2. **品質・運用(CI除く)**: D1バックアップ・KV監視・ALLOWED_SUB・PKCE。(service層テスト・Zodバリデーションは導入済)
+   - ※ 歩数は日次集計で復帰済(`pullStepsDaily`)。
 
 ### 不採用(オーナー判断, 2026-06-01)
 - ❌ ワークアウトテンプレート(PPL) / ❌ 種目図鑑(free-exercise-db 800+) / ❌ 進捗写真 / ❌ 食事写真入力 / ❌ 身体周径
