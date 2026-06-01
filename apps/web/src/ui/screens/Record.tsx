@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronDown, ChevronUp, Link2, Plus, Search, Trophy, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import Model, { type IExerciseData } from 'react-body-highlighter';
 import { Card } from '../components/Card';
 import { api, type Exercise } from '../lib/api';
-import { MUSCLE_GROUPS } from '../lib/muscles';
+import { MUSCLE_GROUPS, MUSCLE_TO_SLUG, SLUG_TO_MUSCLE } from '../lib/muscles';
 
 interface SetRow {
   key: string;
@@ -340,17 +341,18 @@ export function RecordScreen({
       ))}
 
       <Card title="種目を追加">
-        <div className="flex items-center gap-2 rounded-lg border border-line bg-paper px-3 py-2">
-          <Search className="h-4 w-4 text-faint" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="種目名で検索(例: ベンチ)"
-            className="w-full bg-transparent text-sm outline-none placeholder:text-faint"
-          />
-        </div>
+        {/* 部位タップ起点(要望#5): 身体図をタップ → その部位の種目を表示 */}
+        <p className="mb-1 text-[11px] text-faint">
+          {muscle
+            ? `${MUSCLE_GROUPS.find((m) => m.id === muscle)?.ja ?? ''}の種目`
+            : '部位をタップして種目を選ぶ'}
+        </p>
+        <BodyPicker
+          selected={muscle}
+          onSelect={(id) => setMuscle((cur) => (cur === id ? null : id))}
+        />
 
-        {/* 部位タップで種目候補(要望) */}
+        {/* 代替: 部位チップ(図が押しにくい時) */}
         <div className="mt-2 -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
           {MUSCLE_GROUPS.map((mg) => (
             <button
@@ -364,6 +366,17 @@ export function RecordScreen({
               {mg.ja}
             </button>
           ))}
+        </div>
+
+        {/* 名前検索(副次) */}
+        <div className="mt-2 flex items-center gap-2 rounded-lg border border-line bg-paper px-3 py-2">
+          <Search className="h-4 w-4 text-faint" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="または名前で探す(例: ベンチ)"
+            className="w-full bg-transparent text-sm outline-none placeholder:text-faint"
+          />
         </div>
 
         {(search.trim() || muscle) && (
@@ -427,6 +440,42 @@ export function RecordScreen({
       {save.error && (
         <p className="text-center text-sm text-accent-ink">{(save.error as Error).message}</p>
       )}
+    </div>
+  );
+}
+
+// 身体図ピッカー(前面/背面)。タップで部位を選択 → 親が種目候補を絞る(要望#5)。
+function BodyPicker({
+  selected,
+  onSelect,
+}: {
+  selected: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const slug = selected ? MUSCLE_TO_SLUG[selected] : undefined;
+  const data: IExerciseData[] = slug
+    ? [{ name: 'sel', muscles: [slug] as IExerciseData['muscles'], frequency: 1 }]
+    : [];
+  const onClick = (s: { muscle: string }) => {
+    const id = SLUG_TO_MUSCLE[s.muscle];
+    if (id) onSelect(id);
+  };
+  return (
+    <div className="grid grid-cols-2 gap-2 [&_svg]:h-auto [&_svg]:max-h-[26vh] [&_svg]:w-full">
+      <Model
+        type="anterior"
+        data={data}
+        highlightedColors={['#df4a26']}
+        bodyColor="#e6e1d5"
+        onClick={onClick}
+      />
+      <Model
+        type="posterior"
+        data={data}
+        highlightedColors={['#df4a26']}
+        bodyColor="#e6e1d5"
+        onClick={onClick}
+      />
     </div>
   );
 }
