@@ -18,6 +18,8 @@ export interface AppContext {
   featureGhNutritionPush: boolean;
   /** GH push を同期で試すか(既定 true。失敗は best-effort で握り潰し)。 */
   pushInline?: boolean;
+  /** provider 注入(テストで fake / Fitbit 切替 / MCP 再利用)。未設定なら getProvider が既定を遅延生成。 */
+  provider?: HealthProvider;
 }
 
 /** GH バインディングから AppContext を組む(D1/KV/secrets)。 */
@@ -41,9 +43,12 @@ export function makeContext(env: {
   };
 }
 
-/** 既定 provider(GoogleHealthProvider, §5.6)。両Worker共通 getAccessToken でトークン解決。 */
+/** provider を返す。ctx.provider が注入済ならそれを、無ければ既定 GoogleHealthProvider を遅延生成しキャッシュ。 */
 export function getProvider(ctx: AppContext): HealthProvider {
-  return new GoogleHealthProvider(
-    makeGetToken({ TOKENS: ctx.tokens, LOCK: ctx.lock, client: ctx.oauth }),
-  );
+  if (!ctx.provider) {
+    ctx.provider = new GoogleHealthProvider(
+      makeGetToken({ TOKENS: ctx.tokens, LOCK: ctx.lock, client: ctx.oauth }),
+    );
+  }
+  return ctx.provider;
 }

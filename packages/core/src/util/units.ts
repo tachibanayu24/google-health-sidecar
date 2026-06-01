@@ -44,18 +44,10 @@ export function formatDual(
   return `${roundTo(asPrimary, digits)} ${primary} / ${roundTo(asSecondary, digits)} ${secondary}`;
 }
 
-/** 入力刻み(§9.3: 単位追従)。 */
-export function inputStep(unit: WeightUnit): number[] {
-  return unit === 'kg' ? [0.5, 1.25, 2.5] : [1, 2.5, 5];
-}
-
 /**
- * ナトリウム(mg)⇄ 食塩相当量(g)。日本の表示慣行に合わせ、保存は GH の sodium、表示は食塩相当量。
- * 食塩相当量(g) = ナトリウム(mg) × 2.54 / 1000。
+ * ナトリウム(mg)→ 食塩相当量(g)。日本の表示慣行に合わせ、保存は GH の sodium、表示は食塩相当量。
+ * 食塩相当量(g) = ナトリウム(mg) × 2.54 / 1000。(逆変換は apps/web 側 lib/units を使用)
  */
 export function saltGFromSodiumMg(mg: number): number {
   return (mg * 2.54) / 1000;
-}
-export function sodiumMgFromSaltG(g: number): number {
-  return (g * 1000) / 2.54;
 }

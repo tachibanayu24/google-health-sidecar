@@ -1,4 +1,4 @@
-import { ProviderApiError } from '../../util/errors';
+import { ProviderApiError, RateLimitError } from '../../util/errors';
 import { backoffMs, parseRetryAfter, sleep } from '../../util/rate-limit';
 import { GH_BASE, GH_USER, RECONCILE_VERB } from './discovery-pin';
 
@@ -21,7 +21,7 @@ export class GhClient {
     url: string,
     body?: unknown,
   ): Promise<T> {
-    for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
+    for (let attempt = 1; ; attempt++) {
       const token = await this.getToken();
       const res = await fetch(url, {
         method,
@@ -33,20 +33,23 @@ export class GhClient {
         body: body !== undefined ? JSON.stringify(body) : undefined,
       });
 
-      if (res.status === 429 && attempt < this.maxAttempts) {
+      if (res.status === 429) {
         const waitSec = parseRetryAfter(res.headers.get('Retry-After'), { fallbackSec: 0 });
+        // 最終試行でも 429 → recoverable な RateLimitError を投げ、呼び出し側で次cron送りに分岐できるように。
+        if (attempt >= this.maxAttempts) {
+          throw new RateLimitError(
+            waitSec > 0 ? waitSec : Math.round(backoffMs(attempt) / 1000),
+            url,
+          );
+        }
         await sleep(waitSec > 0 ? waitSec * 1000 : backoffMs(attempt));
         continue;
       }
 
       const text = await res.text();
-      if (!res.ok) {
-        throw new ProviderApiError(res.status, text, url);
-      }
+      if (!res.ok) throw new ProviderApiError(res.status, text, url);
       return (text ? JSON.parse(text) : {}) as T;
     }
-    // 到達しない(ループは return か throw で抜ける)。型のための保険。
-    throw new ProviderApiError(0, 'GhClient.request: max attempts exceeded', url);
   }
 
   createDataPoint<T = unknown>(dataType: string, payload: unknown): Promise<T> {
@@ -60,14 +63,6 @@ export class GhClient {
       if (v !== undefined && v !== '') u.searchParams.set(k, v);
     }
     return this.request<T>(RECONCILE_VERB, u.toString());
-  }
-
-  list<T = unknown>(dataType: string, query: Record<string, string | undefined>): Promise<T> {
-    const u = new URL(this.dpPath(dataType));
-    for (const [k, v] of Object.entries(query)) {
-      if (v !== undefined && v !== '') u.searchParams.set(k, v);
-    }
-    return this.request<T>('GET', u.toString());
   }
 
   batchDelete(dataType: string, names: string[]): Promise<unknown> {
