@@ -112,9 +112,97 @@ export function HistoryScreen({ onEditWorkout }: { onEditWorkout: (id: string) =
       </Card>
 
       <ExerciseTrend />
+      <Measurements />
       <PrList />
       <RecentWorkouts onEdit={onEditWorkout} />
     </div>
+  );
+}
+
+// ============ 身体周径(§1.4) ============
+const SITES = [
+  '胸囲',
+  'ウエスト',
+  '上腕(右)',
+  '上腕(左)',
+  '大腿(右)',
+  '大腿(左)',
+  'ふくらはぎ',
+  '肩幅',
+];
+
+function Measurements() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['measurements'], queryFn: api.measurements });
+  const [site, setSite] = useState(SITES[0]!);
+  const [val, setVal] = useState('');
+  const save = useMutation({
+    mutationFn: () => api.logMeasurement({ site, valueCm: Number(val) }),
+    onSuccess: () => {
+      setVal('');
+      qc.invalidateQueries({ queryKey: ['measurements'] });
+    },
+  });
+  const latest = q.data?.latest ?? [];
+  return (
+    <Card title="身体周径">
+      <div className="-mx-1 mb-2 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
+        {SITES.map((s) => (
+          <button
+            type="button"
+            key={s}
+            onClick={() => setSite(s)}
+            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+              site === s ? 'bg-ink text-card' : 'border border-line bg-paper text-muted'
+            }`}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted">{site}</span>
+        <input
+          type="number"
+          inputMode="decimal"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          placeholder="cm"
+          className="w-20 rounded-lg border border-line bg-paper px-2 py-1.5 text-center text-sm font-semibold tnum outline-none focus:border-accent focus:bg-card"
+        />
+        <button
+          type="button"
+          onClick={() => save.mutate()}
+          disabled={!val || save.isPending}
+          className="ml-auto rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-card disabled:opacity-40"
+        >
+          記録
+        </button>
+      </div>
+      {latest.length > 0 && (
+        <ul className="mt-3 space-y-1.5 border-t border-line pt-3 text-sm">
+          {latest.map((m) => {
+            const delta = m.prev_cm != null ? Math.round((m.value_cm - m.prev_cm) * 10) / 10 : null;
+            return (
+              <li key={m.site} className="flex items-center justify-between">
+                <span className="text-muted">{m.site}</span>
+                <span className="flex items-center gap-2">
+                  <span className="tnum font-semibold">{m.value_cm} cm</span>
+                  {delta != null && delta !== 0 && (
+                    <span
+                      className={`tnum text-[11px] ${delta > 0 ? 'text-carb' : 'text-accent-ink'}`}
+                    >
+                      {delta > 0 ? '+' : ''}
+                      {delta}
+                    </span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
   );
 }
 

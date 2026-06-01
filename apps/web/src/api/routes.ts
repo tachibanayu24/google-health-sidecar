@@ -10,9 +10,11 @@ import {
   getExerciseHistory,
   getGhAuthError,
   getInProgressSession,
+  getLatestMeasurements,
   getMealById,
   getMealItems,
   getMealsByDate,
+  getMeasurementHistory,
   getMuscleVolume,
   getRecentPrs,
   getRecentSessions,
@@ -22,9 +24,11 @@ import {
   getTrends,
   jstDaysAgo,
   type LogMealInput,
+  type LogMeasurementInput,
   type LogWeightInput,
   listMealPresets,
   logMeal,
+  logMeasurement,
   logWeight,
   type MealItemInput,
   makeContext,
@@ -371,5 +375,27 @@ api.post('/body/weight', async (c) => {
     return c.json({ error: 'entryValue and entryUnit required' }, 400);
   }
   const result = await logWeight(ctx, body);
+  return c.json(result, 201);
+});
+
+api.get('/measurements', async (c) => {
+  const ctx = makeContext(c.env);
+  const latest = await getLatestMeasurements(ctx.db);
+  return c.json({ latest });
+});
+
+api.get('/measurements/:site', async (c) => {
+  const ctx = makeContext(c.env);
+  const points = await getMeasurementHistory(ctx.db, c.req.param('site'));
+  return c.json({ points });
+});
+
+api.post('/measurements', async (c) => {
+  const ctx = makeContext(c.env);
+  const body = (await c.req.json()) as LogMeasurementInput;
+  if (!body?.site || typeof body.valueCm !== 'number' || body.valueCm <= 0) {
+    return c.json({ error: 'site and positive valueCm required' }, 400);
+  }
+  const result = await logMeasurement(ctx, body);
   return c.json(result, 201);
 });
