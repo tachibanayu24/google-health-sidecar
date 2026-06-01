@@ -110,6 +110,44 @@ async function store(ctx: AppContext, dt: ReadDataType, p: ProviderDataPoint): P
 }
 
 /**
+ * 歩数の日次合計集計(§5.4)。GH の `steps` は分単位 interval なので、直近数日分の interval を
+ * reconcile し JST 日付で合算 → daily_metrics(steps) に overwrite。/5 cron 全部では重い(429/subrequest)
+ * ため、scheduled 側で日数回だけ呼ぶ(時刻ゲート)。cursor は使わず固定窓を毎回読み直して overwrite。
+ */
+export async function pullStepsDaily(
+  ctx: AppContext,
+  opts: { days?: number } = {},
+): Promise<{ dates: number }> {
+  const dt = READ_DATATYPES.find((d) => d.ghDataType === 'steps');
+  if (!dt) return { dates: 0 };
+  const provider = getProvider(ctx);
+  const now = nowSec();
+  const since = Math.floor(Date.parse(`${jstDaysAgo(opts.days ?? 2)}T00:00:00Z`) / 1000);
+  const filter = buildReadFilter(dt, since, now);
+  const sums = new Map<string, number>();
+  let cursor: string | null = null;
+  do {
+    const { points, cursor: next } = await provider.reconcileDataPoints('steps', filter, cursor);
+    for (const p of points) {
+      if (p.value == null) continue;
+      const date = toJstDateString((p.timeSec || now) * 1000);
+      sums.set(date, (sums.get(date) ?? 0) + p.value);
+    }
+    cursor = next;
+  } while (cursor);
+  for (const [date, total] of sums) {
+    await upsertDailyMetric(ctx.db, {
+      metric: 'steps' as DailyMetricKind,
+      value: Math.round(total),
+      unit: 'count',
+      date,
+      ghExternalId: null,
+    });
+  }
+  return { dates: sums.size };
+}
+
+/**
  * gh_sync_state の pending/failed を少数ずつ push(毎30分 cron スロット, §12.2)。
  * エンティティ別に D1 から payload を再構築して push し、成否を台帳に反映(best-effort)。
  */
