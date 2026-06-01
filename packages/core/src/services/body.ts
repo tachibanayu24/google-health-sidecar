@@ -1,9 +1,8 @@
 import { insertStmt, runBatch } from '../db/batch-helpers';
 import { ulid } from '../db/ids';
-import { insertMeasurement } from '../db/repositories/body';
 import { markPushFailed, markPushSynced, pendingPushStmt } from '../db/repositories/sync';
 import type { WeightUnit } from '../domain/enums';
-import { nowSec, todayJst, toJstDateString } from '../util/date';
+import { nowSec, toJstDateString } from '../util/date';
 import { errorMessage } from '../util/errors';
 import { toKg } from '../util/units';
 import { type AppContext, getProvider } from './context';
@@ -74,25 +73,4 @@ export async function logWeight(
     }
   }
   return { id, ghPushed };
-}
-
-export interface LogMeasurementInput {
-  site: string;
-  valueCm: number;
-  date?: string;
-  note?: string;
-}
-
-/** 身体周径の記録(§1.4: D1のみ。GH には対応 dataType が無い)。 */
-export async function logMeasurement(
-  ctx: AppContext,
-  input: LogMeasurementInput,
-): Promise<{ id: string }> {
-  const id = await insertMeasurement(ctx.db, {
-    date: input.date ?? todayJst(),
-    site: input.site,
-    valueCm: input.valueCm,
-    note: input.note ?? null,
-  });
-  return { id };
 }

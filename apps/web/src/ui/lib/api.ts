@@ -240,14 +240,4 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  measurements: () =>
-    req<{
-      latest: Array<{ site: string; value_cm: number; date: string; prev_cm: number | null }>;
-    }>('/measurements'),
-  measurementHistory: (site: string) =>
-    req<{ points: Array<{ date: string; value_cm: number }> }>(
-      `/measurements/${encodeURIComponent(site)}`,
-    ),
-  logMeasurement: (body: { site: string; valueCm: number; date?: string; note?: string }) =>
-    req<{ id: string }>('/measurements', { method: 'POST', body: JSON.stringify(body) }),
 };
