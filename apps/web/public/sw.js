@@ -11,7 +11,10 @@ const SHELL = ['/', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/app
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()),
+    caches
+      .open(VERSION)
+      .then((c) => c.addAll(SHELL))
+      .then(() => self.skipWaiting()),
   );
 });
 
@@ -41,7 +44,9 @@ self.addEventListener('fetch', (event) => {
   // SPA ナビゲーション: network-first(更新を拾う)→ オフライン時 cached '/'。
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(() => caches.match('/', { ignoreSearch: true }).then((r) => r || Response.error())),
+      fetch(request).catch(() =>
+        caches.match('/', { ignoreSearch: true }).then((r) => r || Response.error()),
+      ),
     );
     return;
   }
