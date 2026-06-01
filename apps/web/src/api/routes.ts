@@ -2,12 +2,14 @@ import {
   autocompleteFoods,
   getActiveNutritionTarget,
   getBodyMetricsByDate,
+  getDailyMetricsByDate,
   getExerciseHistory,
   getInProgressSession,
   getMealItems,
   getMealsByDate,
   getMuscleVolume,
   getSettings,
+  getSleepByDate,
   getTrends,
   jstDaysAgo,
   type LogMealInput,
@@ -136,10 +138,12 @@ api.get('/today', async (c) => {
   const ctx = makeContext(c.env);
   const date = c.req.query('date') ?? undefined;
   const d = date ?? new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-  const [meals, inProgress, body] = await Promise.all([
+  const [meals, inProgress, body, sleep, daily] = await Promise.all([
     getMealsByDate(ctx.db, d),
     getInProgressSession(ctx.db),
     getBodyMetricsByDate(ctx.db, d),
+    getSleepByDate(ctx.db, d),
+    getDailyMetricsByDate(ctx.db, d),
   ]);
   const mealsWithItems = await Promise.all(
     meals.map(async (m) => ({ ...m, items: await getMealItems(ctx.db, m.id) })),
@@ -171,6 +175,8 @@ api.get('/today', async (c) => {
     pfc,
     inProgress,
     body,
+    sleep,
+    daily,
   });
 });
 

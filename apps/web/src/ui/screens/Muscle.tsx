@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter';
 import { Card } from '../components/Card';
 import { api, type MuscleVolume } from '../lib/api';
-import { ErrorBox, Loading } from './Today';
+import { ErrorBox, Loading } from './Home';
 
 const NAME_JA: Record<string, string> = {
   chest: '胸',

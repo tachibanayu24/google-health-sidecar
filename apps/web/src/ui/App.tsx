@@ -10,16 +10,16 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { HistoryScreen } from './screens/History';
+import { HomeScreen } from './screens/Home';
 import { MealScreen } from './screens/Meal';
 import { MuscleScreen } from './screens/Muscle';
 import { RecordScreen } from './screens/Record';
 import { SettingsScreen } from './screens/Settings';
-import { TodayScreen } from './screens/Today';
 
-type View = 'today' | 'history' | 'record' | 'meal' | 'muscle' | 'settings';
+type View = 'home' | 'history' | 'record' | 'meal' | 'muscle' | 'settings';
 
 export function App() {
-  const [view, setView] = useState<View>('today');
+  const [view, setView] = useState<View>('home');
   const [chooser, setChooser] = useState(false);
 
   return (
@@ -27,10 +27,10 @@ export function App() {
       <Header />
       <main className="flex-1 overflow-y-auto px-5 pb-28 pt-3">
         <div key={view} className="rise">
-          {view === 'today' && <TodayScreen onGoRecord={() => setView('record')} />}
+          {view === 'home' && <HomeScreen onGoRecord={() => setView('record')} />}
           {view === 'history' && <HistoryScreen />}
-          {view === 'record' && <RecordScreen onSaved={() => setView('today')} />}
-          {view === 'meal' && <MealScreen onSaved={() => setView('today')} />}
+          {view === 'record' && <RecordScreen onSaved={() => setView('home')} />}
+          {view === 'meal' && <MealScreen onSaved={() => setView('home')} />}
           {view === 'muscle' && <MuscleScreen />}
           {view === 'settings' && <SettingsScreen />}
         </div>
@@ -75,12 +75,7 @@ function BottomNav({
   return (
     <nav className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-line bg-card/95 backdrop-blur-md">
       <div className="mx-auto grid max-w-md grid-cols-5 items-stretch px-2">
-        <NavTab
-          Icon={House}
-          label="Today"
-          active={view === 'today'}
-          onClick={() => onTab('today')}
-        />
+        <NavTab Icon={House} label="Home" active={view === 'home'} onClick={() => onTab('home')} />
         <NavTab
           Icon={TrendingUp}
           label="Trends"

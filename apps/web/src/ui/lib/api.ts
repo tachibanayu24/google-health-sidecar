@@ -71,12 +71,22 @@ export interface TodayMeal {
     carbs_g: number;
   }>;
 }
+export interface SleepSummary {
+  total_min: number;
+  deep_min: number | null;
+  light_min: number | null;
+  rem_min: number | null;
+  awake_min: number | null;
+  efficiency: number | null;
+}
 export interface Today {
   date: string;
   pfc: { kcal: number; p: number; f: number; c: number; salt_g: number };
   meals: TodayMeal[];
   inProgress: { id: string; title: string | null; started_at: number } | null;
   body: Array<{ source: string; weight_kg: number | null; body_fat_pct: number | null }>;
+  sleep: SleepSummary | null;
+  daily: Array<{ metric: string; value: number; unit: string }>;
 }
 
 export interface SaveWorkoutResult {
@@ -126,7 +136,7 @@ export const api = {
   muscleVolume: (windowDays = 7) =>
     req<{ windowDays: number; muscles: MuscleVolume[] }>(`/muscle-volume?window=${windowDays}`),
   trends: (days = 90) => req<Trends>(`/trends?days=${days}`),
-  today: () => req<Today>('/today'),
+  today: (date?: string) => req<Today>(`/today${date ? `?date=${date}` : ''}`),
   foodAutocomplete: (q: string) =>
     req<{ foods: FoodSuggestion[] }>(`/foods/autocomplete?q=${encodeURIComponent(q)}`),
   saveWorkout: (body: unknown) =>

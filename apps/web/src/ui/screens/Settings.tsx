@@ -3,7 +3,7 @@ import { Check, Gauge, Ruler, Target } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Card } from '../components/Card';
 import { api } from '../lib/api';
-import { ErrorBox, Loading } from './Today';
+import { ErrorBox, Loading } from './Home';
 
 type Phase = 'bulk' | 'cut' | 'maintain';
 

@@ -58,3 +58,37 @@ export async function getLatestWeight(db: Db): Promise<BodyMetric | null> {
     'SELECT * FROM body_metrics WHERE weight_kg IS NOT NULL ORDER BY measured_at DESC LIMIT 1',
   );
 }
+
+// ============ センシング read(GH ミラー。Home ダッシュボード用) ============
+export interface SleepSummaryRow {
+  total_min: number;
+  deep_min: number | null;
+  light_min: number | null;
+  rem_min: number | null;
+  awake_min: number | null;
+  efficiency: number | null;
+}
+
+/** その日付の睡眠(複数あれば end_at 最新)。 */
+export async function getSleepByDate(db: Db, date: string): Promise<SleepSummaryRow | null> {
+  const rows = await db.raw<SleepSummaryRow>(
+    `SELECT total_min, deep_min, light_min, rem_min, awake_min, efficiency
+     FROM sleep_logs WHERE date = ? ORDER BY end_at DESC LIMIT 1`,
+    date,
+  );
+  return rows[0] ?? null;
+}
+
+export interface DailyMetricRow {
+  metric: string;
+  value: number;
+  unit: string;
+}
+
+/** その日付のセンシング日次値(resting_hr/hrv_rmssd/spo2_avg/steps 等)。 */
+export async function getDailyMetricsByDate(db: Db, date: string): Promise<DailyMetricRow[]> {
+  return db.raw<DailyMetricRow>(
+    'SELECT metric, value, unit FROM daily_metrics WHERE date = ? ORDER BY metric',
+    date,
+  );
+}

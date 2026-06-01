@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import { Card } from '../components/Card';
 import { api } from '../lib/api';
-import { ErrorBox, Loading } from './Today';
+import { ErrorBox, Loading } from './Home';
 
 const INK = '#19160f';
 const ACCENT = '#df4a26';
