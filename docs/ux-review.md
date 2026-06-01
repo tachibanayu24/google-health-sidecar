@@ -67,6 +67,11 @@
   - **からだ**(`Recovery.tsx`)= 週間スナップショット + 体組成90日(体重+体脂肪 dual line)+ 体重手入力 + 睡眠の質 + 日次センシング。
   - 共通化: `components/state.tsx`(Loading/ErrorBox/Empty)・`components/chart.tsx`(ChartFrame/TT/色)。旧 History.tsx/Muscle.tsx 削除。
   - 多面 adversarial レビュー(5観点→検証)で確証バグ6件を修正(Home日付不整合・読取エラー無音・recharts domain・編集戻り先 等)。
+- ✅ **実ルーティング + ドリルダウンUX(2026-06-01)**:
+  - **react-router-dom(createBrowserRouter)へ移行**。「ブラウザバックでアプリが落ちる」(useState 切替で履歴なし)を根治。実URL(/training /body /nutrition /nutrition/:type /record/:id /meal/:id)+ back/forward + ディープリンク(wrangler SPA fallback 既設, 全ルート 200 確認)。離脱破棄ガードは `useBlocker` 化、保存後は `navigate(-1)` で元画面へ。
+  - **食事→マクロレーダー詳細**(`MealCategoryDetail.tsx`): 栄養画面は区分サマリ一覧、各区分タップで詳細へ。マクロを **P/F/C のカロリー寄与% でレーダーチャート**可視化 + 品目別内訳 + 編集/削除。「タップ→可視化付き詳細」を体験の芯に。
+  - 栄養の日付は **URL(?d=)単一ソース**化(内部 state drift を解消, `{replace}` で履歴を汚さない)。
+  - 焦点 adversarial レビュー(3観点→検証)で確証バグ1件(日付 drift)を修正。
 
 ## オーナー判断で不採用(2026-06-01)
 - ❌ **進捗写真(R2)** — 不要。
