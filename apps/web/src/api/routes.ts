@@ -4,9 +4,11 @@ import {
   deleteMealPresetRow,
   deleteWorkout,
   getActiveNutritionTarget,
+  getAllSyncRuns,
   getBodyMetricsByDate,
   getDailyMetricsByDate,
   getExerciseHistory,
+  getGhAuthError,
   getInProgressSession,
   getMealById,
   getMealItems,
@@ -216,6 +218,21 @@ api.get('/prs', async (c) => {
   const ctx = makeContext(c.env);
   const prs = await getRecentPrs(ctx.db, 20);
   return c.json({ prs });
+});
+
+api.get('/sync-status', async (c) => {
+  const ctx = makeContext(c.env);
+  const [runs, authError] = await Promise.all([getAllSyncRuns(ctx.db), getGhAuthError(ctx.tokens)]);
+  return c.json({
+    authError,
+    runs: runs.map((r) => ({
+      data_type: r.data_type,
+      last_synced_at: r.last_synced_at,
+      last_status: r.last_status,
+      last_error: r.last_error,
+      consecutive_failures: r.consecutive_failures,
+    })),
+  });
 });
 
 api.get('/meal-presets', async (c) => {

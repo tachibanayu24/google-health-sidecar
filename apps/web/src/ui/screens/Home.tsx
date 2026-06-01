@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
+  AlertTriangle,
   ChevronLeft,
   ChevronRight,
   Dumbbell,
@@ -49,6 +50,7 @@ export function HomeScreen({
 
   return (
     <div className="mx-auto max-w-md space-y-4">
+      <SyncHealthBanner />
       <DateNav
         date={date}
         isToday={isToday}
@@ -205,6 +207,32 @@ function MealList({
         );
       })}
     </ul>
+  );
+}
+
+// GH 同期ヘルス: 再認証要 or 同期エラーがあれば警告(TTLバグのような黙殺を防ぐ)。
+function SyncHealthBanner() {
+  const q = useQuery({ queryKey: ['sync-status'], queryFn: api.syncStatus, staleTime: 60_000 });
+  if (!q.data) return null;
+  const { authError, runs } = q.data;
+  const failing = runs.filter((r) => r.consecutive_failures > 0 && r.last_error);
+  if (!authError && failing.length === 0) return null;
+  const msg = authError
+    ? `GH 再認証が必要です。tools/oauth-bootstrap を再実行してください。`
+    : `GH 同期エラー: ${failing
+        .slice(0, 2)
+        .map((r) => `${r.data_type}`)
+        .join(', ')}${failing.length > 2 ? ` 他${failing.length - 2}` : ''}`;
+  return (
+    <div className="flex items-start gap-2 rounded-xl border border-accent/40 bg-accent-soft px-3 py-2.5 text-sm text-accent-ink">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.4} />
+      <div className="min-w-0">
+        <div className="font-semibold">{msg}</div>
+        {!authError && failing[0]?.last_error && (
+          <div className="mt-0.5 truncate text-[11px] text-muted">{failing[0].last_error}</div>
+        )}
+      </div>
+    </div>
   );
 }
 

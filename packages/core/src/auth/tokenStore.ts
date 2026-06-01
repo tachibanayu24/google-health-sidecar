@@ -11,6 +11,7 @@ import { type GoogleTokenResponse, type OAuthClient, refreshAccessToken } from '
 const K_ACCESS = 'gh:access_token';
 const K_REFRESH = 'gh:refresh_token';
 const K_EXPIRES = 'gh:expires_at';
+const K_AUTH_ERROR = 'gh:auth_error'; // refresh 失敗(invalid_grant=revoke/失効)を記録。再認証要をUIに伝える。
 const LOCK_KEY = 'gh:refresh_lock';
 const REFRESH_SKEW_SEC = 60;
 // Cloudflare KV の expirationTtl 最小は 60s。ロックは refresh 完了で即 delete されるので 60 で十分。
@@ -101,10 +102,29 @@ export async function getAccessToken(env: TokenStoreEnv): Promise<string> {
     const issuedAt = nowSec();
     const resp = await refreshAccessToken(env.client, cur.refreshToken);
     const next = await persist(env.TOKENS, resp, issuedAt, cur.refreshToken);
+    await env.TOKENS.delete(K_AUTH_ERROR); // refresh 成功 → 再認証フラグ解除
     return next.accessToken;
+  } catch (e) {
+    // invalid_grant(refresh token の revoke/失効)は再認証必須 → KV に記録して UI に出す。
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/invalid_grant/i.test(msg)) {
+      await env.TOKENS.put(
+        K_AUTH_ERROR,
+        `${nowSec()}:再認証が必要です(refresh token が失効/取消)。`,
+      );
+    }
+    throw e;
   } finally {
     if (locked) await env.LOCK.delete(LOCK_KEY);
   }
+}
+
+/** UI 向け: GH 再認証が必要かを返す(invalid_grant 記録の有無)。 */
+export async function getGhAuthError(tokens: KVNamespace): Promise<string | null> {
+  const v = await tokens.get(K_AUTH_ERROR);
+  if (!v) return null;
+  const i = v.indexOf(':');
+  return i >= 0 ? v.slice(i + 1) : v;
 }
 
 async function acquireLock(lock: KVNamespace): Promise<boolean> {

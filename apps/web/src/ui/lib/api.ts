@@ -202,6 +202,17 @@ export const api = {
       method: 'DELETE',
     }),
   prs: () => req<{ prs: Pr[] }>('/prs'),
+  syncStatus: () =>
+    req<{
+      authError: string | null;
+      runs: Array<{
+        data_type: string;
+        last_synced_at: number | null;
+        last_status: string | null;
+        last_error: string | null;
+        consecutive_failures: number;
+      }>;
+    }>('/sync-status'),
   mealPresets: () => req<{ presets: MealPreset[] }>('/meal-presets'),
   saveMealPreset: (body: { name: string; defaultMealType: string; items: MealItemInput[] }) =>
     req<{ presetId: string }>('/meal-presets', { method: 'POST', body: JSON.stringify(body) }),

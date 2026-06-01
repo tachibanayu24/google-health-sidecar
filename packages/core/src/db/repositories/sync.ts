@@ -9,6 +9,11 @@ export async function getSyncRun(db: Db, dataType: string): Promise<SyncRun | nu
   return db.one(SyncRun, 'SELECT * FROM sync_runs WHERE data_type = ?', dataType);
 }
 
+/** 全 sync_runs(UI の同期ヘルス表示用)。 */
+export async function getAllSyncRuns(db: Db): Promise<SyncRun[]> {
+  return db.all(SyncRun, 'SELECT * FROM sync_runs ORDER BY data_type');
+}
+
 export async function markSyncOk(
   db: Db,
   dataType: string,
