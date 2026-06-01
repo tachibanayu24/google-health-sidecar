@@ -8,6 +8,7 @@ import {
 import { getSettings } from '../db/repositories/settings';
 import { markPushFailed, markPushSynced, pendingPushStmt } from '../db/repositories/sync';
 import {
+  deleteSessionRow,
   getExerciseHistoryRows,
   getWindowSets,
   type WindowSetRow,
@@ -25,6 +26,7 @@ import {
   setTypeStimulusWeight,
 } from '../domain/metrics';
 import type { Exercise, ExerciseHistorySet, MuscleVolume } from '../domain/models';
+import { WRITE_DATATYPE } from '../providers/google-health/discovery-pin';
 import { jstDaysAgo, nowSec, todayJst } from '../util/date';
 import { errorMessage } from '../util/errors';
 import { toKg } from '../util/units';
@@ -284,6 +286,32 @@ async function pushWorkoutSummary(
   } catch (e) {
     await markPushFailed(ctx.db, 'workout', s.sessionId, errorMessage(e)); // 失敗は cron で再試行
   }
+}
+
+/**
+ * ワークアウト削除(§8.5)。D1 正本を削除し、GH に push 済みなら exercise datapoint を best-effort batchDelete。
+ */
+export async function deleteWorkout(
+  ctx: AppContext,
+  sessionId: string,
+): Promise<{ deleted: boolean; ghDeleted: boolean }> {
+  const rows = await ctx.db.raw<{ gh_datapoint_id: string | null }>(
+    "SELECT gh_datapoint_id FROM gh_sync_state WHERE entity_type='workout' AND entity_id=?",
+    sessionId,
+  );
+  const dpId = rows[0]?.gh_datapoint_id ?? null;
+  let ghDeleted = false;
+  if (dpId) {
+    try {
+      await getProvider(ctx).batchDelete(WRITE_DATATYPE.exercise, [dpId]);
+      ghDeleted = true;
+    } catch {
+      /* best-effort: GH 失敗でも D1 正本は削除 */
+    }
+  }
+  await ctx.db.run("DELETE FROM gh_sync_state WHERE entity_type='workout' AND entity_id=?", sessionId);
+  await deleteSessionRow(ctx.db, sessionId);
+  return { deleted: true, ghDeleted };
 }
 
 // ============ reads(トレーナーAI/UI 用, §10.4) ============

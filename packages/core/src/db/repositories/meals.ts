@@ -3,6 +3,7 @@ import { MealItem as MealItemSchema, Meal as MealSchema } from '../../domain/mod
 import { nowSec } from '../../util/date';
 import { deleteByStmt, insertStmt, runBatch, type Stmt } from '../batch-helpers';
 import type { Db } from '../client';
+import { ulid } from '../ids';
 
 /**
  * 食事永続化(§8.5)。編集は明細 delete+再INSERT を単一 batch に収める。
@@ -77,5 +78,50 @@ export async function autocompleteFoods(db: Db, q: string, limit = 8): Promise<M
       LIMIT ?`,
     pattern,
     limit,
+  );
+}
+
+// ============ 食事プリセット(「朝の定番」ワンタップ, §9.4) ============
+export interface MealPresetRow {
+  id: string;
+  name: string;
+  items_json: string;
+  default_meal_type: string;
+  use_count: number;
+}
+
+export async function listMealPresets(db: Db): Promise<MealPresetRow[]> {
+  return db.raw<MealPresetRow>(
+    'SELECT id, name, items_json, default_meal_type, use_count FROM meal_presets ORDER BY use_count DESC, updated_at DESC',
+  );
+}
+
+export async function insertMealPreset(
+  db: Db,
+  p: { name: string; itemsJson: string; defaultMealType: string },
+): Promise<string> {
+  const id = ulid();
+  const now = nowSec();
+  await db.run(
+    'INSERT INTO meal_presets (id, name, items_json, default_meal_type, use_count, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
+    id,
+    p.name,
+    p.itemsJson,
+    p.defaultMealType,
+    now,
+    now,
+  );
+  return id;
+}
+
+export async function deleteMealPresetRow(db: Db, id: string): Promise<void> {
+  await db.run('DELETE FROM meal_presets WHERE id = ?', id);
+}
+
+export async function bumpPresetUse(db: Db, id: string): Promise<void> {
+  await db.run(
+    'UPDATE meal_presets SET use_count = use_count + 1, updated_at = ? WHERE id = ?',
+    nowSec(),
+    id,
   );
 }

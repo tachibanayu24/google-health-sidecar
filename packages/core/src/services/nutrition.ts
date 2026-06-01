@@ -1,6 +1,6 @@
 import { insertStmt, runBatch, type Stmt } from '../db/batch-helpers';
 import { ulid } from '../db/ids';
-import { deleteMealRow } from '../db/repositories/meals';
+import { bumpPresetUse, deleteMealRow, insertMealPreset } from '../db/repositories/meals';
 import {
   markPushFailed,
   markPushSynced,
@@ -33,6 +33,8 @@ export interface LogMealInput {
   note?: string;
   inputMethod?: MealInputMethod;
   items: MealItemInput[];
+  /** プリセット由来なら使用回数を加算(任意)。 */
+  presetId?: string;
 }
 
 /**
@@ -87,11 +89,26 @@ export async function logMeal(
   );
   await runBatch(ctx.db, stmts); // ★原子的
 
+  if (input.presetId) await bumpPresetUse(ctx.db, input.presetId); // プリセット使用回数
+
   let ghPushed = false;
   if (ctx.featureGhNutritionPush && ctx.pushInline !== false) {
     ghPushed = await pushMeal(ctx, mealId, input);
   }
   return { mealId, ghPushed };
+}
+
+/** 現在の食事内容をプリセット保存(「朝の定番」等)。items は MealItemInput[] を JSON 化。 */
+export async function saveMealPreset(
+  ctx: AppContext,
+  input: { name: string; defaultMealType: MealType; items: MealItemInput[] },
+): Promise<{ presetId: string }> {
+  const presetId = await insertMealPreset(ctx.db, {
+    name: input.name,
+    itemsJson: JSON.stringify(input.items),
+    defaultMealType: input.defaultMealType,
+  });
+  return { presetId };
 }
 
 async function pushMeal(ctx: AppContext, mealId: string, input: LogMealInput): Promise<boolean> {

@@ -109,6 +109,40 @@ export interface Trends {
   pfcDaily: Array<{ date: string; kcal: number; p: number; f: number; c: number }>;
 }
 
+export interface RecentSession {
+  id: string;
+  date: string;
+  title: string | null;
+  total_volume_kg: number;
+  est_calories: number | null;
+  exercises: number;
+  sets: number;
+}
+export interface Pr {
+  exercise_id: string;
+  name_ja: string | null;
+  name_en: string;
+  value: number;
+  rep_bucket: number | null;
+  pr_basis: string | null;
+  achieved_at: number;
+}
+export interface MealItemInput {
+  foodName: string;
+  caloriesKcal: number;
+  proteinG?: number;
+  fatG?: number;
+  carbsG?: number;
+  sodiumMg?: number;
+}
+export interface MealPreset {
+  id: string;
+  name: string;
+  defaultMealType: string;
+  useCount: number;
+  items: MealItemInput[];
+}
+
 export const api = {
   getSettings: () =>
     req<{ settings: Settings; nutritionTarget: NutritionTarget | null }>('/settings'),
@@ -150,6 +184,17 @@ export const api = {
     req<{ deleted: boolean; ghDeleted: boolean }>(`/meals/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }),
+  recentWorkouts: () => req<{ sessions: RecentSession[] }>('/workouts/recent'),
+  deleteWorkout: (id: string) =>
+    req<{ deleted: boolean; ghDeleted: boolean }>(`/workouts/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+  prs: () => req<{ prs: Pr[] }>('/prs'),
+  mealPresets: () => req<{ presets: MealPreset[] }>('/meal-presets'),
+  saveMealPreset: (body: { name: string; defaultMealType: string; items: MealItemInput[] }) =>
+    req<{ presetId: string }>('/meal-presets', { method: 'POST', body: JSON.stringify(body) }),
+  deleteMealPreset: (id: string) =>
+    req<{ ok: true }>(`/meal-presets/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   logWeight: (body: unknown) =>
     req<{ id: string; ghPushed: boolean }>('/body/weight', {
       method: 'POST',

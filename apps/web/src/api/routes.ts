@@ -1,6 +1,8 @@
 import {
   autocompleteFoods,
   deleteMeal,
+  deleteMealPresetRow,
+  deleteWorkout,
   getActiveNutritionTarget,
   getBodyMetricsByDate,
   getDailyMetricsByDate,
@@ -9,18 +11,23 @@ import {
   getMealItems,
   getMealsByDate,
   getMuscleVolume,
+  getRecentPrs,
+  getRecentSessions,
   getSettings,
   getSleepByDate,
   getTrends,
   jstDaysAgo,
   type LogMealInput,
   type LogWeightInput,
+  listMealPresets,
   logMeal,
   logWeight,
+  type MealItemInput,
   makeContext,
   type SaveWorkoutInput,
   type SetNutritionTargetInput,
   saltGFromSodiumMg,
+  saveMealPreset,
   saveWorkout,
   searchExercises,
   setNutritionTarget,
@@ -189,6 +196,63 @@ api.post('/workouts', async (c) => {
   }
   const result = await saveWorkout(ctx, body);
   return c.json(result, 201);
+});
+
+api.get('/workouts/recent', async (c) => {
+  const ctx = makeContext(c.env);
+  const limit = Math.min(60, Number(c.req.query('limit') ?? '30') || 30);
+  const sessions = await getRecentSessions(ctx.db, limit);
+  return c.json({ sessions });
+});
+
+api.delete('/workouts/:id', async (c) => {
+  const ctx = makeContext(c.env);
+  const result = await deleteWorkout(ctx, c.req.param('id'));
+  return c.json(result);
+});
+
+api.get('/prs', async (c) => {
+  const ctx = makeContext(c.env);
+  const prs = await getRecentPrs(ctx.db, 20);
+  return c.json({ prs });
+});
+
+api.get('/meal-presets', async (c) => {
+  const ctx = makeContext(c.env);
+  const rows = await listMealPresets(ctx.db);
+  // items_json はパースして返す。
+  const presets = rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    defaultMealType: r.default_meal_type,
+    useCount: r.use_count,
+    items: JSON.parse(r.items_json) as MealItemInput[],
+  }));
+  return c.json({ presets });
+});
+
+api.post('/meal-presets', async (c) => {
+  const ctx = makeContext(c.env);
+  const body = (await c.req.json()) as {
+    name?: string;
+    defaultMealType?: string;
+    items?: MealItemInput[];
+  };
+  if (!body?.name || !Array.isArray(body.items) || body.items.length === 0) {
+    return c.json({ error: 'name and items required' }, 400);
+  }
+  const result = await saveMealPreset(ctx, {
+    name: body.name,
+    defaultMealType: (body.defaultMealType ?? 'Anytime') as never,
+    items: body.items,
+  });
+  return c.json(result, 201);
+});
+
+api.delete('/meal-presets/:id', async (c) => {
+  const ctx = makeContext(c.env);
+  await deleteMealPresetRow(ctx.db, c.req.param('id'));
+  return c.json({ ok: true });
 });
 
 api.post('/meals', async (c) => {

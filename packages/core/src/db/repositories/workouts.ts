@@ -167,3 +167,55 @@ export async function getWindowSets(db: Db, sinceDate: string): Promise<WindowSe
     sinceDate,
   );
 }
+
+// ============ セッション一覧 / 削除 / PR(History 画面) ============
+export interface RecentSessionRow {
+  id: string;
+  date: string;
+  title: string | null;
+  total_volume_kg: number;
+  est_calories: number | null;
+  exercises: number;
+  sets: number;
+}
+
+/** 直近のワークアウトセッション(完了済)。Home/History の履歴リスト用。 */
+export async function getRecentSessions(db: Db, limit = 30): Promise<RecentSessionRow[]> {
+  return db.raw<RecentSessionRow>(
+    `SELECT s.id, s.date, s.title, s.total_volume_kg, s.est_calories,
+            (SELECT count(*) FROM workout_exercises we WHERE we.session_id = s.id) AS exercises,
+            (SELECT count(*) FROM workout_sets ws
+               JOIN workout_exercises we ON we.id = ws.workout_exercise_id
+               WHERE we.session_id = s.id) AS sets
+       FROM workout_sessions s
+      WHERE s.status = 'completed'
+      ORDER BY s.started_at DESC LIMIT ?`,
+    limit,
+  );
+}
+
+/** D1 からセッション削除(workout_exercises/sets は ON DELETE CASCADE)。public は services.deleteWorkout。 */
+export async function deleteSessionRow(db: Db, id: string): Promise<void> {
+  await db.run('DELETE FROM workout_sessions WHERE id = ?', id);
+}
+
+export interface PrRow {
+  exercise_id: string;
+  name_ja: string | null;
+  name_en: string;
+  value: number;
+  rep_bucket: number | null;
+  pr_basis: string | null;
+  achieved_at: number;
+}
+
+/** 直近の e1RM PR(種目名つき)。PR タイムライン用。 */
+export async function getRecentPrs(db: Db, limit = 20): Promise<PrRow[]> {
+  return db.raw<PrRow>(
+    `SELECT pr.exercise_id, ex.name_ja, ex.name_en, pr.value, pr.rep_bucket, pr.pr_basis, pr.achieved_at
+       FROM personal_records pr JOIN exercises ex ON ex.id = pr.exercise_id
+      WHERE pr.record_type = 'e1rm'
+      ORDER BY pr.achieved_at DESC LIMIT ?`,
+    limit,
+  );
+}

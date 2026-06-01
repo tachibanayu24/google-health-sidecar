@@ -28,6 +28,17 @@ const newSet = (init?: Partial<SetRow>): SetRow => ({
   ...init,
 });
 
+// セット種別: タップで循環。warmup は volume 非加算(§8.x)。
+const SET_TYPE_CYCLE: SetRow['setType'][] = ['main', 'warmup', 'drop', 'failure'];
+const SET_TYPE_META: Record<SetRow['setType'], { abbr: string; cls: string }> = {
+  main: { abbr: 'M', cls: 'bg-ink text-card' },
+  warmup: { abbr: 'W', cls: 'bg-paper text-faint border border-line' },
+  drop: { abbr: 'D', cls: 'bg-carb text-card' },
+  failure: { abbr: 'F', cls: 'bg-accent text-card' },
+  backoff: { abbr: 'B', cls: 'bg-paper text-muted border border-line' },
+  amrap: { abbr: 'A', cls: 'bg-paper text-muted border border-line' },
+};
+
 export function RecordScreen({ onSaved }: { onSaved: () => void }) {
   const qc = useQueryClient();
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
@@ -172,7 +183,7 @@ export function RecordScreen({ onSaved }: { onSaved: () => void }) {
             </button>
           </div>
           <div className="mt-2 grid grid-cols-[1.6rem_1fr_1fr_1fr] gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-faint">
-            <span>Set</span>
+            <span>型</span>
             <span>{unit}</span>
             <span>Reps</span>
             <span>RPE</span>
@@ -180,7 +191,21 @@ export function RecordScreen({ onSaved }: { onSaved: () => void }) {
           <div className="mt-1 space-y-1.5">
             {it.sets.map((s, si) => (
               <div key={s.key} className="grid grid-cols-[1.6rem_1fr_1fr_1fr] items-center gap-2">
-                <span className="text-center text-xs font-bold text-faint tnum">{si + 1}</span>
+                <button
+                  type="button"
+                  aria-label="セット種別を変更"
+                  onClick={() =>
+                    updateSet(ei, si, {
+                      setType:
+                        SET_TYPE_CYCLE[
+                          (SET_TYPE_CYCLE.indexOf(s.setType) + 1) % SET_TYPE_CYCLE.length
+                        ],
+                    })
+                  }
+                  className={`flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold ${SET_TYPE_META[s.setType].cls}`}
+                >
+                  {SET_TYPE_META[s.setType].abbr}
+                </button>
                 <NumInput
                   value={s.entryValue}
                   onChange={(v) => updateSet(ei, si, { entryValue: v })}
