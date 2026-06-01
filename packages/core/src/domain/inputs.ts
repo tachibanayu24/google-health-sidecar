@@ -13,6 +13,20 @@ const isoDate = z
   .optional();
 const epochSec = z.number().int().nonnegative();
 
+/** 1食品の栄養入力(食事記録・プリセットで共通)。 */
+export const MealItemInputSchema = z.object({
+  foodName: z.string().min(1).max(120),
+  quantity: z.number().positive().optional(),
+  unit: z.string().max(20).optional(),
+  caloriesKcal: z.number().min(0).max(20000),
+  proteinG: z.number().min(0).max(2000).optional(),
+  fatG: z.number().min(0).max(2000).optional(),
+  carbsG: z.number().min(0).max(2000).optional(),
+  fiberG: z.number().min(0).max(500).optional(),
+  sugarG: z.number().min(0).max(2000).optional(),
+  sodiumMg: z.number().min(0).max(100000).optional(),
+});
+
 export const LogMealInputSchema = z.object({
   date: isoDate,
   loggedAtSec: epochSec.optional(),
@@ -21,23 +35,7 @@ export const LogMealInputSchema = z.object({
   inputMethod: MealInputMethod.optional(),
   presetId: z.string().min(1).optional(),
   clientRequestId: z.string().min(1).max(64).optional(),
-  items: z
-    .array(
-      z.object({
-        foodName: z.string().min(1).max(120),
-        quantity: z.number().positive().optional(),
-        unit: z.string().max(20).optional(),
-        caloriesKcal: z.number().min(0).max(20000),
-        proteinG: z.number().min(0).max(2000).optional(),
-        fatG: z.number().min(0).max(2000).optional(),
-        carbsG: z.number().min(0).max(2000).optional(),
-        fiberG: z.number().min(0).max(500).optional(),
-        sugarG: z.number().min(0).max(2000).optional(),
-        sodiumMg: z.number().min(0).max(100000).optional(),
-      }),
-    )
-    .min(1, '食事には最低1品必要')
-    .max(50),
+  items: z.array(MealItemInputSchema).min(1, '食事には最低1品必要').max(50),
 });
 export type LogMealInputParsed = z.infer<typeof LogMealInputSchema>;
 

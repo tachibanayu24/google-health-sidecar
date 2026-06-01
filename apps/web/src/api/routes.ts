@@ -29,6 +29,7 @@ import {
   logMeal,
   logWeight,
   type MealItemInput,
+  MealItemInputSchema,
   makeContext,
   SaveWorkoutInputSchema,
   type SetNutritionTargetInput,
@@ -42,6 +43,15 @@ import {
 } from '@ghs/core';
 import { Hono } from 'hono';
 import type { HonoEnv } from '../env';
+
+/** 破損しても落ちない JSON.parse(失敗時 null)。 */
+function safeJson(s: string): unknown {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
 
 /** UIバックエンド /api(§10.4 read 契約と対応, 全 write は services 経由 §8.5)。 */
 export const api = new Hono<HonoEnv>();
@@ -316,14 +326,17 @@ api.get('/sync-status', async (c) => {
 api.get('/meal-presets', async (c) => {
   const ctx = makeContext(c.env);
   const rows = await listMealPresets(ctx.db);
-  // items_json はパースして返す。
-  const presets = rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    defaultMealType: r.default_meal_type,
-    useCount: r.use_count,
-    items: JSON.parse(r.items_json) as MealItemInput[],
-  }));
+  // items_json は保存時の任意JSON。破損や型不一致に備えて safeParse(壊れていれば空配列で安全側)。
+  const presets = rows.map((r) => {
+    const parsed = MealItemInputSchema.array().safeParse(safeJson(r.items_json));
+    return {
+      id: r.id,
+      name: r.name,
+      defaultMealType: r.default_meal_type,
+      useCount: r.use_count,
+      items: parsed.success ? parsed.data : [],
+    };
+  });
   return c.json({ presets });
 });
 

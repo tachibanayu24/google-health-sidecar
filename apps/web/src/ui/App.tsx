@@ -1,5 +1,5 @@
 import { Dumbbell, HeartPulse, House, Plus, Settings, Utensils } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { lazy, Suspense, useRef, useState } from 'react';
 import {
   createBrowserRouter,
   Outlet,
@@ -10,15 +10,24 @@ import {
   useSearchParams,
 } from 'react-router-dom';
 import { Modal, Sheet } from './components/Overlay';
+import { Loading } from './components/state';
 import { todayJst } from './lib/datetime';
 import { HomeScreen } from './screens/Home';
 import { MealScreen } from './screens/Meal';
 import { MealCategoryDetail } from './screens/MealCategoryDetail';
 import { NutritionScreen } from './screens/Nutrition';
-import { RecordScreen } from './screens/Record';
-import { RecoveryScreen } from './screens/Recovery';
 import { SettingsScreen } from './screens/Settings';
-import { TrainingScreen } from './screens/Training';
+
+// 重い可視化(recharts / react-body-highlighter)を含む画面は遅延ロードして初期バンドルを軽量化。
+const TrainingScreen = lazy(() =>
+  import('./screens/Training').then((m) => ({ default: m.TrainingScreen })),
+);
+const RecoveryScreen = lazy(() =>
+  import('./screens/Recovery').then((m) => ({ default: m.RecoveryScreen })),
+);
+const RecordScreen = lazy(() =>
+  import('./screens/Record').then((m) => ({ default: m.RecordScreen })),
+);
 
 // ============ ルート定義(BrowserRouter / SPA fallback は wrangler assets で対応) ============
 export const router = createBrowserRouter([
@@ -157,7 +166,9 @@ function Layout() {
       <Header />
       <main className="flex-1 overflow-y-auto px-5 pb-28 pt-3">
         <div key={pathname} className="rise">
-          <Outlet />
+          <Suspense fallback={<Loading />}>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
       {chooser && (
