@@ -2,6 +2,7 @@ import type {
   BodyPushInput,
   ExercisePushInput,
   NutritionPushInput,
+  NutritionReadEntry,
   ProviderDataPoint,
 } from '../HealthProvider';
 
@@ -119,6 +120,42 @@ export function parseReconcileResponse(
   const r = (res ?? {}) as { dataPoints?: unknown[]; nextPageToken?: string };
   const points = (r.dataPoints ?? []).map((raw) => mapDataPoint(dataType, raw));
   return { points, cursor: r.nextPageToken ?? null };
+}
+
+// ============ nutrition-log の read(GH の食事を取り込む, §5.2 双方向) ============
+/** nutrition-log reconcile 応答 → 取り込み用エントリ[]。read 形は write と同一(probe 確認)。 */
+export function parseNutritionRead(res: unknown): {
+  entries: NutritionReadEntry[];
+  cursor: string | null;
+} {
+  const r = (res ?? {}) as { dataPoints?: unknown[]; nextPageToken?: string };
+  const entries = (r.dataPoints ?? []).map((raw): NutritionReadEntry => {
+    const p = (raw ?? {}) as Record<string, unknown>;
+    const n = (p.nutritionLog ?? p.data ?? {}) as Record<string, unknown>;
+    const nutrients = Array.isArray(n.nutrients) ? (n.nutrients as unknown[]) : [];
+    const findNutrient = (name: string): number | null => {
+      for (const x of nutrients) {
+        if (field(x, 'nutrient') === name) return asNum(field(field(x, 'quantity'), 'grams'));
+      }
+      return null;
+    };
+    const ds = (p.dataSource ?? {}) as { application?: { name?: string } | string };
+    const app = ds.application;
+    const sodiumG = findNutrient('SODIUM');
+    return {
+      datapointId: String(p.dataPointName ?? p.name ?? ''),
+      dataOrigin: typeof app === 'string' ? app : app?.name,
+      atSec: iso8601ToSec(field(n.interval, 'startTime')),
+      mealTypeGh: String(n.mealType ?? 'ANYTIME'),
+      foodName: String(n.foodDisplayName ?? '食事'),
+      kcal: asNum(field(n.energy, 'kcal')) ?? 0,
+      proteinG: findNutrient('PROTEIN'),
+      fatG: asNum(field(n.totalFat, 'grams')),
+      carbsG: asNum(field(n.totalCarbohydrate, 'grams')),
+      sodiumMg: sodiumG == null ? null : Math.round(sodiumG * 1000),
+    };
+  });
+  return { entries, cursor: r.nextPageToken ?? null };
 }
 
 // ============ 値・時刻の抽出(dataType 別 typed sub-object) ============

@@ -159,13 +159,22 @@ function MealList({
     <ul className="mt-4 space-y-1 border-t border-line pt-3 text-sm">
       {meals.map((m) => {
         const kcal = Math.round(m.items.reduce((a, i) => a + i.calories_kcal, 0));
+        const isGh = m.source === 'google_health';
         return (
           <li key={m.id} className="flex items-center justify-between gap-2 py-0.5">
             <span className="flex min-w-0 items-center gap-2 text-ink">
               <Utensils className="h-3.5 w-3.5 shrink-0 text-faint" strokeWidth={2.2} />
               <span className="truncate">{mealTypeJa(m.meal_type)}</span>
+              {isGh && (
+                <span className="shrink-0 rounded-full bg-paper px-1.5 py-0.5 text-[9px] font-semibold text-faint">
+                  GH
+                </span>
+              )}
             </span>
-            {confirmId === m.id ? (
+            {isGh ? (
+              // GH 取込分は read 表示のみ(編集/削除はGH側の操作。再pullで戻るため不可)。
+              <span className="tnum text-muted">{kcal} kcal</span>
+            ) : confirmId === m.id ? (
               <span className="flex items-center gap-2">
                 <button
                   type="button"

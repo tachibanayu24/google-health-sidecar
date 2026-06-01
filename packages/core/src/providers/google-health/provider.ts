@@ -3,6 +3,7 @@ import type {
   ExercisePushInput,
   HealthProvider,
   NutritionPushInput,
+  NutritionReadResult,
   PushResult,
   ReconcileResult,
 } from '../HealthProvider';
@@ -13,6 +14,7 @@ import {
   buildExercisePayload,
   buildNutritionPayload,
   parseCreateResponse,
+  parseNutritionRead,
   parseReconcileResponse,
 } from './mappers';
 
@@ -38,6 +40,15 @@ export class GoogleHealthProvider implements HealthProvider {
       pageToken: cursor ?? undefined,
     });
     return parseReconcileResponse(ghDataType, res);
+  }
+
+  async reconcileNutrition(cursor: string | null): Promise<NutritionReadResult> {
+    // interval filter が member 無効(実機確認)→ no-filter + pageToken でページング取込。
+    const res = await this.client.reconcile(WRITE_DATATYPE.nutrition, {
+      pageSize: '50',
+      pageToken: cursor ?? undefined,
+    });
+    return parseNutritionRead(res);
   }
 
   async pushExercise(input: ExercisePushInput): Promise<PushResult> {

@@ -170,6 +170,9 @@ export const Meal = z.object({
   note: z.string().nullable(),
   photo_r2_key: z.string().nullable(),
   input_method: MealInputMethod,
+  // 取込分の区別(§5.2 双方向)。0006 migration で列追加(source NOT NULL DEFAULT 'app')。
+  source: DataSource,
+  gh_external_id: z.string().nullable(),
   created_at: Unix,
   updated_at: Unix,
 });

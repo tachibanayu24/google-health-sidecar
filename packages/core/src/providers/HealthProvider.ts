@@ -29,6 +29,25 @@ export interface ReconcileResult {
   cursor: string | null;
 }
 
+/** nutrition-log read(GH の食事取り込み, §5.2 双方向)の1エントリ。 */
+export interface NutritionReadEntry {
+  datapointId: string;
+  dataOrigin?: string;
+  atSec: number;
+  /** GH の mealType enum(BREAKFAST/LUNCH/DINNER/SNACK/ANYTIME 等)。 */
+  mealTypeGh: string;
+  foodName: string;
+  kcal: number;
+  proteinG: number | null;
+  fatG: number | null;
+  carbsG: number | null;
+  sodiumMg: number | null;
+}
+export interface NutritionReadResult {
+  entries: NutritionReadEntry[];
+  cursor: string | null;
+}
+
 // ---------- push(D1 → GH) ----------
 export interface PushResult {
   /** GH dataPoint resource name。gh_sync_state.gh_datapoint_id に保存。 */
@@ -82,6 +101,9 @@ export interface HealthProvider {
     filter: string,
     cursor: string | null,
   ): Promise<ReconcileResult>;
+
+  /** GH の食事(nutrition-log)を取り込む read。interval filter 不可のため no-filter + pageToken(§5.2)。 */
+  reconcileNutrition(cursor: string | null): Promise<NutritionReadResult>;
 
   pushExercise(input: ExercisePushInput): Promise<PushResult>;
   /** flag OFF 時は呼び出し側で抑止(§5.2)。 */

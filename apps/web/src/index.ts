@@ -1,5 +1,6 @@
 import {
   makeContext,
+  pullNutrition,
   pullStepsDaily,
   retryPendingPushes,
   runDailyPull,
@@ -40,6 +41,7 @@ export default {
       (async () => {
         await staleAbandonedSessions(app.db);
         await runDailyPull(app); // GH→D1 reconcile(own-write 除外・冪等・cursor 増分)
+        await pullNutrition(app); // GH の食事を取込(新規0ページで早期終了=idle時は軽量, §5.2)
         if (stepsSlot) await pullStepsDaily(app, { days: 2 }).catch(() => undefined); // 歩数=日次集計(重いので日3回)
         await retryPendingPushes(app, { max: 20 }); // 失敗/未送 push の再送
       })(),

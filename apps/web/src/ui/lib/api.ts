@@ -63,6 +63,7 @@ export interface MuscleVolume {
 export interface TodayMeal {
   id: string;
   meal_type: string;
+  source?: string;
   items: Array<{
     food_name: string;
     calories_kcal: number;
