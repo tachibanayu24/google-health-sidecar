@@ -15,7 +15,7 @@ import { parseReconcileResponse } from '@ghs/core/providers/google-health/mapper
 import { ProviderApiError } from '@ghs/core/util/errors';
 import { loadAccessToken } from './_token';
 
-const token = loadAccessToken();
+const token = await loadAccessToken();
 const client = new GhClient(async () => token);
 const now = Math.floor(Date.now() / 1000);
 const since = now - 30 * 24 * 60 * 60;

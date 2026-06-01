@@ -16,7 +16,7 @@ import {
 import { ProviderApiError } from '@ghs/core/util/errors';
 import { loadAccessToken } from './_token';
 
-const token = loadAccessToken();
+const token = await loadAccessToken();
 const client = new GhClient(async () => token);
 const now = Math.floor(Date.now() / 1000);
 const payload = buildNutritionPayload({
