@@ -1,8 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Card } from '../components/Card';
-import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { Loading } from '../components/state';
 import { api, type TodayMeal } from '../lib/api';
 import { jstDayOfWeek, todayJst } from '../lib/datetime';
@@ -34,19 +33,19 @@ export function mealTypeJa(t: string): string {
   );
 }
 
-/** 栄養画面(サブスクリーン)。kcal残ヒーロー + マクロ + 食事ログ(品目別) + 記録導線。 */
+/** 栄養画面(サブスクリーン)。kcal残ヒーロー + マクロ + 食事区分(タップで詳細レーダー)+ 記録導線。 */
 export function NutritionScreen({
   date,
   onBack,
   onRecordMeal,
-  onEditMeal,
   onOpenSettings,
+  onOpenCategory,
 }: {
   date: string;
   onBack: () => void;
   onRecordMeal: () => void;
-  onEditMeal: (id: string) => void;
   onOpenSettings: () => void;
+  onOpenCategory: (mealType: string, date: string) => void;
 }) {
   const [d, setD] = useState(date); // 画面内で日付を前後できる(過去の食事振り返り)
   const isToday = d === todayJst();
@@ -158,7 +157,7 @@ export function NutritionScreen({
         </div>
       </Card>
 
-      <MealsCard meals={t?.meals ?? []} date={d} onEdit={onEditMeal} />
+      <MealsCard meals={t?.meals ?? []} onOpenCategory={(mt) => onOpenCategory(mt, d)} />
 
       <div className="flex gap-2">
         <button
@@ -224,29 +223,14 @@ export function Bar({
 }
 
 // ============ 食事ログ(meal_type グルーピング + 品目別 PFC + カテゴリ小計 + 削除確認) ============
+/** 食事区分のサマリ一覧。各行タップで MealCategoryDetail(レーダー+内訳)へ。 */
 function MealsCard({
   meals,
-  date,
-  onEdit,
+  onOpenCategory,
 }: {
   meals: TodayMeal[];
-  date: string;
-  onEdit: (id: string) => void;
+  onOpenCategory: (mealType: string) => void;
 }) {
-  const qc = useQueryClient();
-  const [expanded, setExpanded] = useState<Set<string>>(
-    () => new Set(['Breakfast', 'Lunch', 'Dinner']),
-  );
-  const [confirm, setConfirm] = useState<{ id: string; label: string } | null>(null);
-  const del = useMutation({
-    mutationFn: api.deleteMeal,
-    onSuccess: () => {
-      setConfirm(null);
-      qc.invalidateQueries({ queryKey: ['today', date] });
-      qc.invalidateQueries({ queryKey: ['trends'] });
-    },
-  });
-
   const groups = useMemo(() => {
     const byType = new Map<string, TodayMeal[]>();
     for (const m of meals) {
@@ -269,17 +253,9 @@ function MealsCard({
           c += it.carbs_g;
           count++;
         }
-      return { type, meals: ms, kcal, p, f, c, count };
+      return { type, kcal, p, f, c, count };
     });
   }, [meals]);
-
-  const toggle = (t: string) =>
-    setExpanded((prev) => {
-      const n = new Set(prev);
-      if (n.has(t)) n.delete(t);
-      else n.add(t);
-      return n;
-    });
 
   return (
     <Card title="食事ログ">
@@ -287,120 +263,29 @@ function MealsCard({
         <p className="py-2 text-sm text-faint">まだ記録がありません。＋から食事を記録できます。</p>
       ) : (
         <div className="divide-y divide-line/60">
-          {groups.map((g) => {
-            const isOpen = expanded.has(g.type);
-            return (
-              <div key={g.type} className="py-1 first:pt-0 last:pb-0">
-                <button
-                  type="button"
-                  onClick={() => toggle(g.type)}
-                  className="flex w-full items-center justify-between gap-2 py-1"
-                >
-                  <span className="flex items-center gap-1.5">
-                    {isOpen ? (
-                      <ChevronDown className="h-4 w-4 text-faint" strokeWidth={2.4} />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-faint" strokeWidth={2.4} />
-                    )}
-                    <span className="text-sm font-semibold text-ink">{mealTypeJa(g.type)}</span>
-                    <span className="text-[11px] text-faint">{g.count}品</span>
-                  </span>
-                  <span className="tnum text-sm font-semibold text-ink">
-                    {Math.round(g.kcal)} kcal
-                  </span>
-                </button>
-
-                {isOpen && (
-                  <div className="mb-1 pl-5">
-                    <ul>
-                      {g.meals.flatMap((m) => {
-                        const isGh = m.source === 'google_health';
-                        const mealKcal = Math.round(
-                          m.items.reduce((a, i) => a + i.calories_kcal, 0),
-                        );
-                        return m.items.map((it, idx) => (
-                          <li
-                            // biome-ignore lint/suspicious/noArrayIndexKey: 読み取り専用の静的リスト(並べ替え/挿入なし)
-                            key={`${m.id}:${idx}`}
-                            className="flex items-start justify-between gap-2 border-b border-line/40 py-1.5 last:border-0"
-                          >
-                            <span className="flex min-w-0 flex-col">
-                              <span className="truncate text-sm text-ink">{it.food_name}</span>
-                              <span className="mt-0.5 flex gap-2 text-[10px] tnum">
-                                <span style={{ color: 'var(--color-protein)' }}>
-                                  P{Math.round(it.protein_g)}g
-                                </span>
-                                <span style={{ color: 'var(--color-fat)' }}>
-                                  F{Math.round(it.fat_g)}g
-                                </span>
-                                <span style={{ color: 'var(--color-carb)' }}>
-                                  C{Math.round(it.carbs_g)}g
-                                </span>
-                              </span>
-                            </span>
-                            <span className="flex shrink-0 items-center gap-1.5">
-                              <span className="tnum text-[11px] text-muted">
-                                {Math.round(it.calories_kcal)}
-                              </span>
-                              {idx === 0 &&
-                                (isGh ? (
-                                  <span className="rounded-full bg-paper px-1.5 py-0.5 text-[9px] font-semibold text-faint">
-                                    GH
-                                  </span>
-                                ) : (
-                                  <>
-                                    <button
-                                      type="button"
-                                      aria-label="編集"
-                                      onClick={() => onEdit(m.id)}
-                                      className="p-1 text-faint active:text-accent"
-                                    >
-                                      <Pencil className="h-3.5 w-3.5" strokeWidth={2.2} />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      aria-label="削除"
-                                      onClick={() =>
-                                        setConfirm({
-                                          id: m.id,
-                                          label: `${mealTypeJa(m.meal_type)} / ${m.items[0]?.food_name ?? '食事'}${m.items.length > 1 ? ` 他${m.items.length - 1}品` : ''} (${mealKcal}kcal)`,
-                                        })
-                                      }
-                                      className="p-1 text-faint active:text-accent"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />
-                                    </button>
-                                  </>
-                                ))}
-                            </span>
-                          </li>
-                        ));
-                      })}
-                    </ul>
-                    <div className="mt-1 flex items-center justify-between border-t border-line/60 pt-1.5">
-                      <span className="text-[11px] font-bold text-muted">
-                        {mealTypeJa(g.type)}計
-                      </span>
-                      <span className="tnum text-[10px] text-muted">
-                        {Math.round(g.kcal)}kcal · P{Math.round(g.p)} F{Math.round(g.f)} C
-                        {Math.round(g.c)}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {groups.map((g) => (
+            <button
+              key={g.type}
+              type="button"
+              onClick={() => onOpenCategory(g.type)}
+              className="flex w-full items-center gap-3 py-2.5 text-left first:pt-1 last:pb-1"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="flex items-baseline gap-1.5">
+                  <span className="text-sm font-semibold text-ink">{mealTypeJa(g.type)}</span>
+                  <span className="text-[11px] text-faint">{g.count}品</span>
+                </span>
+                <span className="mt-0.5 flex gap-2 text-[10px] tnum">
+                  <span style={{ color: 'var(--color-protein)' }}>P{Math.round(g.p)}</span>
+                  <span style={{ color: 'var(--color-fat)' }}>F{Math.round(g.f)}</span>
+                  <span style={{ color: 'var(--color-carb)' }}>C{Math.round(g.c)}</span>
+                </span>
+              </span>
+              <span className="tnum text-sm font-semibold text-ink">{Math.round(g.kcal)} kcal</span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-faint" strokeWidth={2.4} />
+            </button>
+          ))}
         </div>
-      )}
-      {confirm && (
-        <DeleteConfirmModal
-          kind="meal"
-          targetLabel={confirm.label}
-          isPending={del.isPending}
-          onConfirm={() => del.mutate(confirm.id)}
-          onCancel={() => setConfirm(null)}
-        />
       )}
     </Card>
   );

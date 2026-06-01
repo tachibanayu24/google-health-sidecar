@@ -1,140 +1,182 @@
 import { Dumbbell, HeartPulse, House, Plus, Settings, Utensils, X } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import {
+  createBrowserRouter,
+  Outlet,
+  useBlocker,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
 import { todayJst } from './lib/datetime';
 import { HomeScreen } from './screens/Home';
 import { MealScreen } from './screens/Meal';
+import { MealCategoryDetail } from './screens/MealCategoryDetail';
 import { NutritionScreen } from './screens/Nutrition';
 import { RecordScreen } from './screens/Record';
 import { RecoveryScreen } from './screens/Recovery';
 import { SettingsScreen } from './screens/Settings';
 import { TrainingScreen } from './screens/Training';
 
-type Tab = 'home' | 'training' | 'recovery' | 'settings';
-type View = Tab | 'record' | 'meal' | 'nutrition';
+// ============ ルート定義(BrowserRouter / SPA fallback は wrangler assets で対応) ============
+export const router = createBrowserRouter([
+  {
+    element: <Layout />,
+    children: [
+      { path: '/', element: <HomeRoute /> },
+      { path: '/training', element: <TrainingRoute /> },
+      { path: '/body', element: <RecoveryScreen /> },
+      { path: '/settings', element: <SettingsScreen /> },
+      { path: '/nutrition', element: <NutritionRoute /> },
+      { path: '/nutrition/:mealType', element: <MealCategoryRoute /> },
+      { path: '/record', element: <RecordRoute /> },
+      { path: '/record/:id', element: <RecordRoute /> },
+      { path: '/meal', element: <MealRoute /> },
+      { path: '/meal/:id', element: <MealRoute /> },
+      { path: '*', element: <HomeRoute /> },
+    ],
+  },
+]);
 
-export function App() {
-  const [view, setView] = useState<View>('home');
-  const [chooser, setChooser] = useState(false);
-  const [editMealId, setEditMealId] = useState<string | null>(null);
-  const [editWorkoutId, setEditWorkoutId] = useState<string | null>(null);
-  const [nutritionDate, setNutritionDate] = useState(todayJst());
-  const [mealReturn, setMealReturn] = useState<View>('home');
-  const [recordReturn, setRecordReturn] = useState<View>('home');
+// ============ ルート単位のラッパ(既存 screen を薄く包み、router hooks を供給) ============
+function HomeRoute() {
+  const navigate = useNavigate();
+  return (
+    <HomeScreen
+      onOpenNutrition={(d) => navigate(`/nutrition?d=${d}`)}
+      onOpenTraining={() => navigate('/training')}
+      onOpenRecovery={() => navigate('/body')}
+      onResume={() => navigate('/record')}
+    />
+  );
+}
+
+function TrainingRoute() {
+  const navigate = useNavigate();
+  return <TrainingScreen onEditWorkout={(id) => navigate(`/record/${id}`)} />;
+}
+
+function NutritionRoute() {
+  const [sp] = useSearchParams();
+  const navigate = useNavigate();
+  const date = sp.get('d') ?? todayJst();
+  return (
+    <NutritionScreen
+      date={date}
+      onBack={() => navigate('/')}
+      onRecordMeal={() => navigate('/meal')}
+      onOpenSettings={() => navigate('/settings')}
+      onOpenCategory={(mealType, d) => navigate(`/nutrition/${mealType}?d=${d}`)}
+    />
+  );
+}
+
+function MealCategoryRoute() {
+  const { mealType } = useParams();
+  const [sp] = useSearchParams();
+  const navigate = useNavigate();
+  const date = sp.get('d') ?? todayJst();
+  return (
+    <MealCategoryDetail
+      mealType={mealType ?? 'Anytime'}
+      date={date}
+      onBack={() => navigate(-1)}
+      onEditMeal={(id) => navigate(`/meal/${id}`)}
+      onRecordMeal={() => navigate('/meal')}
+    />
+  );
+}
+
+/** 記録/食事の編集画面。未保存があるとき離脱を useBlocker で遮り破棄確認。保存後は navigate(-1) で元の画面へ。 */
+function RecordRoute() {
+  const { id } = useParams();
+  const navigate = useNavigate();
   const [dirty, setDirty] = useState(false);
-  const [pendingNav, setPendingNav] = useState<{ run: () => void } | null>(null);
+  const saved = useRef(false);
+  const blocker = useBlocker(() => dirty && !saved.current);
+  return (
+    <>
+      <RecordScreen
+        editWorkoutId={id ?? null}
+        onDirty={setDirty}
+        onSaved={() => {
+          saved.current = true;
+          navigate(-1);
+        }}
+      />
+      {blocker.state === 'blocked' && (
+        <DiscardGuard onDiscard={() => blocker.proceed()} onCancel={() => blocker.reset()} />
+      )}
+    </>
+  );
+}
 
-  // 記録/食事画面で未保存入力があるとき、離脱操作は破棄確認を挟む。
-  const guard = (run: () => void) => {
-    if ((view === 'record' || view === 'meal') && dirty) setPendingNav({ run });
-    else run();
-  };
-  const openMeal = (id: string | null, ret: View) => {
-    setEditMealId(id);
-    setMealReturn(ret);
-    setDirty(false);
-    setView('meal');
-  };
+function MealRoute() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [dirty, setDirty] = useState(false);
+  const saved = useRef(false);
+  const blocker = useBlocker(() => dirty && !saved.current);
+  return (
+    <>
+      <MealScreen
+        editMealId={id ?? null}
+        onDirty={setDirty}
+        onSaved={() => {
+          saved.current = true;
+          navigate(-1);
+        }}
+      />
+      {blocker.state === 'blocked' && (
+        <DiscardGuard onDiscard={() => blocker.proceed()} onCancel={() => blocker.reset()} />
+      )}
+    </>
+  );
+}
 
+// ============ レイアウト(ヘッダ + Outlet + ボトムナビ + 記録チューザー) ============
+function Layout() {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const [chooser, setChooser] = useState(false);
   const tab: Tab | null =
-    view === 'home' || view === 'training' || view === 'recovery' || view === 'settings'
-      ? view
-      : null;
-
+    pathname === '/'
+      ? 'home'
+      : pathname.startsWith('/training')
+        ? 'training'
+        : pathname.startsWith('/body')
+          ? 'body'
+          : pathname.startsWith('/settings')
+            ? 'settings'
+            : null;
   return (
     <div className="flex h-full flex-col">
       <Header />
       <main className="flex-1 overflow-y-auto px-5 pb-28 pt-3">
-        <div key={view} className="rise">
-          {view === 'home' && (
-            <HomeScreen
-              onOpenNutrition={(d) => {
-                setNutritionDate(d);
-                setView('nutrition');
-              }}
-              onOpenTraining={() => setView('training')}
-              onOpenRecovery={() => setView('recovery')}
-              onResume={() => setView('record')}
-            />
-          )}
-          {view === 'training' && (
-            <TrainingScreen
-              onEditWorkout={(id) => {
-                setEditWorkoutId(id);
-                setRecordReturn('training');
-                setView('record');
-              }}
-            />
-          )}
-          {view === 'recovery' && <RecoveryScreen />}
-          {view === 'settings' && <SettingsScreen />}
-          {view === 'nutrition' && (
-            <NutritionScreen
-              date={nutritionDate}
-              onBack={() => setView('home')}
-              onRecordMeal={() => openMeal(null, 'nutrition')}
-              onEditMeal={(id) => openMeal(id, 'nutrition')}
-              onOpenSettings={() => setView('settings')}
-            />
-          )}
-          {view === 'record' && (
-            <RecordScreen
-              editWorkoutId={editWorkoutId}
-              onDirty={setDirty}
-              onSaved={() => {
-                setDirty(false);
-                setEditWorkoutId(null);
-                setView(recordReturn);
-                setRecordReturn('home');
-              }}
-            />
-          )}
-          {view === 'meal' && (
-            <MealScreen
-              editMealId={editMealId}
-              onDirty={setDirty}
-              onSaved={() => {
-                setDirty(false);
-                setEditMealId(null);
-                setView(mealReturn);
-              }}
-            />
-          )}
+        <div key={pathname} className="rise">
+          <Outlet />
         </div>
       </main>
-
       {chooser && (
         <LogChooser
           onClose={() => setChooser(false)}
           onPick={(v) => {
             setChooser(false);
-            guard(() => {
-              setDirty(false);
-              if (v === 'meal') openMeal(null, 'home');
-              else {
-                setEditWorkoutId(null);
-                setRecordReturn('home');
-                setView('record');
-              }
-            });
+            navigate(v === 'meal' ? '/meal' : '/record');
           }}
         />
       )}
-
-      {pendingNav && (
-        <DiscardGuard
-          onDiscard={() => {
-            setDirty(false);
-            pendingNav.run();
-            setPendingNav(null);
-          }}
-          onCancel={() => setPendingNav(null)}
-        />
-      )}
-
-      <BottomNav tab={tab} onTab={(v) => guard(() => setView(v))} onPlus={() => setChooser(true)} />
+      <BottomNav
+        tab={tab}
+        onTab={(v) => navigate(v === 'home' ? '/' : `/${v}`)}
+        onPlus={() => setChooser(true)}
+      />
     </div>
   );
 }
+
+type Tab = 'home' | 'training' | 'body' | 'settings';
 
 /** 未保存の記録から離脱しようとしたときの破棄確認(データ消失防止)。 */
 function DiscardGuard({ onDiscard, onCancel }: { onDiscard: () => void; onCancel: () => void }) {
@@ -213,8 +255,8 @@ function BottomNav({
         <NavTab
           Icon={HeartPulse}
           label="からだ"
-          active={tab === 'recovery'}
-          onClick={() => onTab('recovery')}
+          active={tab === 'body'}
+          onClick={() => onTab('body')}
         />
         <NavTab
           Icon={Settings}
