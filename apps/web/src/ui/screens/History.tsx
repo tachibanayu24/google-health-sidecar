@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { Card } from '../components/Card';
 import { api, type Exercise } from '../lib/api';
+import { epochToJstMonthDay } from '../lib/datetime';
 import { ErrorBox, Loading } from './Home';
 
 const INK = '#19160f';
@@ -321,7 +322,7 @@ function RecentWorkouts({ onEdit }: { onEdit: (id: string) => void }) {
 }
 
 function tsToMd(sec: number): string {
-  return new Date(sec * 1000 + 9 * 3600_000).toISOString().slice(5, 10).replace('-', '/');
+  return epochToJstMonthDay(sec);
 }
 
 const axisTick = { fill: FAINT, fontSize: 10 };

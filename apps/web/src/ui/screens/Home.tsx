@@ -4,18 +4,20 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  CloudOff,
   Dumbbell,
   Flame,
   Footprints,
   HeartPulse,
   Moon,
   Pencil,
+  RefreshCw,
   Scale,
   Trash2,
   Utensils,
   Wind,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, Stat } from '../components/Card';
 import {
   api,
@@ -24,16 +26,15 @@ import {
   type SleepSummary,
   type TodayMeal,
 } from '../lib/api';
+import { epochToJstHhmm, jstDayOfWeek, todayJst } from '../lib/datetime';
+import { flushOutbox, pendingCount, subscribeOutbox } from '../lib/outbox';
 import { round } from '../lib/units';
 
-function todayJst(): string {
-  return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-}
 function shiftDate(date: string, delta: number): string {
   const t = Date.parse(`${date}T00:00:00Z`) + delta * 86_400_000;
   return new Date(t).toISOString().slice(0, 10);
 }
-const hhmm = (sec: number) => new Date(sec * 1000 + 9 * 3600_000).toISOString().slice(11, 16);
+const hhmm = (sec: number) => epochToJstHhmm(sec);
 
 export function HomeScreen({
   onGoRecord,
@@ -55,6 +56,7 @@ export function HomeScreen({
   return (
     <div className="mx-auto max-w-md space-y-4">
       <SyncHealthBanner />
+      <OutboxBanner />
       <DateNav
         date={date}
         isToday={isToday}
@@ -462,6 +464,53 @@ function SyncHealthBanner() {
   );
 }
 
+/** 未送信(オフライン退避)の件数を購読。 */
+function usePendingCount(): number {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    const refresh = () => pendingCount().then(setN);
+    refresh();
+    return subscribeOutbox(refresh);
+  }, []);
+  return n;
+}
+
+/** オフラインで退避した記録の未送信バナー(手動送信 + 自動再送の案内)。 */
+function OutboxBanner() {
+  const pending = usePendingCount();
+  const qc = useQueryClient();
+  const [sending, setSending] = useState(false);
+  if (pending === 0) return null;
+  const flushNow = async () => {
+    setSending(true);
+    const r = await flushOutbox();
+    setSending(false);
+    if (r.sent > 0) {
+      for (const key of ['today', 'trends', 'recent-workouts', 'muscle-volume', 'prs']) {
+        qc.invalidateQueries({ queryKey: [key] });
+      }
+    }
+  };
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-line bg-paper px-3 py-2.5 text-sm">
+      <CloudOff className="h-4 w-4 shrink-0 text-muted" strokeWidth={2.2} />
+      <div className="min-w-0 flex-1">
+        <span className="font-semibold">未送信 {pending} 件</span>
+        <span className="ml-1 text-muted">オンライン復帰時に自動送信</span>
+      </div>
+      <button
+        type="button"
+        onClick={flushNow}
+        disabled={sending}
+        className="flex shrink-0 items-center gap-1 rounded-lg bg-ink px-2.5 py-1.5 text-xs font-bold text-card disabled:opacity-50"
+      >
+        <RefreshCw className={`h-3.5 w-3.5 ${sending ? 'animate-spin' : ''}`} strokeWidth={2.4} />
+        今すぐ送信
+      </button>
+    </div>
+  );
+}
+
 function DateNav({
   date,
   isToday,
@@ -475,8 +524,7 @@ function DateNav({
   onNext: () => void;
   onToday: () => void;
 }) {
-  const d = new Date(`${date}T00:00:00+09:00`);
-  const wd = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+  const wd = ['日', '月', '火', '水', '木', '金', '土'][jstDayOfWeek(date)];
   return (
     <div className="flex items-center justify-between">
       <button

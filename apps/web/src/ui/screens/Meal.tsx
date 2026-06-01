@@ -3,6 +3,7 @@ import { Bookmark, Check, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Card } from '../components/Card';
 import { api, type FoodSuggestion, type MealPreset } from '../lib/api';
+import { jstHourNow } from '../lib/datetime';
 import { round, saltFromSodiumMg, sodiumMgFromSalt } from '../lib/units';
 
 const MEAL_TYPES = [
@@ -493,7 +494,7 @@ function M({ label, v }: { label: string; v: number }) {
 }
 
 function defaultMealType(): string {
-  const h = new Date(Date.now() + 9 * 3600_000).getUTCHours();
+  const h = jstHourNow();
   if (h < 10) return 'Breakfast';
   if (h < 15) return 'Lunch';
   if (h < 21) return 'Dinner';

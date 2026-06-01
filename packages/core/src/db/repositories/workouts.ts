@@ -202,6 +202,7 @@ export async function deleteSessionRow(db: Db, id: string): Promise<void> {
 export interface SessionDetailRow {
   id: string;
   date: string;
+  started_at: number;
   title: string | null;
   bodyweight_kg: number | null;
   exercise_id: string;
@@ -220,7 +221,7 @@ export interface SessionDetailRow {
 /** セッション詳細(種目×セットを平坦行で)。in-place 編集のプレフィル用。 */
 export async function getSessionDetail(db: Db, id: string): Promise<SessionDetailRow[]> {
   return db.raw<SessionDetailRow>(
-    `SELECT s.id, s.date, s.title, s.bodyweight_kg,
+    `SELECT s.id, s.date, s.started_at, s.title, s.bodyweight_kg,
             we.exercise_id, ex.name_en, ex.name_ja, we.order_index, we.superset_group,
             ws.set_index, ws.set_type, ws.entry_value, ws.entry_unit, ws.reps, ws.rpe
        FROM workout_sessions s

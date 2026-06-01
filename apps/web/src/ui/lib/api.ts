@@ -1,5 +1,7 @@
 /** /api クライアント(同一オリジン, 認証は Cookie セッション / dev bypass)。 */
 
+import { enqueue } from './outbox';
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     headers: { 'content-type': 'application/json' },
@@ -11,6 +13,33 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`API ${res.status} ${path}: ${text.slice(0, 200)}`);
   }
   return res.json() as Promise<T>;
+}
+
+/** ネット不通(fetch が TypeError) or オフライン。HTTP エラー(res 返却)はこれに含めない。 */
+function isOffline(e: unknown): boolean {
+  return e instanceof TypeError || (typeof navigator !== 'undefined' && navigator.onLine === false);
+}
+
+/**
+ * authoring write(食事/ワークアウト)を送信。ネット不通かつ冪等キーがあれば
+ * アウトボックスへ退避し queued を立てて返す(オンライン復帰時に再送, §9.8)。
+ */
+async function submitOrQueue<T>(
+  path: string,
+  kind: 'meal' | 'workout',
+  body: unknown,
+  synthetic: (crid: string) => T,
+): Promise<T> {
+  try {
+    return await req<T>(path, { method: 'POST', body: JSON.stringify(body) });
+  } catch (e) {
+    const crid = (body as { clientRequestId?: string }).clientRequestId;
+    if (crid && isOffline(e)) {
+      await enqueue({ id: crid, kind, path, body, createdAt: Date.now(), attempts: 0 });
+      return synthetic(crid);
+    }
+    throw e; // HTTP エラーや冪等キー無し(編集など)はそのまま失敗
+  }
 }
 
 // ---- 型(/api レスポンス。core のドメインに概ね対応) ----
@@ -183,12 +212,19 @@ export const api = {
   foodAutocomplete: (q: string) =>
     req<{ foods: FoodSuggestion[] }>(`/foods/autocomplete?q=${encodeURIComponent(q)}`),
   saveWorkout: (body: unknown) =>
-    req<SaveWorkoutResult>('/workouts', { method: 'POST', body: JSON.stringify(body) }),
+    submitOrQueue<SaveWorkoutResult & { queued?: boolean }>(
+      '/workouts',
+      'workout',
+      body,
+      (crid) => ({ sessionId: crid, totalVolumeKg: 0, newPrs: [], queued: true }),
+    ),
   logMeal: (body: unknown) =>
-    req<{ mealId: string; ghPushed: boolean }>('/meals', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
+    submitOrQueue<{ mealId: string; ghPushed: boolean; queued?: boolean }>(
+      '/meals',
+      'meal',
+      body,
+      (crid) => ({ mealId: crid, ghPushed: false, queued: true }),
+    ),
   getMeal: (id: string) =>
     req<{
       meal: { id: string; date: string; logged_at: number; meal_type: string; note: string | null };
@@ -208,7 +244,13 @@ export const api = {
   recentWorkouts: () => req<{ sessions: RecentSession[] }>('/workouts/recent'),
   getWorkout: (id: string) =>
     req<{
-      session: { id: string; date: string; title: string | null; bodyweightKg: number | null };
+      session: {
+        id: string;
+        date: string;
+        startedAt: number;
+        title: string | null;
+        bodyweightKg: number | null;
+      };
       exercises: Array<{
         exerciseId: string;
         name_en: string;

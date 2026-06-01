@@ -271,6 +271,7 @@ api.get('/workouts/:id', async (c) => {
     session: {
       id: first.id,
       date: first.date,
+      startedAt: first.started_at,
       title: first.title,
       bodyweightKg: first.bodyweight_kg,
     },

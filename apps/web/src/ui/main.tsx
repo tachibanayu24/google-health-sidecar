@@ -3,11 +3,29 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { LoginGate } from './LoginGate';
+import { flushOutbox } from './lib/outbox';
 import './index.css';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1, refetchOnWindowFocus: false } },
 });
+
+// オフライン送信キューのフラッシュ(§9.8): オンライン復帰・前面復帰・起動時に再送。
+// 送信できたら関連クエリを無効化して最新化。iOS は Background Sync 非対応なので JS 主導。
+function flushAndRefresh(): void {
+  flushOutbox().then((r) => {
+    if (r.sent > 0) {
+      for (const key of ['today', 'trends', 'recent-workouts', 'muscle-volume', 'prs']) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
+    }
+  });
+}
+window.addEventListener('online', flushAndRefresh);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') flushAndRefresh();
+});
+flushAndRefresh();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

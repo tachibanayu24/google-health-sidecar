@@ -1,14 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, ChevronUp, Link2, Plus, Search, Trophy, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Clock, Plus, Search, Trophy, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Model, { type IExerciseData } from 'react-body-highlighter';
 import { Card } from '../components/Card';
 import { api, type Exercise } from '../lib/api';
+import {
+  datetimeLocalToEpochSec,
+  datetimeLocalToJstDate,
+  epochToDatetimeLocal,
+  nowDatetimeLocal,
+} from '../lib/datetime';
 import { MUSCLE_GROUPS, MUSCLE_TO_SLUG, SLUG_TO_MUSCLE } from '../lib/muscles';
 
 interface SetRow {
   key: string;
-  setType: 'warmup' | 'main' | 'drop' | 'backoff' | 'amrap' | 'failure';
+  setType: 'warmup' | 'main';
   entryValue: number | null;
   reps: number | null;
   rpe: number | null;
@@ -17,7 +23,6 @@ interface LoggedExercise {
   key: string;
   exercise: Exercise;
   last?: string;
-  supersetGroup: number | null;
   sets: SetRow[];
 }
 
@@ -30,23 +35,10 @@ const newSet = (init?: Partial<SetRow>): SetRow => ({
   ...init,
 });
 
-// セット種別: タップで循環。warmup は volume 非加算(§8.x)。
-const SET_TYPE_CYCLE: SetRow['setType'][] = ['main', 'warmup', 'drop', 'failure'];
-const SET_TYPE_LABEL: Record<SetRow['setType'], string> = {
-  main: 'メイン',
-  warmup: 'ウォームアップ',
-  drop: 'ドロップ',
-  failure: '限界',
-  backoff: 'バックオフ',
-  amrap: 'AMRAP',
-};
+// セット種別は「本番 / ウォームアップ」の2状態のみ。warmup は総量・PR から除外(§8.x)。
 const SET_TYPE_META: Record<SetRow['setType'], { abbr: string; cls: string }> = {
-  main: { abbr: 'M', cls: 'bg-ink text-card' },
+  main: { abbr: '本', cls: 'bg-ink text-card' },
   warmup: { abbr: 'W', cls: 'bg-paper text-faint border border-line' },
-  drop: { abbr: 'D', cls: 'bg-carb text-card' },
-  failure: { abbr: 'F', cls: 'bg-accent text-card' },
-  backoff: { abbr: 'B', cls: 'bg-paper text-muted border border-line' },
-  amrap: { abbr: 'A', cls: 'bg-paper text-muted border border-line' },
 };
 
 export function RecordScreen({
@@ -66,7 +58,7 @@ export function RecordScreen({
   const [items, setItems] = useState<LoggedExercise[]>([]);
   const [search, setSearch] = useState('');
   const [muscle, setMuscle] = useState<string | null>(null);
-  const [editDate, setEditDate] = useState<string | null>(null);
+  const [when, setWhen] = useState<string>(nowDatetimeLocal()); // 登録日時(JST壁時計, datetime-local)
 
   // 編集モード: 既存セッションを読み込みプレフィル(保存時は旧削除+再記録で置換)。
   const editQ = useQuery({
@@ -78,7 +70,12 @@ export function RecordScreen({
     if (!editQ.data) return;
     setTitle(editQ.data.session.title ?? '');
     setBodyweight(editQ.data.session.bodyweightKg ?? null);
-    setEditDate(editQ.data.session.date);
+    // 登録日時は元の started_at(無ければ日付の正午)を JST 壁時計で prefill。
+    setWhen(
+      editQ.data.session.startedAt != null
+        ? epochToDatetimeLocal(editQ.data.session.startedAt)
+        : `${editQ.data.session.date}T12:00`,
+    );
     setItems(
       editQ.data.exercises.map((ex) => ({
         key: crypto.randomUUID(),
@@ -93,10 +90,10 @@ export function RecordScreen({
           bw_factor: 1,
           default_rep_range: null,
         },
-        supersetGroup: ex.supersetGroup,
+        // 旧データの drop/failure 等は本番に集約(種別は本番/W の2状態のみ)。
         sets: ex.sets.map((s) =>
           newSet({
-            setType: s.setType as SetRow['setType'],
+            setType: s.setType === 'warmup' ? 'warmup' : 'main',
             entryValue: s.entryValue,
             reps: s.reps,
             rpe: s.rpe,
@@ -138,10 +135,7 @@ export function RecordScreen({
     } catch {
       /* 履歴なしは無視 */
     }
-    setItems((prev) => [
-      ...prev,
-      { key: crypto.randomUUID(), exercise: ex, last, supersetGroup: null, sets: prefill },
-    ]);
+    setItems((prev) => [...prev, { key: crypto.randomUUID(), exercise: ex, last, sets: prefill }]);
   }
 
   function moveExercise(ei: number, dir: -1 | 1) {
@@ -152,20 +146,6 @@ export function RecordScreen({
       [next[ei], next[j]] = [next[j]!, next[ei]!];
       return next;
     });
-  }
-  function cycleSuperset(ei: number) {
-    // null → 1 → 2 → 3 → null(同一番号の隣接種目がスーパーセット)。
-    setItems((prev) =>
-      prev.map((it, i) =>
-        i !== ei
-          ? it
-          : {
-              ...it,
-              supersetGroup:
-                it.supersetGroup == null ? 1 : it.supersetGroup >= 3 ? null : it.supersetGroup + 1,
-            },
-      ),
-    );
   }
 
   function updateSet(ei: number, si: number, patch: Partial<SetRow>) {
@@ -210,19 +190,18 @@ export function RecordScreen({
     mutationFn: async () => {
       // 編集 = 旧セッション削除(GH datapoint も)→ 元の日付で再記録。
       if (editWorkoutId) await api.deleteWorkout(editWorkoutId);
-      // ライブタイマーは持たないので、所要時間はセット数から概算(1セット≈3分、最低5分)。
-      const now = Math.floor(Date.now() / 1000);
+      // 登録日時(JST壁時計)を終了時刻とし、所要時間はセット数から概算(1セット≈3分、最低5分)。
+      const endedAtSec = datetimeLocalToEpochSec(when);
       const estDurationSec = Math.max(300, totalSets * 180);
       return api.saveWorkout({
         title: title || undefined,
-        date: editDate ?? undefined,
+        date: datetimeLocalToJstDate(when),
         bodyweightKg: bodyweight,
-        startedAtSec: now - estDurationSec,
-        endedAtSec: now,
+        startedAtSec: endedAtSec - estDurationSec,
+        endedAtSec,
         clientRequestId: editWorkoutId ? undefined : reqId,
         exercises: items.map((it) => ({
           exerciseId: it.exercise.id,
-          supersetGroup: it.supersetGroup,
           sets: it.sets.map((s) => ({
             setType: s.setType,
             entryValue: s.entryValue,
@@ -264,32 +243,28 @@ export function RecordScreen({
         <UnitToggle unit={unit} onChange={setUnit} />
       </div>
 
+      {/* 登録日時(デフォルト現在時刻・編集可)。過去のセッションも遡って記録できる。 */}
+      <label className="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2.5 text-sm">
+        <Clock className="h-4 w-4 shrink-0 text-faint" strokeWidth={2.2} />
+        <span className="shrink-0 text-muted">日時</span>
+        <input
+          type="datetime-local"
+          value={when}
+          onChange={(e) => setWhen(e.target.value)}
+          className="ml-auto bg-transparent text-right font-semibold tnum outline-none"
+        />
+      </label>
+
       {items.map((it, ei) => (
         <Card key={it.key}>
           <div className="mb-1 flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                {it.supersetGroup != null && (
-                  <span className="flex items-center gap-0.5 rounded bg-carb px-1.5 py-0.5 text-[10px] font-bold text-card">
-                    <Link2 className="h-3 w-3" strokeWidth={2.6} />
-                    SS{it.supersetGroup}
-                  </span>
-                )}
-                <div className="truncate font-display text-base font-bold tracking-tight">
-                  {it.exercise.name_ja ?? it.exercise.name_en}
-                </div>
+              <div className="truncate font-display text-base font-bold tracking-tight">
+                {it.exercise.name_ja ?? it.exercise.name_en}
               </div>
               {it.last && <div className="mt-0.5 text-[11px] text-faint">{it.last}</div>}
             </div>
             <div className="flex shrink-0 items-center text-faint">
-              <button
-                type="button"
-                aria-label="スーパーセット"
-                onClick={() => cycleSuperset(ei)}
-                className={`rounded-md p-1 ${it.supersetGroup != null ? 'text-carb' : 'hover:text-ink'}`}
-              >
-                <Link2 className="h-4 w-4" />
-              </button>
               <button
                 type="button"
                 aria-label="上へ"
@@ -329,14 +304,9 @@ export function RecordScreen({
               <div key={s.key} className="grid grid-cols-[1.6rem_1fr_1fr_1fr] items-center gap-2">
                 <button
                   type="button"
-                  aria-label="セット種別を変更"
+                  aria-label="本番/ウォームアップ切替"
                   onClick={() =>
-                    updateSet(ei, si, {
-                      setType:
-                        SET_TYPE_CYCLE[
-                          (SET_TYPE_CYCLE.indexOf(s.setType) + 1) % SET_TYPE_CYCLE.length
-                        ],
-                    })
+                    updateSet(ei, si, { setType: s.setType === 'warmup' ? 'main' : 'warmup' })
                   }
                   className={`flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold ${SET_TYPE_META[s.setType].cls}`}
                 >
@@ -362,20 +332,10 @@ export function RecordScreen({
       ))}
 
       {items.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-1 text-[11px] text-muted">
-          <span className="font-semibold text-faint">型:</span>
-          {SET_TYPE_CYCLE.map((t) => (
-            <span key={t} className="flex items-center gap-1">
-              <span
-                className={`flex h-4 w-4 items-center justify-center rounded text-[9px] font-bold ${SET_TYPE_META[t].cls}`}
-              >
-                {SET_TYPE_META[t].abbr}
-              </span>
-              {SET_TYPE_LABEL[t]}
-            </span>
-          ))}
-          <span className="text-faint">— Wは総量に含めない</span>
-        </div>
+        <p className="px-1 text-[11px] leading-snug text-muted">
+          先頭のボタンをタップで <span className="font-bold text-ink">本</span>=本番 ⇄{' '}
+          <span className="font-bold">W</span>=ウォームアップ を切替(W は総量・PR に含めません)。
+        </p>
       )}
 
       <Card title="種目を追加">
