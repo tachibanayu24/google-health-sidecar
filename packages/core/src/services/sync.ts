@@ -235,6 +235,25 @@ export async function retryPendingPushes(
           null,
         );
         synced++;
+      } else if (p.entity_type === 'body_metric_fat') {
+        const bm = await getBodyMetricById(ctx.db, p.entity_id);
+        if (!bm) continue;
+        if (bm.source !== 'app' || bm.body_fat_pct == null) continue;
+        const res = await provider.pushBodyMetric({
+          kind: 'body-fat',
+          sampleTimeSec: bm.measured_at,
+          bodyFatPct: bm.body_fat_pct,
+          clientTag: bm.id,
+        });
+        await markPushSynced(
+          ctx.db,
+          'body_metric_fat',
+          p.entity_id,
+          res.datapointId,
+          res.dataOrigin,
+          null,
+        );
+        synced++;
       }
     } catch (e) {
       if (e instanceof RateLimitError) {

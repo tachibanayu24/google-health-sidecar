@@ -134,7 +134,8 @@ export const Provenance = z.enum(['d1_confirmed', 'gh_provisional']);
 export type Provenance = z.infer<typeof Provenance>;
 
 // ---------- GH同期 ----------
-export const SyncEntityType = z.enum(['workout', 'meal', 'body_metric']);
+// body_metric=体重 datapoint、body_metric_fat=体脂肪 datapoint(同一 body_metrics 行を別 datapoint で追跡)。
+export const SyncEntityType = z.enum(['workout', 'meal', 'body_metric', 'body_metric_fat']);
 export type SyncEntityType = z.infer<typeof SyncEntityType>;
 
 export const SyncStatus = z.enum([

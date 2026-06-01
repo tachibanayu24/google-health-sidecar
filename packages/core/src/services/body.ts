@@ -29,7 +29,8 @@ export async function logWeight(
   const date = input.date ?? toJstDateString(measuredAt * 1000);
   const weightKg = toKg(input.entryValue, input.entryUnit);
 
-  await runBatch(ctx.db, [
+  const hasFat = input.bodyFatPct != null;
+  const stmts = [
     insertStmt('body_metrics', {
       id,
       date,
@@ -44,12 +45,17 @@ export async function logWeight(
       updated_at: now,
     }),
     pendingPushStmt('body_metric', id),
-  ]);
+  ];
+  // 体脂肪は別 datapoint なので独立した push 台帳行で追跡(削除/再試行/echo判定を体重と分離)。
+  if (hasFat) stmts.push(pendingPushStmt('body_metric_fat', id));
+  await runBatch(ctx.db, stmts);
 
   let ghPushed = false;
   if (ctx.pushInline !== false) {
+    const provider = getProvider(ctx);
+    // 体重と体脂肪は独立した try/catch。片方の失敗がもう片方の synced 状態を上書きしない
+    // (旧実装は体脂肪失敗で体重行を failed に巻き戻し→cron が体重を二重 push する不具合があった)。
     try {
-      const provider = getProvider(ctx);
       const res = await provider.pushBodyMetric({
         kind: 'weight',
         sampleTimeSec: measuredAt,
@@ -58,18 +64,21 @@ export async function logWeight(
       });
       await markPushSynced(ctx.db, 'body_metric', id, res.datapointId, res.dataOrigin, null);
       ghPushed = true;
-      // 体脂肪も入力されていれば別 datapoint で push(best-effort)。
-      if (input.bodyFatPct != null) {
+    } catch (e) {
+      await markPushFailed(ctx.db, 'body_metric', id, errorMessage(e));
+    }
+    if (hasFat) {
+      try {
         const bf = await provider.pushBodyMetric({
           kind: 'body-fat',
           sampleTimeSec: measuredAt,
-          bodyFatPct: input.bodyFatPct,
+          bodyFatPct: input.bodyFatPct as number,
           clientTag: id,
         });
-        void bf;
+        await markPushSynced(ctx.db, 'body_metric_fat', id, bf.datapointId, bf.dataOrigin, null);
+      } catch (e) {
+        await markPushFailed(ctx.db, 'body_metric_fat', id, errorMessage(e));
       }
-    } catch (e) {
-      await markPushFailed(ctx.db, 'body_metric', id, errorMessage(e));
     }
   }
   return { id, ghPushed };

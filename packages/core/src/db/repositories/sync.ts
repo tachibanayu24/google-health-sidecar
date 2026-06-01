@@ -186,20 +186,33 @@ export function skippedPushStmt(entityType: SyncEntityType, entityId: string) {
   );
 }
 
-/** 自分の書込みか(reconcile own-write 判定, §5.4)。gh_data_origin / datapoint_id 一致。 */
+/**
+ * reconcile で取得した datapoint が自分の push か(echo ループ防止, §5.4)。
+ *
+ * 2つの突合を OR で使う(どちらか一致すれば own-write):
+ *  1) gh_datapoint_id 完全一致 — 最も厳密。「この datapoint はまさに自分が作った」。
+ *  2) gh_data_origin 一致 — create 応答と reconcile で datapoint id 形式が揃う保証が無い
+ *     (mappers の parseCreateResponse に「要トークン検証」注記)ため、アプリ固有の
+ *     dataOrigin(他デバイスと異なる application name)を信頼できる echo キーとして併用。
+ *
+ * ⚠ 空文字 origin は誤一致(''='') を生むため除外。両キーとも空なら own-write ではない。
+ */
 export async function isKnownOwnWrite(
   db: Db,
   datapointId: string | undefined,
   dataOrigin: string | undefined,
 ): Promise<boolean> {
-  if (!datapointId && !dataOrigin) return false;
+  const dpId = datapointId && datapointId.length > 0 ? datapointId : null;
+  const origin = dataOrigin && dataOrigin.length > 0 ? dataOrigin : null;
+  if (!dpId && !origin) return false;
   const row = await db.raw<{ n: number }>(
     `SELECT count(*) AS n FROM gh_sync_state
-       WHERE (gh_datapoint_id IS NOT NULL AND gh_datapoint_id = ?)
-          OR (? IS NOT NULL AND gh_data_origin = ?)`,
-    datapointId ?? null,
-    dataOrigin ?? null,
-    dataOrigin ?? null,
+       WHERE (? IS NOT NULL AND gh_datapoint_id = ?)
+          OR (? IS NOT NULL AND gh_data_origin != '' AND gh_data_origin = ?)`,
+    dpId,
+    dpId,
+    origin,
+    origin,
   );
   return (row[0]?.n ?? 0) > 0;
 }
