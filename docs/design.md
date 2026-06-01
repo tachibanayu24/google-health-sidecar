@@ -821,10 +821,14 @@ UI(IndexedDBアウトボックス)と MCP(Claude経由)が同一の食事/ワー
 
 ### 9.8 PWA技術
 - manifest: `display:"standalone"`, `orientation:"portrait"`, アイコン192/512/maskable。
-- Service Worker: vite-plugin-pwa(generateSW)でアプリシェルprecache。
-- **オフライン下書き(必須級)**【判断】: ジムは電波弱、かつ食事/ワークアウトはauthoring元=取りこぼすと真実が消える。記録は IndexedDB アウトボックス→TanStack Query Mutationキュー→Background Sync(iOS未対応時は `online`イベント/起動時フラッシュfallback)。冪等キー(クライアントUUID)で重複送信を弾く。二経路重複は §8.7 の業務キー警告で補完。
-  - **サーバ側の冪等は実装済(2026-06-01)**: `meals`/`workout_sessions` に `client_request_id`(partial unique index, migration 0005)。`logMeal`/`saveWorkout` は書込前に既存チェックし、ヒットすれば既存 id を返す(再送・MCP リトライで二重登録しない)。web は記録ドラフト1回ぶんの UUID を送信。MCP も同 service を通るので 1 箇所で両対応。残るはクライアント側 IndexedDB 送信キューの実装のみ。
-- インストール導線: Android=`beforeinstallprompt`捕捉、iOS=非standalone検知して「共有→ホーム画面に追加」を一度案内。
+- Service Worker: 手書き `public/sw.js`(アプリシェル precache + `/api`・`/auth` は非キャッシュ network-first)。
+- **オフライン下書き = 実装済(2026-06-01, `apps/web/src/ui/lib/outbox.ts`)**: ジムは電波弱、かつ食事/ワークアウトは authoring 元=取りこぼすと真実が消える。
+  - サーバ冪等: `meals`/`workout_sessions` に `client_request_id`(partial unique index, migration 0005)。`logMeal`/`saveWorkout` は書込前に既存チェックし、ヒットすれば既存 id を返す。
+  - クライアント送信キュー: `api.logMeal`/`saveWorkout` はネット不通(fetch TypeError / `navigator.onLine===false`)かつ `client_request_id` 有りのとき IndexedDB アウトボックスへ退避し `queued` を返す(UI は通常どおり遷移)。HTTP エラー(res返却)や編集(冪等キー無し)は退避せず失敗させる。
+  - フラッシュ: `online` / `visibilitychange(visible)` / 起動時に `flushOutbox()`。古い順に再送し、2xx=削除 / 4xx=破棄(恒久) / 5xx=attempts++(上限5で破棄) / ネット例外=順序維持のため中断。`flushing` ガードで二重実行防止。送信成功で関連クエリ invalidate。
+  - iOS は Background Sync 非対応のため JS イベント主導(全プラットフォーム共通)。Home に未送信件数バナー+手動「今すぐ送信」。
+  - ※ オフライン**閲覧**(/api レスポンスのキャッシュ)は非対応。書込の取りこぼし防止を優先。
+- インストール導線: Android=`beforeinstallprompt`捕捉、iOS=非standalone検知して「共有→ホーム画面に追加」を一度案内(未実装・残タスク)。
 
 ### 9.9 kg/lb(要件8)
 - 定数: kg→lb `× 2.2046226218`、lb→kg `× 0.45359237`(国際協定の定義値で往復誤差最小)。
