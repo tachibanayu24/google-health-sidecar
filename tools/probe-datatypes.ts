@@ -35,7 +35,9 @@ for (const id of CANDIDATES) {
   } catch (e) {
     if (e instanceof ProviderApiError) {
       const invalid = /Invalid data type/i.test(e.bodyText);
-      console.log(`${invalid ? '✗' : '⚠'} ${id} — HTTP ${e.status}${invalid ? ' (Invalid data type ID)' : `: ${e.bodyText.slice(0, 80)}`}`);
+      console.log(
+        `${invalid ? '✗' : '⚠'} ${id} — HTTP ${e.status}${invalid ? ' (Invalid data type ID)' : `: ${e.bodyText.slice(0, 80)}`}`,
+      );
     } else {
       console.log(`⚠ ${id} — ${String(e).slice(0, 80)}`);
     }

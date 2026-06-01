@@ -92,11 +92,15 @@ export const READ_DATATYPES: ReadDataType[] = [
     valueField: 'steps',
     timeShape: 'interval',
     store: { kind: 'daily_metric', metric: 'steps', unit: 'count' },
-    // GH は分単位 interval で返る → daily_metric への単一 upsert では最後の1分で上書きされ日次合計にならない。
-    // 正しくは日次合計に集計が必要(+大量ページングで重い)。MVP任意のため当面除外し、日次集計対応は後続(§5.4)。
+    // 実機プローブ(2026-06-01): daily-steps/daily-step-count/step-count は全て Invalid data type ID。
+    // 歩数は `steps`(分単位 interval)のみ存在。daily_metric への単一 upsert は最後の1分で上書きされ日次合計に
+    // ならず、全分ページングは */5 cron で過負荷(Too many subrequests 実測)。よって当面除外。
+    // 日次合計対応は「時刻ゲートで日数回だけ interval を集計し overwrite」する後続実装で復帰予定(§5.4)。
     unverified: true,
   },
-  // 皮膚温は dataType ID が未確定(daily-skin-temperature は 400 Invalid data type ID)→ probe で確定するまで除外。
+  // 皮膚温: 実機プローブ(2026-06-01)で daily-skin-temperature/skin-temperature/wrist-temperature/
+  // body-temperature 等の候補8種すべて Invalid data type ID → GH はこのクライアントに皮膚温を提供していない。
+  // 正IDが判明するまで恒久除外(loop からスキップ)。
   {
     ghDataType: 'daily-skin-temperature',
     valueField: 'dailySkinTemperature',

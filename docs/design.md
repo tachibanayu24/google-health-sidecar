@@ -237,7 +237,7 @@ POST /v4/users/me/dataTypes/body-fat/dataPoints
 | `spo2` | `daily-oxygen-saturation` | health_metrics_and_measurements | `daily_metrics(metric='spo2_avg', unit='%')` | 【確定】 |
 | `vo2max` | `daily-vo2-max` | activity_and_fitness | `daily_metrics(metric='vo2max', unit='ml/kg/min')` | 【確定】 |
 | `resp-rate` | `daily-respiratory-rate` | health_metrics_and_measurements | `daily_metrics(metric='resp_rate', unit='/min')` | ✅【確定: 2026-06-01 実データ取得 `breathsPerMinute`, §17.5】 |
-| `skin-temp` | `daily-skin-temperature` | health_metrics_and_measurements | `daily_metrics(metric='skin_temp_c', unit='celsius', 絶対℃)` | 【要検証: `daily-skin-temperature` は Invalid data type ID(2026-06-01)→正ID不明・loop除外, §17.5】 |
+| `skin-temp` | (なし) | health_metrics_and_measurements | `daily_metrics(metric='skin_temp_c', unit='celsius', 絶対℃)` | 【恒久除外: 候補8種すべて Invalid data type ID と実機確定(2026-06-01)→ GH 未提供, §17.5】 |
 | `steps` | `steps` | activity_and_fitness | `daily_metrics(metric='steps', unit='count')` | 【確定・MVP任意】 |
 
 - **体重/体脂肪の合流**: `weight` と `body-fat` は別 dataType・別 sync_runs 行として個別に pull し、**日付キーで `body_metrics` の同一行へ合流(upsert)**する。`vo2max` は `daily-vo2-max` を主とし、`run-vo2-max` が必要なら別内部キーで追加(MVPは `daily-vo2-max` のみ)。
@@ -1239,6 +1239,10 @@ GH v4 の**公開 discovery doc**(`https://health.googleapis.com/$discovery/rest
 
 **確定した接続**: read = weight / body-fat / sleep / daily-resting-heart-rate / daily-heart-rate-variability / daily-oxygen-saturation / daily-respiratory-rate / steps(実データで値・時刻一致を確認)。write = exercise / **nutrition(200 OK, create→batchDelete 検証済)** / weight / body-fat。これにより §14#1 の「nutrition write が成立しない可能性」リスクは**実機 200 で完全解消**、`FEATURE_GH_NUTRITION_PUSH=true` 化。
 
-**残 openItem**(D1 正本に影響せず): ① **VO2max** — 実データが空(reconcile 0 件)。dataType ID・フィールドは pin 済、データ発生後に値確認 ② **skin-temp** — `daily-skin-temperature` は `Invalid data type ID`(正 ID 不明)→ `unverified:true` で loop 除外継続。
+**残 openItem**(D1 正本に影響せず): ① **VO2max** — 実データが空(reconcile 0 件)。dataType ID・フィールドは pin 済、データ発生後に値確認 ② **skin-temp** — `tools/probe-datatypes` で候補8種(daily-skin-temperature / skin-temperature / wrist-temperature / body-temperature 等)すべて `Invalid data type ID` と確定 → **GH はこのクライアントに皮膚温を提供していない**。恒久除外。 ③ **steps** — daily-steps/daily-step-count/step-count も全て Invalid。歩数は `steps`(分単位 interval)のみ。日次合計は時刻ゲートで日数回 interval 集計→overwrite する後続実装で復帰(§5.4)。
+
+**own-write echo と recordingMethod の整理(2026-06-01)**: pull 対象(weight/body-fat/sleep/daily-*)と push 対象(exercise/nutrition-log/weight/body-fat)のうち **重複するのは weight/body-fat のみ**。手入力体組成 push は現状 UI 導線が無い(体重は GH 取込が主)が、`logWeight`→`pushBodyMetric` 経路は存在する。echo 防止は **`gh_datapoint_id` 一致による own-write 判定**(`isKnownOwnWrite`)で行い、`recordingMethod` には依存しない。よって §2.1 の「手入力=MANUAL」記述は実装と不一致(MANUAL は GH enum に無く 400、実装は全 push で `ACTIVELY_MEASURED`)→ **own-write 判定は recordingMethod 非依存なので機能上の問題なし**。設計記述を実装に合わせて訂正(MANUAL → ACTIVELY_MEASURED, 判定は gh_datapoint_id)。
+
+**同期ヘルスの可視化(2026-06-01)**: KV TTL バグで pull が全滅しても気づけなかった反省から、`gh:auth_error`(invalid_grant 記録)+ `GET /api/sync-status` + Home の警告バナーを追加。再認証要・連続失敗を必ず UI に出す。
 
 **意義**: 「要検証(discovery pin)」とマークしていた最大の実装リスク(特に nutrition write 可否)を**実トークンで完全解消**。GH 連携は read/write 全 dataType が実データで確定。vitest 39 tests で int64文字列/Date型時刻/weightGrams/sleep summary/nutrition payload/interval を回帰固定。
