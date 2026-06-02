@@ -104,7 +104,7 @@ export function MealReport({
             <div key={g.type} className="rounded-lg bg-card/60 px-3 py-2 ring-1 ring-line/50">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-[13px] font-bold text-ink">{mealTypeJa(g.type)}</span>
-                <span className="tnum shrink-0 text-[12px] font-semibold text-ink">
+                <span className="tnum shrink-0 whitespace-nowrap text-[12px] font-semibold text-ink">
                   {Math.round(g.kcal)}
                   <span className="text-[10px] text-faint"> kcal</span>
                 </span>

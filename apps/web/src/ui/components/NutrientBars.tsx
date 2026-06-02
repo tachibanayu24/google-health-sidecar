@@ -118,7 +118,7 @@ function Row({
           )}
         </span>
         <span
-          className={`tnum ${inverted && over ? 'font-semibold text-accent-ink' : uncaptured ? 'text-faint' : 'text-muted'}`}
+          className={`tnum whitespace-nowrap ${inverted && over ? 'font-semibold text-accent-ink' : uncaptured ? 'text-faint' : 'text-muted'}`}
         >
           {uncaptured ? '—' : rounded}
           {t ? ` / ${Math.round(t)}` : ''}
