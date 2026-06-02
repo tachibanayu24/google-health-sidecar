@@ -34,7 +34,9 @@ export class GoogleHealthProvider implements HealthProvider {
     // reconcile = GET + query(discovery doc 確定, §5.1)。filter は呼び出し側が dataType 別に組む。
     const res = await this.client.reconcile(ghDataType, {
       filter,
-      pageSize: '25',
+      // 大きめ pageSize(GH は >=1000 を許容=実機確認)。分単位 interval(steps/active-energy)を
+      // 25/page だと 100+ ページ=過負荷になり高頻度化できなかった。1000 で通常1ページに収まる。
+      pageSize: '1000',
       pageToken: cursor ?? undefined,
     });
     return parseReconcileResponse(ghDataType, res);

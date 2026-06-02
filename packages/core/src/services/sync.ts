@@ -46,9 +46,13 @@ export async function runDailyPull(
     if (dt.unverified) continue; // dataType ID 未確定(resp-rate/skin-temp)は当面 skip(§5.4)
     try {
       const st = await getSyncRun(ctx.db, dt.ghDataType);
-      const since =
-        st?.last_synced_at ??
-        Math.floor(Date.parse(`${jstDaysAgo(opts.backfillDays ?? 14)}T00:00:00Z`) / 1000);
+      // 遅延到着対策: Fitbit→GH ミラーは数時間遅れ、睡眠の end_time は朝(=同期実行時刻より過去)。
+      // since=last_synced_at(実行時刻)のままだと「実行時刻より過去の時刻を持つ後着データ」を恒久的に
+      // 取りこぼす(今朝の睡眠が来ない実バグ)。最低3日は再スキャンする(own-write除外+upsertで冪等)。
+      const firstSince = Math.floor(
+        Date.parse(`${jstDaysAgo(opts.backfillDays ?? 14)}T00:00:00Z`) / 1000,
+      );
+      const since = Math.min(st?.last_synced_at ?? firstSince, now - 3 * 86400);
       let cursor = st?.last_cursor ?? null;
       const filter = buildReadFilter(dt, since, now);
       // ページングを cursor が尽きるまで(単一ユーザー1日分なら通常1ページ)。

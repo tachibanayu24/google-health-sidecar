@@ -36,17 +36,16 @@ export default {
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     const app = makeContext(env);
     const jst = new Date(controller.scheduledTime + 9 * 3600_000);
-    const stepsSlot = jst.getUTCMinutes() === 0 && [7, 13, 22].includes(jst.getUTCHours());
+    // 1日1回(早朝7時)だけ前日までの遅延到着分も広めに再集計。
+    const catchupSlot = jst.getUTCMinutes() === 0 && jst.getUTCHours() === 7;
     ctx.waitUntil(
       (async () => {
         await staleAbandonedSessions(app.db);
-        await runDailyPull(app); // GH→D1 reconcile(センシングのみ: weight/sleep/HRV等。own-write除外・冪等)
+        await runDailyPull(app); // GH→D1 reconcile(センシング: weight/sleep/HRV等。3日ルックバック・own-write除外・冪等)
         // ※ 食事(nutrition)は GH→アプリの pull をしない。食事は app/MCP が D1 正本→GH push の一方向(§5.2)。
-        if (stepsSlot) {
-          // 分単位 interval の日次集計(重いので日3回・時刻ゲート)。歩数 + 消費カロリー(エネルギー収支)。
-          await pullStepsDaily(app, { days: 2 }).catch(() => undefined);
-          await pullActiveEnergyDaily(app, { days: 2 }).catch(() => undefined);
-        }
+        // 分単位 interval の日次集計。pageSize 拡大(1000)で軽くなったため毎回(*/5)当日分を集計=高頻度。
+        await pullStepsDaily(app, { days: catchupSlot ? 3 : 1 }).catch(() => undefined);
+        await pullActiveEnergyDaily(app, { days: catchupSlot ? 3 : 1 }).catch(() => undefined);
         await retryPendingPushes(app, { max: 20 }); // 失敗/未送 push の再送
       })(),
     );
