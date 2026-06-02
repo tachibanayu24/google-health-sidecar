@@ -15,6 +15,7 @@ export function ShareImageModal({
   headerRight,
   onClose,
   disabled = false,
+  tone = 'paper',
   children,
 }: {
   heading: string;
@@ -22,8 +23,17 @@ export function ShareImageModal({
   headerRight?: ReactNode;
   onClose: () => void;
   disabled?: boolean;
+  /** paper=ウォームクリーム+暗字(既定) / bold=バーミリオン全面+クリーム字(Wrapped 風) */
+  tone?: 'paper' | 'bold';
   children: ReactNode;
 }) {
+  const isBold = tone === 'bold';
+  const cardBg = isBold
+    ? 'linear-gradient(165deg, #ff7d4f 0%, #e8501f 44%, #7e2810 100%)'
+    : 'linear-gradient(162deg, #fffdf8 0%, #f6ece2 52%, #f1dbce 100%)';
+  const glow = isBold
+    ? 'radial-gradient(120% 75% at 50% -12%, rgba(255,255,255,0.26) 0%, rgba(255,255,255,0) 58%)'
+    : 'radial-gradient(120% 90% at 88% 102%, rgba(223,74,38,0.16) 0%, rgba(223,74,38,0) 60%)';
   const cardRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(false);
@@ -77,23 +87,17 @@ export function ShareImageModal({
           {/* ===== ここからキャプチャ対象(シェア画像) ===== */}
           <div
             ref={cardRef}
-            className="rise relative overflow-hidden rounded-3xl px-6 pb-7 pt-6 text-ink shadow-[0_24px_60px_-16px] shadow-ink/50"
-            style={{
-              background: 'linear-gradient(162deg, #fffdf8 0%, #f6ece2 52%, #f1dbce 100%)',
-            }}
+            className={`rise relative overflow-hidden rounded-3xl px-6 pb-7 pt-6 shadow-[0_24px_60px_-16px] shadow-ink/50 ${
+              isBold ? 'text-card' : 'text-ink'
+            }`}
+            style={{ background: cardBg }}
           >
-            {/* 右下のバーミリオン・グロー(さりげない奥行き) */}
-            <div
-              className="pointer-events-none absolute inset-0"
-              style={{
-                background:
-                  'radial-gradient(120% 90% at 88% 102%, rgba(223,74,38,0.16) 0%, rgba(223,74,38,0) 60%)',
-              }}
-            />
+            {/* グロー(さりげない奥行き) */}
+            <div className="pointer-events-none absolute inset-0" style={{ background: glow }} />
             <div className="relative">
               {/* ヘッダ: ロゴ + headerRight(日付等) */}
               <div className="flex items-center justify-between">
-                <BrandLogo size="sm" />
+                <BrandLogo size="sm" variant={isBold ? 'light' : 'box'} />
                 {headerRight}
               </div>
               {children}

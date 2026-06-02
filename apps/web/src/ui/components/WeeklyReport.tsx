@@ -4,13 +4,11 @@ import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter';
 import { api } from '../lib/api';
 import { formatDateForDisplay } from '../lib/datetime';
 import { MUSCLE_TO_SLUGS } from '../lib/muscles';
-import { HEATMAP_RAMP } from '../lib/theme';
-import { saltFromSodiumMg } from '../lib/units';
-import { NutrientBars } from './NutrientBars';
-import { ReportStat, ShareImageModal } from './ShareImageModal';
+import { ShareImageModal } from './ShareImageModal';
 
-const RAMP = HEATMAP_RAMP;
-const BASE_BODY = '#c2b8a6';
+// 濃色キャンバス用: 人体はダークなバーミリオンの影、効かせた部位はクリーム〜白で発光。
+const RAMP_BOLD = ['#f0a585', '#f6bfa3', '#fbd8c4', '#fff0e8', '#fffefb'];
+const BODY_BOLD = '#9b3617';
 
 function bucket(i: number): number {
   if (i <= 0.02) return 0;
@@ -44,17 +42,19 @@ function fmtSleep(min: number | null): string {
 }
 
 /**
- * 週間サマリーのシェアレポート(直近7日の総合ラップ: トレ/食事/睡眠/コンディション/体重)。
- * 共通台紙 ShareImageModal に乗せる。総挙上量は物に例えてさりげなく忍ばせる。
+ * 週間サマリーのシェアレポート(直近7日の総合ラップ)。Spotify Wrapped 風の濃色・大型タイポ。
+ * 共通台紙 ShareImageModal(tone='bold')に乗せ、総挙上量は物に例えてさりげなく忍ばせる。
  */
 export function WeeklyReport({ onClose }: { onClose: () => void }) {
   const week = useQuery({ queryKey: ['weekly-summary'], queryFn: api.weeklySummary });
   const mv = useQuery({ queryKey: ['muscle-volume', 7], queryFn: () => api.muscleVolume(7) });
   const d = week.data;
+  const muscles = mv.data?.muscles ?? [];
+  const worked = muscles.filter((m) => m.actual_sets > 0).length;
 
   // 人体図(直近7日に効かせた部位)。
   const slugBucket = new Map<Muscle, number>();
-  for (const m of mv.data?.muscles ?? []) {
+  for (const m of muscles) {
     const b = bucket(m.stimulus);
     for (const slug of MUSCLE_TO_SLUGS[m.muscle] ?? []) {
       if (b > (slugBucket.get(slug) ?? 0)) slugBucket.set(slug, b);
@@ -68,117 +68,150 @@ export function WeeklyReport({ onClose }: { onClose: () => void }) {
 
   const tons = d ? d.training.volumeKg / 1000 : 0;
   const brag = d ? tonnageBrag(d.training.volumeKg) : null;
-  const nutrients = d
-    ? {
-        kcal: d.nutrition.avgKcal,
-        p: d.nutrition.avgP,
-        f: d.nutrition.avgF,
-        c: d.nutrition.avgC,
-        salt_g: Math.round(saltFromSodiumMg(d.nutrition.avgSodiumMg) * 10) / 10,
-        fiber_g: d.nutrition.avgFiberG,
-      }
-    : null;
+  const hasFood = (d?.nutrition.daysLogged ?? 0) > 0;
+  const delta = d?.body.deltaKg ?? null;
   const rangeLabel = d
     ? `${formatDateForDisplay(d.range.start)} – ${formatDateForDisplay(d.range.end)}`
     : '';
 
   return (
     <ShareImageModal
+      tone="bold"
       heading="週間サマリー"
       filename={d ? `logbook-week-${d.range.end}.png` : 'logbook-week.png'}
       headerRight={
-        <span className="tnum whitespace-nowrap text-[12px] font-semibold text-muted">
+        <span className="tnum whitespace-nowrap text-[12px] font-semibold text-card/75">
           {rangeLabel}
         </span>
       }
       onClose={onClose}
       disabled={week.isLoading || mv.isLoading}
     >
-      {/* タイトル */}
-      <div className="mt-4">
-        <div className="font-display text-[26px] font-extrabold leading-tight tracking-tight">
+      {/* イントロ */}
+      <div className="mt-5">
+        <div className="text-[11px] font-bold uppercase tracking-[0.34em] text-card/55">
+          Week in review
+        </div>
+        <div className="mt-1 font-display text-[20px] font-extrabold text-card/95">
           今週のまとめ
         </div>
       </div>
 
-      {/* トレーニング */}
-      <SectionLabel>トレーニング</SectionLabel>
-      <div className="grid grid-cols-3 gap-2 rounded-2xl border border-line/70 bg-card/70 px-3 py-3">
-        <ReportStat label="セッション" value={String(d?.training.sessions ?? 0)} unit="回" />
-        <ReportStat
-          label="総挙上"
-          value={tons.toLocaleString(undefined, { maximumFractionDigits: 1 })}
-          unit="t"
-        />
-        <ReportStat label="自己ベスト" value={String(d?.training.prs ?? 0)} unit="PR" />
-      </div>
-      {brag && (
-        <div className="mt-1.5 text-center text-[11px] font-medium text-faint">
-          今週の総挙上 ≈ {brag}
+      {/* ヒーロー: 総挙上 */}
+      <div className="mt-7">
+        <div className="flex items-end gap-2">
+          <span className="font-display text-[68px] font-black leading-[0.82] tracking-tight">
+            {tons.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+          </span>
+          <span className="mb-2.5 text-lg font-bold text-card/85">トン挙上</span>
         </div>
-      )}
-      <div className="mt-3 grid grid-cols-2 gap-1 [&_svg]:h-auto [&_svg]:max-h-[26vh] [&_svg]:w-full">
-        <Model type="anterior" data={bodyData} highlightedColors={RAMP} bodyColor={BASE_BODY} />
-        <Model type="posterior" data={bodyData} highlightedColors={RAMP} bodyColor={BASE_BODY} />
+        {brag && <div className="mt-2 text-[13px] font-semibold text-card/85">≈ {brag}</div>}
+      </div>
+
+      {/* モーメント(3-up の大型数字) */}
+      <div className="mt-7 grid grid-cols-3 gap-2">
+        <Moment value={String(d?.training.sessions ?? 0)} label="セッション" />
+        <Moment value={String(d?.training.prs ?? 0)} label="自己ベスト" />
+        <Moment value={`${worked}/16`} label="攻めた部位" />
+      </div>
+
+      {/* 人体図(クリーム発光) */}
+      <div className="mt-6 grid grid-cols-2 gap-1 [&_svg]:h-auto [&_svg]:max-h-[26vh] [&_svg]:w-full">
+        <Model
+          type="anterior"
+          data={bodyData}
+          highlightedColors={RAMP_BOLD}
+          bodyColor={BODY_BOLD}
+        />
+        <Model
+          type="posterior"
+          data={bodyData}
+          highlightedColors={RAMP_BOLD}
+          bodyColor={BODY_BOLD}
+        />
       </div>
 
       {/* 栄養(1日平均) */}
-      <SectionLabel>栄養 — 1日平均</SectionLabel>
-      <div className="rounded-2xl border border-line/70 bg-card/70 px-3 py-3">
-        {nutrients && (d?.nutrition.daysLogged ?? 0) > 0 ? (
-          <NutrientBars values={nutrients} target={d?.target ?? null} />
+      <div className="mt-7 border-t border-card/20 pt-5">
+        <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-card/55">
+          1日平均の栄養
+        </div>
+        {hasFood && d ? (
+          <>
+            <div className="mt-1 flex items-end gap-2">
+              <span className="font-display text-[42px] font-black leading-none">
+                {d.nutrition.avgKcal.toLocaleString()}
+              </span>
+              <span className="mb-1.5 text-sm font-bold text-card/80">kcal</span>
+            </div>
+            <div className="mt-1.5 flex gap-4 text-[14px] font-bold tnum text-card/85">
+              <span>P {d.nutrition.avgP}</span>
+              <span>F {d.nutrition.avgF}</span>
+              <span>C {d.nutrition.avgC}</span>
+            </div>
+          </>
         ) : (
-          // 記録ゼロは「0/目標」のバーだと絶食と誤読されるため「記録なし」と明示。
-          <p className="py-1 text-center text-[12px] text-faint">この期間の食事記録はありません</p>
+          <div className="mt-2 text-[14px] font-semibold text-card/70">食事の記録なし</div>
         )}
-        <div className="mt-2 text-[10px] text-faint">記録 {d?.nutrition.daysLogged ?? 0}/7 日</div>
       </div>
 
-      {/* 睡眠・コンディション */}
-      <SectionLabel>睡眠・コンディション</SectionLabel>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-2xl border border-line/70 bg-card/70 px-3 py-3">
-        <MiniStat
+      {/* 睡眠 / 体重 */}
+      <div className="mt-6 grid grid-cols-2 gap-4 border-t border-card/20 pt-5">
+        <Block
           label="平均睡眠"
           value={fmtSleep(d?.sleep.avgTotalMin ?? null)}
-          sub={d?.sleep.avgEfficiency != null ? `効率${d.sleep.avgEfficiency}%` : undefined}
+          sub={d?.sleep.avgEfficiency != null ? `効率 ${d.sleep.avgEfficiency}%` : undefined}
         />
-        <MiniStat
-          label="平均歩数"
-          value={d?.sensing.avgSteps != null ? d.sensing.avgSteps.toLocaleString() : '—'}
-        />
-        <MiniStat
-          label="平均消費"
-          value={d?.sensing.avgActiveKcal != null ? d.sensing.avgActiveKcal.toLocaleString() : '—'}
-          sub="kcal"
-        />
-        <MiniStat
+        <Block
           label="体重"
           value={d?.body.endKg != null ? String(d.body.endKg) : '—'}
-          sub={
-            d?.body.deltaKg != null ? `${d.body.deltaKg >= 0 ? '+' : ''}${d.body.deltaKg}kg` : 'kg'
-          }
+          unit={d?.body.endKg != null ? 'kg' : undefined}
+          sub={delta != null ? `${delta >= 0 ? '+' : ''}${delta}kg / 週` : undefined}
         />
       </div>
+
+      {/* フッタ(コンディション) */}
+      {d && (d.sensing.avgSteps != null || d.sensing.avgActiveKcal != null) && (
+        <div className="mt-5 flex flex-wrap gap-x-4 gap-y-1 text-[12px] font-semibold text-card/55">
+          {d.sensing.avgSteps != null && <span>歩数 {d.sensing.avgSteps.toLocaleString()}/日</span>}
+          {d.sensing.avgActiveKcal != null && (
+            <span>消費 {d.sensing.avgActiveKcal.toLocaleString()}kcal/日</span>
+          )}
+          {d.sensing.avgHrv != null && <span>HRV {d.sensing.avgHrv}ms</span>}
+        </div>
+      )}
     </ShareImageModal>
   );
 }
 
-function SectionLabel({ children }: { children: ReactNode }) {
+function Moment({ value, label }: { value: string; label: string }) {
   return (
-    <div className="mt-5 mb-2 font-display text-[11px] font-bold uppercase tracking-[0.14em] text-faint">
-      {children}
+    <div>
+      <div className="font-display text-[34px] font-black leading-none">{value}</div>
+      <div className="mt-1.5 text-[11px] font-semibold tracking-wide text-card/60">{label}</div>
     </div>
   );
 }
 
-function MiniStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function Block({
+  label,
+  value,
+  unit,
+  sub,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  sub?: ReactNode;
+}) {
   return (
-    <div className="flex items-baseline justify-between gap-2">
-      <span className="text-[11px] text-faint">{label}</span>
-      <span className="tnum text-[13px] font-semibold text-ink">
-        {value}
-        {sub && <span className="ml-1 text-[10px] font-normal text-muted">{sub}</span>}
-      </span>
+    <div>
+      <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-card/55">{label}</div>
+      <div className="mt-1 flex items-baseline gap-1">
+        <span className="font-display text-[30px] font-black leading-none">{value}</span>
+        {unit && <span className="text-sm font-bold text-card/75">{unit}</span>}
+      </div>
+      {sub && <div className="mt-1 text-[11px] font-medium text-card/65">{sub}</div>}
     </div>
   );
 }
