@@ -20,10 +20,17 @@ import {
   getRecentPrs,
   getRecentSessions,
   getSettings,
+  LogMealInputSchema,
+  logMeal,
+  logWeight,
   makeContext,
   resolveExercise,
+  SaveWorkoutInputSchema,
+  saveWorkout,
   searchExercises,
+  setNutritionTarget,
   todayJst,
+  toKg,
 } from '@ghs/core';
 import { StreamableHTTPTransport } from '@hono/mcp';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -81,6 +88,24 @@ const ok = (data: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data) }],
 });
 const READ = { readOnlyHint: true, openWorldHint: false } as const;
+// 追記 write(非破壊・冪等)。GH push を伴うものは openWorldHint:true。
+const WRITE_GH = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+} as const;
+const WRITE_LOCAL = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+/** clientRequestId を未指定時のみ生成(勝手に振り直すと再送が別記録になる, §6.1)。 */
+function ensureCrid(provided?: string): string {
+  return provided && provided.length > 0 ? provided : crypto.randomUUID();
+}
 
 /** 種目を id 優先で解決。曖昧/0件は例外でなく候補配列を返す(§5.5-A: 利用者の往復を最小化)。 */
 async function resolveExerciseId(
@@ -100,9 +125,9 @@ async function resolveExerciseId(
   }
 }
 
-/** リクエスト毎に McpServer を新規生成(ステートレス)。M2-a: get_settings / M2-b: read 群。 */
+/** リクエスト毎に McpServer を新規生成(ステートレス)。M2-a: get_settings / M2-b: read / M2-c: write。 */
 function buildServer(env: Env): McpServer {
-  const server = new McpServer({ name: 'logbook-mcp', version: '0.2.0' });
+  const server = new McpServer({ name: 'logbook-mcp', version: '0.3.0' });
 
   server.registerTool(
     'get_settings',
@@ -332,6 +357,117 @@ function buildServer(env: Env): McpServer {
         workouts,
         body,
       });
+    },
+  );
+
+  // ===== M2-c: write(全て @ghs/core/services 経由・§8.5。GH push 成否を ghPushed で正直に返す)=====
+
+  server.registerTool(
+    'log_meal',
+    {
+      title: '食事を記録',
+      description:
+        '食事(items の合算)を D1 に記録し GH へ push。栄養値(kcal 必須、PFC/繊維/糖/ナトリウム任意)は呼び出し側が見積もって渡す。同じ記録の再送防止に clientRequestId を再利用(省略時はサーバ生成し結果に返す)。kcal は kcal、各栄養は g、sodium は mg。',
+      inputSchema: LogMealInputSchema.shape,
+      annotations: WRITE_GH,
+    },
+    async (args) => {
+      const ctx = makeContext(env);
+      const input = LogMealInputSchema.parse(args);
+      const clientRequestId = ensureCrid(input.clientRequestId);
+      const res = await logMeal(ctx, { ...input, clientRequestId });
+      return ok({ ...res, clientRequestId });
+    },
+  );
+
+  server.registerTool(
+    'log_workout',
+    {
+      title: 'ワークアウトを記録',
+      description:
+        'ワークアウト(種目×セット)を D1 に記録し GH へ push。e1RM/PR/総ボリュームは core が計算。exerciseId は search_exercises で解決した id。重量種目は entryValue 必須(自重は省略可=bodyweight、reps のみでよい)。entryUnit は kg/lb。loadMode 省略時は種目マスタに従う。title は不要(主働筋の部位から自動命名)。clientRequestId は再送で再利用。',
+      inputSchema: SaveWorkoutInputSchema.shape,
+      annotations: WRITE_GH,
+    },
+    async (args) => {
+      const ctx = makeContext(env);
+      const input = SaveWorkoutInputSchema.parse(args);
+      const clientRequestId = ensureCrid(input.clientRequestId);
+      const res = await saveWorkout(ctx, { ...input, clientRequestId });
+      return ok({ ...res, clientRequestId });
+    },
+  );
+
+  server.registerTool(
+    'log_weight',
+    {
+      title: '体重を記録',
+      description:
+        '体重(+任意で体脂肪%)を手入力で記録し GH へ push。entryUnit は kg/lb。同日に近い記録があると status:"similar_exists" を返すので、別測定(朝晩など)なら confirm:true を付けて再呼び出し、重複なら呼ばない。',
+      inputSchema: {
+        entryValue: z.number().positive().max(1000),
+        entryUnit: z.enum(['kg', 'lb']),
+        bodyFatPct: z.number().min(0).max(70).optional(),
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        measuredAtSec: z.number().int().nonnegative().optional(),
+        confirm: z.boolean().optional().describe('同日重複の警告を承知で記録する'),
+      },
+      annotations: WRITE_GH,
+    },
+    async ({ entryValue, entryUnit, bodyFatPct, date, measuredAtSec, confirm }) => {
+      const ctx = makeContext(env);
+      const d = date ?? todayJst();
+      if (!confirm) {
+        const existing = await getBodyForDate(ctx.db, d);
+        if (
+          existing.weightKg != null &&
+          Math.abs(existing.weightKg - toKg(entryValue, entryUnit)) < 0.5
+        ) {
+          return ok({
+            status: 'similar_exists',
+            requireConfirm: true,
+            existing: {
+              weight_kg: existing.weightKg,
+              body_fat_pct: existing.bodyFatPct,
+              source: existing.source,
+            },
+            message: `同日(${d})に ${existing.weightKg}kg の記録があります。別測定なら confirm:true で記録します。`,
+          });
+        }
+      }
+      const res = await logWeight(ctx, { entryValue, entryUnit, bodyFatPct, date, measuredAtSec });
+      return ok(res);
+    },
+  );
+
+  server.registerTool(
+    'set_nutrition_target',
+    {
+      title: '栄養目標を設定',
+      description:
+        '栄養目標(phase=bulk/cut/maintain、kcal、P/F/C g、任意で塩 g・繊維 g、適用開始日)を設定。AI が目標基準で分析・提案するための基準。dateFrom 省略時は今日から適用(同日は上書き)。',
+      inputSchema: {
+        phase: z.enum(['bulk', 'cut', 'maintain']),
+        kcal: z.number().positive().max(10000),
+        proteinG: z.number().min(0).max(1000),
+        fatG: z.number().min(0).max(1000),
+        carbsG: z.number().min(0).max(2000),
+        saltG: z.number().min(0).max(100).optional(),
+        fiberG: z.number().min(0).max(200).optional(),
+        dateFrom: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+      },
+      annotations: WRITE_LOCAL,
+    },
+    async (args) => {
+      const ctx = makeContext(env);
+      await setNutritionTarget(ctx, args);
+      return ok({ ok: true });
     },
   );
 
