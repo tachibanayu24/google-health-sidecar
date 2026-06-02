@@ -152,6 +152,28 @@ export interface Trends {
   volumeDaily: Array<{ date: string; volume_kg: number }>;
   pfcDaily: Array<{ date: string; kcal: number; p: number; f: number; c: number }>;
 }
+export interface WeeklySummary {
+  range: { start: string; end: string };
+  training: { sessions: number; volumeKg: number; prs: number };
+  nutrition: {
+    daysLogged: number;
+    avgKcal: number;
+    avgP: number;
+    avgF: number;
+    avgC: number;
+    avgSodiumMg: number;
+    avgFiberG: number;
+  };
+  sleep: { nights: number; avgTotalMin: number | null; avgEfficiency: number | null };
+  sensing: {
+    avgSteps: number | null;
+    avgActiveKcal: number | null;
+    avgRestingHr: number | null;
+    avgHrv: number | null;
+  };
+  body: { startKg: number | null; endKg: number | null; deltaKg: number | null };
+  target: NutritionTarget | null;
+}
 
 export interface RecentSession {
   id: string;
@@ -223,6 +245,7 @@ export const api = {
       cells: Array<{ date: string; muscle: string; sets: number }>;
     }>(`/training-calendar?days=${days}`),
   trends: (days = 90) => req<Trends>(`/trends?days=${days}`),
+  weeklySummary: () => req<WeeklySummary>('/weekly-summary'),
   today: (date?: string) => req<Today>(`/today${date ? `?date=${date}` : ''}`),
   foodAutocomplete: (q: string) =>
     req<{ foods: FoodSuggestion[] }>(`/foods/autocomplete?q=${encodeURIComponent(q)}`),

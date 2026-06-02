@@ -9,11 +9,13 @@ import {
   HeartPulse,
   RefreshCw,
   Scale,
+  Share2,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Card } from '../components/Card';
 import { NutrientBars } from '../components/NutrientBars';
 import { ErrorBox, Loading } from '../components/state';
+import { WeeklyReport } from '../components/WeeklyReport';
 import { api, type BodyReading, type NutritionTarget, type Today } from '../lib/api';
 import { DOW_JA, formatDateForDisplay, jstDayOfWeek, shiftDate, todayJst } from '../lib/datetime';
 import { invalidateAfterFlush } from '../lib/invalidate';
@@ -33,6 +35,7 @@ export function HomeScreen({
   onResume: () => void;
 }) {
   const [date, setDate] = useState(todayJst());
+  const [shareWeek, setShareWeek] = useState(false);
   const isToday = date === todayJst();
   const today = useQuery({ queryKey: ['today', date], queryFn: () => api.today(date) });
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
@@ -98,6 +101,16 @@ export function HomeScreen({
         onOpen={onOpenTraining}
       />
       <RecoveryGlance sleep={t.sleep} daily={t.daily} onOpen={onOpenRecovery} />
+
+      <button
+        type="button"
+        onClick={() => setShareWeek(true)}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-line bg-card/60 py-3 text-sm font-semibold text-muted active:scale-[0.99]"
+      >
+        <Share2 className="h-4 w-4" strokeWidth={2.2} /> 今週のまとめを画像に
+      </button>
+
+      {shareWeek && <WeeklyReport onClose={() => setShareWeek(false)} />}
     </div>
   );
 }
