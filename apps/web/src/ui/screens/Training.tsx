@@ -69,14 +69,6 @@ const REGION_GROUPS: Array<{ key: string; label: string; color: string; muscles:
   },
   { key: 'core', label: '体幹', color: '#9c6b4a', muscles: ['abs', 'obliques', 'lower_back'] },
 ];
-/** セット数 → セル濃度(GitHub草風の4段階)。 */
-function setAlpha(n: number): number {
-  if (n <= 0) return 0;
-  if (n <= 3) return 0.32;
-  if (n <= 6) return 0.55;
-  if (n <= 9) return 0.75;
-  return 0.95;
-}
 function bucket(s: number): number {
   if (s <= 0.02) return 0;
   return Math.min(5, Math.max(1, Math.ceil(s * 5)));
@@ -241,92 +233,202 @@ function Figure({
   );
 }
 
-// ============ トレーニング・カレンダー(直近30日 部位×日マトリクス) ============
+// ============ トレーニング・カレンダー(週グリッド: 曜日×週で分割リズムを見る) ============
+const WEEK_LABELS = ['今週', '先週', '2週前', '3週前', '4週前', '5週前'];
+const DOW_JA = ['月', '火', '水', '木', '金', '土', '日'];
+
+/** ISO日付の曜日。月=0 … 日=6(週は月曜始まり)。 */
+function isoDow(iso: string): number {
+  const [y, m, d] = iso.split('-').map(Number);
+  return (new Date(y!, m! - 1, d!).getDay() + 6) % 7;
+}
+/** 2つのISO日付の経過日数(from→to)。 */
+function isoDaysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}
+
 function TrainingCalendar() {
-  const days = 30;
+  const WEEKS = 5;
+  const days = WEEKS * 7;
   const cal = useQuery({
     queryKey: ['training-calendar', days],
     queryFn: () => api.muscleCalendar(days),
   });
-  // 列: 最古→当日(右端が今日)。日付は JST で生成。
   const today = todayJst();
-  const dates = Array.from({ length: days }, (_, i) => shiftDate(today, -(days - 1 - i)));
-  const sessionDates = new Set(cal.data?.sessionDates ?? []);
-  // muscle → 表示グループ。グループ別 date→sets を集計。
+
+  // muscle(16筋群) → 表示グループ(6区分)、date → (region → セット数) を集計。
   const muscleToRegion = new Map<string, string>();
   for (const g of REGION_GROUPS) for (const m of g.muscles) muscleToRegion.set(m, g.key);
-  const grid = new Map<string, Map<string, number>>(REGION_GROUPS.map((g) => [g.key, new Map()]));
+  const byDate = new Map<string, Map<string, number>>();
   for (const cell of cal.data?.cells ?? []) {
     const region = muscleToRegion.get(cell.muscle);
     if (!region) continue;
-    const row = grid.get(region);
-    if (row) row.set(cell.date, (row.get(cell.date) ?? 0) + cell.sets);
+    let row = byDate.get(cell.date);
+    if (!row) {
+      row = new Map();
+      byDate.set(cell.date, row);
+    }
+    row.set(region, (row.get(region) ?? 0) + cell.sets);
   }
-  const trainedDays = dates.filter((d) => sessionDates.has(d)).length;
+  const sessionDates = new Set(cal.data?.sessionDates ?? []);
+
+  // 今週の月曜から過去 WEEKS 週(各週 月→日, weeks[0]=今週)。
+  const thisMonday = shiftDate(today, -isoDow(today));
+  const weeks = Array.from({ length: WEEKS }, (_, w) =>
+    Array.from({ length: 7 }, (_, i) => shiftDate(shiftDate(thisMonday, -7 * w), i)),
+  );
+
+  // 各部位の最終実施からの経過日(週グリッドでは読みにくい「次にやる部位」を補完)。
+  const lastAgo = new Map<string, number | null>();
+  for (const g of REGION_GROUPS) {
+    let latest: string | null = null;
+    for (const [date, row] of byDate)
+      if ((row.get(g.key) ?? 0) > 0 && (!latest || date > latest)) latest = date;
+    lastAgo.set(g.key, latest ? isoDaysBetween(latest, today) : null);
+  }
+
+  const oldest = weeks[WEEKS - 1]![0]!;
+  const trainedDays = [...sessionDates].filter((d) => d >= oldest && d <= today).length;
 
   return (
     <Card
       title="部位カレンダー"
       right={
         <span className="text-[11px] text-faint">
-          直近30日 · <span className="font-semibold text-muted">{trainedDays}</span>日実施
+          直近{WEEKS}週 · <span className="font-semibold text-muted">{trainedDays}</span>日実施
         </span>
       }
     >
       {cal.isLoading ? (
-        <div className="h-24 animate-pulse rounded-lg bg-line/40" />
+        <div className="h-44 animate-pulse rounded-lg bg-line/40" />
       ) : trainedDays === 0 ? (
-        <Empty note="この30日間のワークアウト記録がありません。" />
+        <Empty note="この期間のワークアウト記録がありません。" />
       ) : (
         <>
-          <div className="space-y-[3px]">
+          {/* 最終実施サマリ: 空きが長い=次に鍛える候補。7日以上は要刺激。 */}
+          <div className="mb-3 flex flex-wrap gap-1.5">
             {REGION_GROUPS.map((g) => {
-              const row = grid.get(g.key);
-              const count = dates.filter((d) => (row?.get(d) ?? 0) > 0).length;
+              const d = lastAgo.get(g.key) ?? null;
+              const stale = d == null || d >= 7;
               return (
-                <div key={g.key} className="flex items-center gap-1.5">
-                  <span className="w-6 shrink-0 text-right text-[11px] font-semibold text-muted">
-                    {g.label}
+                <span
+                  key={g.key}
+                  className="flex items-center gap-1 rounded-full border border-line bg-paper px-2 py-0.5 text-[11px]"
+                >
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: g.color }} />
+                  <span className="font-semibold text-muted">{g.label}</span>
+                  <span className={stale ? 'font-bold text-accent-ink' : 'tnum text-faint'}>
+                    {d == null ? '—' : d === 0 ? '今日' : `${d}日`}
                   </span>
-                  <div
-                    className="grid flex-1 gap-[2px]"
-                    style={{ gridTemplateColumns: `repeat(${days}, minmax(0, 1fr))` }}
-                  >
-                    {dates.map((d, i) => {
-                      const n = row?.get(d) ?? 0;
-                      const a = setAlpha(n);
-                      const isToday = i === days - 1;
-                      return (
-                        <div
-                          // biome-ignore lint/suspicious/noArrayIndexKey: 固定長の日付列(並べ替えなし)
-                          key={`${g.key}:${i}`}
-                          title={n > 0 ? `${formatDateForDisplay(d)} ${g.label} ${n}set` : d}
-                          className={`h-2.5 rounded-[2px] ${a === 0 ? 'bg-line/50' : ''} ${isToday ? 'ring-1 ring-ink/15' : ''}`}
-                          style={a === 0 ? undefined : { backgroundColor: g.color, opacity: a }}
-                        />
-                      );
-                    })}
-                  </div>
-                  <span className="w-7 shrink-0 text-right text-[11px] tnum text-faint">
-                    {count}
-                  </span>
-                </div>
+                </span>
               );
             })}
           </div>
-          {/* 日付の目盛り(左=最古 / 右=今日) */}
-          <div className="mt-1.5 flex justify-between pl-[30px] pr-[34px] text-[9px] text-faint">
-            <span>{formatDateForDisplay(dates[0]!)}</span>
-            <span>{formatDateForDisplay(dates[Math.floor(days / 2)]!)}</span>
-            <span>今日</span>
+
+          {/* 曜日ヘッダ */}
+          <div className="flex items-center gap-1">
+            <span className="w-9 shrink-0" />
+            <div className="grid flex-1 grid-cols-7 gap-1 text-center text-[10px] font-semibold text-faint">
+              {DOW_JA.map((d, i) => (
+                <span key={d} className={i >= 5 ? 'text-muted/60' : undefined}>
+                  {d}
+                </span>
+              ))}
+            </div>
+          </div>
+          {/* 週グリッド(上=今週) */}
+          <div className="mt-1 space-y-1">
+            {weeks.map((week, wi) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: 固定長の週行(並べ替えなし)
+              <div key={wi} className="flex items-center gap-1">
+                <span className="w-9 shrink-0 text-[10px] font-semibold text-faint">
+                  {WEEK_LABELS[wi]}
+                </span>
+                <div className="grid flex-1 grid-cols-7 gap-1">
+                  {week.map((date) => (
+                    <DayCell
+                      key={date}
+                      date={date}
+                      regions={REGION_GROUPS.filter((g) => (byDate.get(date)?.get(g.key) ?? 0) > 0)}
+                      sets={byDate.get(date)}
+                      isToday={date === today}
+                      isFuture={date > today}
+                      rested={sessionDates.has(date)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 凡例 */}
+          <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted">
+            {REGION_GROUPS.map((g) => (
+              <span key={g.key} className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: g.color }} />
+                {g.label}
+              </span>
+            ))}
           </div>
           <p className="mt-2 text-[10px] leading-snug text-faint">
-            ※ 各セットを種目の主働筋に帰属。濃いほどセット数多 ·
-            右端の数字は30日の実施日数。空の列はレスト日。
+            ※ ドット=その日の主働筋の部位 · 上が今週 · 空マスはレスト日。
+            上部チップは最終実施からの経過(7日以上は要刺激)。
           </p>
         </>
       )}
     </Card>
+  );
+}
+
+function DayCell({
+  date,
+  regions,
+  sets,
+  isToday,
+  isFuture,
+  rested,
+}: {
+  date: string;
+  regions: Array<{ key: string; label: string; color: string }>;
+  sets: Map<string, number> | undefined;
+  isToday: boolean;
+  isFuture: boolean;
+  rested: boolean;
+}) {
+  if (isFuture) return <div className="aspect-square" />;
+  const trained = regions.length > 0;
+  const title = trained
+    ? `${formatDateForDisplay(date)} ${regions.map((r) => `${r.label}${sets?.get(r.key) ?? 0}`).join(' ')}`
+    : rested
+      ? `${formatDateForDisplay(date)} 実施(補助のみ)`
+      : `${formatDateForDisplay(date)} レスト`;
+  return (
+    <div
+      title={title}
+      className={`flex aspect-square items-center justify-center rounded-md border ${
+        isToday ? 'ring-2 ring-ink/25' : ''
+      } ${
+        trained
+          ? 'border-line/40 bg-card'
+          : rested
+            ? 'border-line bg-line/30'
+            : 'border-line/50 bg-line/15'
+      }`}
+    >
+      {trained ? (
+        <div className="flex flex-wrap content-center items-center justify-center gap-0.5 p-1">
+          {regions.slice(0, 4).map((r) => (
+            <span
+              key={r.key}
+              className="h-2 w-2 rounded-full"
+              style={{ backgroundColor: r.color }}
+            />
+          ))}
+        </div>
+      ) : rested ? (
+        <span className="h-1 w-1 rounded-full bg-faint/60" />
+      ) : null}
+    </div>
   );
 }
 
@@ -638,6 +740,28 @@ function RecentWorkouts({ onEdit }: { onEdit: (id: string) => void }) {
   );
 }
 
+/** 種目のセット列を表示用に圧縮: main は重量ごとに reps をまとめ(80kg ×8,8,7)、warmup は別。top=最大重量。 */
+function summarizeSets(
+  sets: Array<{
+    setType: string;
+    entryValue: number | null;
+    entryUnit: string;
+    reps: number | null;
+    rpe: number | null;
+  }>,
+) {
+  const main = sets.filter((s) => s.setType !== 'warmup');
+  const warm = sets.filter((s) => s.setType === 'warmup');
+  const groups: Array<{ value: number | null; unit: string; reps: Array<number | null> }> = [];
+  for (const s of main) {
+    const last = groups[groups.length - 1];
+    if (last && last.value === s.entryValue && last.unit === s.entryUnit) last.reps.push(s.reps);
+    else groups.push({ value: s.entryValue, unit: s.entryUnit, reps: [s.reps] });
+  }
+  const top = main.reduce((m, s) => Math.max(m, s.entryValue ?? 0), 0);
+  return { groups, warm, top };
+}
+
 function WorkoutSessionRow({
   session: s,
   initiallyOpen,
@@ -688,25 +812,44 @@ function WorkoutSessionRow({
               読み込みに失敗。タップで再試行
             </button>
           )}
-          {detail.data?.exercises.map((ex) => (
-            <div key={ex.exerciseId} className="mt-2 first:mt-0">
-              <div className="text-sm font-medium text-ink">{ex.name_en}</div>
-              {ex.sets.map((set, i) => (
-                <div
-                  // biome-ignore lint/suspicious/noArrayIndexKey: 読み取り専用の静的リスト(並べ替え/挿入なし)
-                  key={`${ex.exerciseId}:${i}`}
-                  className="tnum text-[11px] leading-relaxed text-faint"
-                >
-                  {set.setType === 'warmup' && (
-                    <span className="mr-1 rounded bg-paper px-1 text-[9px] font-bold">W</span>
-                  )}
-                  {i + 1}: {set.entryValue ?? '—'}
-                  {set.entryUnit} × {set.reps ?? '—'}reps
-                  {set.rpe != null ? ` RPE${set.rpe}` : ''}
+          {detail.data?.exercises.map((ex) => {
+            const { groups, warm, top } = summarizeSets(ex.sets);
+            return (
+              <div key={ex.exerciseId} className="mt-2.5 first:mt-0">
+                <div className="text-sm font-semibold text-ink">{ex.name_en}</div>
+                <div className="mt-0.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                  {groups.map((g, gi) => (
+                    <span
+                      // biome-ignore lint/suspicious/noArrayIndexKey: 読み取り専用の静的リスト(並べ替えなし)
+                      key={gi}
+                      className="tnum text-[12px] text-muted"
+                    >
+                      <span
+                        className={
+                          g.value != null && g.value === top
+                            ? 'font-bold text-ink'
+                            : 'font-semibold text-ink/80'
+                        }
+                      >
+                        {g.value ?? 'BW'}
+                        {g.unit}
+                      </span>
+                      {' ×'}
+                      {g.reps.map((r) => r ?? '—').join(',')}
+                    </span>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ))}
+                {warm.length > 0 && (
+                  <div className="tnum mt-0.5 text-[11px] text-faint">
+                    <span className="mr-1 rounded bg-paper px-1 text-[9px] font-bold">W</span>
+                    {warm
+                      .map((w) => `${w.entryValue ?? 'BW'}${w.entryUnit}×${w.reps ?? '—'}`)
+                      .join('  ')}
+                  </div>
+                )}
+              </div>
+            );
+          })}
           <div className="mt-2.5 flex items-center gap-1">
             <button
               type="button"
