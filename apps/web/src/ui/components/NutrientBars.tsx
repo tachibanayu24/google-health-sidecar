@@ -26,6 +26,15 @@ export function NutrientBars({
 
   return (
     <div className="space-y-2.5">
+      {values.kcal != null && (
+        <Row
+          label="エネルギー"
+          value={values.kcal}
+          target={target?.target_kcal}
+          color="var(--color-ink)"
+          unit="kcal"
+        />
+      )}
       <Row
         label="Protein"
         value={values.p}
@@ -70,6 +79,7 @@ function Row({
   value,
   target,
   color,
+  unit = 'g',
   inverted = false,
   uncaptured = false,
   contribution,
@@ -78,6 +88,7 @@ function Row({
   value: number;
   target?: number;
   color: string;
+  unit?: string;
   inverted?: boolean;
   uncaptured?: boolean;
   contribution?: number;
@@ -111,7 +122,7 @@ function Row({
         >
           {uncaptured ? '—' : rounded}
           {t ? ` / ${Math.round(t)}` : ''}
-          {label === '食塩' || label === '食物繊維' ? 'g' : 'g'}
+          {unit}
           {over && !inverted ? ` (+${Math.round(value - t)})` : ''}
           {inverted && over ? ' ⚠' : ''}
           {uncaptured ? ' 未捕捉' : ''}
