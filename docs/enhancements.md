@@ -31,7 +31,7 @@
 | バケツ | 採用 | 落とす(Claudeに任せる) |
 |---|---|---|
 | 即やる(A・アプリnative) | ①ライブPR演出+共有 / ⑫前回超えプレフィル / ⑧MEV-MAV可視化 /(⑯⑮⑪も安い) | — |
-| 次(B・MCP露出) | **`get_readiness`** / **`get_weekly_summary`**(/weekly-summary を MCP 化) / **`get_nutrition_status`**(適応型TDEE) / volume landmarks の MCP 露出。土台=④ベースライン計算 + ⑩TDEE計算 | — |
+| 次(B・MCP露出) | ✅ **`get_readiness`**(2026-06-03 実装, design.md §8.8) / ✅ **`get_weekly_summary`**(実装済) / **`get_nutrition_status`**(適応型TDEE) / volume landmarks の MCP 露出。土台=✅④ベースライン計算 + ⑩TDEE計算 | — |
 | プッシュのみアプリ | ⑦ N-of-M 逸脱アラート(限定的) | — |
 | 作らない | — | ②朝ブリーフ / ③講評文・チップ / ⑥相関エンジン / ⑬AI提案 / ⑭停滞検知 |
 
@@ -75,7 +75,8 @@
 
 ## Tier 2 — 二層構造を活かす(他社に作れない固有資産)
 
-### 4. 個人ベースライン基盤(14日 vs 8週)共通関数 〔中〕— ※他案の土台
+### 4. 個人ベースライン基盤(14日 vs 8週)共通関数 〔中〕— ※他案の土台 ✅実装済(2026-06-03, design.md §8.8)
+> 実装は「直近最大60日の中央値±MAD による robust z」。当初案の「14日 vs 8週」より単純な単一ローリング窓 + 学習ゲート(14日)に確定。
 - 概要: 各 daily metric の「あなたの平常範囲」を出す純関数。Readiness/通知/MCP回答が全部これを参照。
 - 設計:
   - core services に純関数: 直近14日の中央値±MAD を 直近8週中央値と比較し `low|normal|high|learning` を返す。
@@ -84,7 +85,8 @@
   - read 専用派生(§8.5 write 経路に無関係)。
 - 参照: Oura(HRV Balance), Garmin(HRV Status 7日), Apple(typical range)。
 
-### 5. Readiness信号(緑/黄/赤)+ `get_readiness` MCPツール 〔中〕
+### 5. Readiness信号(緑/黄/赤)+ `get_readiness` MCPツール 〔中〕 ✅実装済(2026-06-03, design.md §8.8)
+> 実装差分: 総合は N-of-M(2指標同時逸脱で赤)。中核 HRV は ln→7日ローリング平均。呼吸数のみ絶対閾値。皮膚温は文脈指標として組込。ACWR 同梱は将来(⑨)。
 - 概要: 朝イチの一枚。偽スコアは出さず「内訳バー + 実測値 + 平常範囲」。
 - 設計:
   - 各指標を ④ の関数で判定 → contributor バーを縦に(例「HRV 48ms / 平常 52-68ms ↓」)。

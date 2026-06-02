@@ -10,7 +10,7 @@
 - **React 19 + Vite + @cloudflare/vite-plugin**(SPA と Worker API を1プロジェクトで同居)
 - Tailwind v4 / TanStack Query / lucide / recharts / react-body-highlighter
 - **Hono**(API + 認証ゲート) / Google OIDC(系統A ログイン)+ GH OAuth Pattern B(系統B, **接続済・daily pull / push 稼働**)
-- pnpm workspace モノレポ: `packages/core`(ドメイン/DB/services/providers/auth) + `apps/web`(UI+API) + `apps/mcp`(**MCP サーバ, 21ツール・本番稼働・claude.ai 接続済**) + `tools`(OAuth CLI / probe)
+- pnpm workspace モノレポ: `packages/core`(ドメイン/DB/services/providers/auth) + `apps/web`(UI+API) + `apps/mcp`(**MCP サーバ, 22ツール・本番稼働・claude.ai 接続済**) + `tools`(OAuth CLI / probe)
 
 ## データフロー(トレーナーAI / Logbook / GH)
 
@@ -96,7 +96,7 @@ pnpm --filter @ghs/web build      # vite build(client + worker)
 
 - **M0(完了)**: モノレポ基盤、ドメイン/metrics、D1スキーマ、HealthProvider抽象 + GH v4 provider(discovery doc 準拠)、db層、auth(Pattern B)、OAuth CLI。
 - **M1(完了)**: services層(全write一点経由)、/api + 認証ゲート、PWA UI(Today / ワークアウトロガー[前回値・kg/lb・部位フィルタ] / 食事[PFC・食塩相当量・オートコンプリート・プリセット] / 人体筋肉ヒートマップ[前面+背面] / 部位カレンダー・頻度 / トレンドチャート / 設定)、Googleログイン、GH 実トークン接続(daily pull / push 稼働)。
-- **M2(完了)**: `apps/mcp` MCP サーバ(21ツール: 記録→分析→週次サマリ→エネルギー収支→GH反映→取消)、`MCP_SHARED_SECRET`+IP 二次防御、claude.ai Custom Connector 接続、種目エイリアス辞書。
+- **M2(完了)**: `apps/mcp` MCP サーバ(22ツール: 記録→分析→週次サマリ→コンディション信号→エネルギー収支→GH反映→取消)、`MCP_SHARED_SECRET`+IP 二次防御、claude.ai Custom Connector 接続、種目エイリアス辞書。
 - スキーマは `packages/core/src/db/migrations/0001-0015`(22 テーブル: `exercise_aliases` 含む。0008/0014 は再構築)。詳細は `docs/design.md` / `docs/mcp-design.md` / `docs/remaining-tasks.md`。
 
 ## オーナー側セットアップ(GH連携・本番)
