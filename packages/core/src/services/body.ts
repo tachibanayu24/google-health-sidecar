@@ -2,6 +2,7 @@ import { insertStmt, runBatch } from '../db/batch-helpers';
 import { ulid } from '../db/ids';
 import { markPushFailed, markPushSynced, pendingPushStmt } from '../db/repositories/sync';
 import type { WeightUnit } from '../domain/enums';
+import { WRITE_DATATYPE } from '../providers/google-health/discovery-pin';
 import { nowSec, toJstDateString } from '../util/date';
 import { errorMessage } from '../util/errors';
 import { toKg } from '../util/units';
@@ -82,4 +83,42 @@ export async function logWeight(
     }
   }
   return { id, ghPushed };
+}
+
+/**
+ * 体重/体脂肪の取消(§8.5)。D1 正本を削除し、GH に push 済みなら weight/body-fat datapoint を
+ * best-effort で batchDelete。台帳(body_metric / body_metric_fat)も同 batch で削除。
+ */
+export async function deleteBodyMetric(
+  ctx: AppContext,
+  id: string,
+): Promise<{ deleted: boolean; ghDeleted: boolean }> {
+  const rows = await ctx.db.raw<{ entity_type: string; gh_datapoint_id: string | null }>(
+    "SELECT entity_type, gh_datapoint_id FROM gh_sync_state WHERE entity_id=? AND entity_type IN ('body_metric','body_metric_fat')",
+    id,
+  );
+  const weightDp = rows.find((r) => r.entity_type === 'body_metric')?.gh_datapoint_id ?? null;
+  const fatDp = rows.find((r) => r.entity_type === 'body_metric_fat')?.gh_datapoint_id ?? null;
+  let ghDeleted = false;
+  const provider = getProvider(ctx);
+  for (const [dpId, dataType] of [
+    [weightDp, WRITE_DATATYPE.weight],
+    [fatDp, WRITE_DATATYPE.bodyFat],
+  ] as const) {
+    if (!dpId) continue;
+    try {
+      await provider.batchDelete(dataType, [dpId]);
+      ghDeleted = true;
+    } catch {
+      /* best-effort: GH 失敗でも D1 正本は削除 */
+    }
+  }
+  await runBatch(ctx.db, [
+    {
+      sql: "DELETE FROM gh_sync_state WHERE entity_id=? AND entity_type IN ('body_metric','body_metric_fat')",
+      binds: [id],
+    },
+    { sql: 'DELETE FROM body_metrics WHERE id=?', binds: [id] },
+  ]);
+  return { deleted: true, ghDeleted };
 }

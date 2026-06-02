@@ -15,8 +15,12 @@ export async function searchExercises(db: Db, opts: ExerciseSearchOpts = {}): Pr
   const where: string[] = [];
   const binds: unknown[] = [];
   if (opts.query) {
-    where.push('(name_en LIKE ? OR name_ja LIKE ?)');
-    binds.push(`%${opts.query}%`, `%${opts.query}%`);
+    // name_en / name_ja に加え、エイリアス辞書(日本語俗称・マシンブランド名・略称, 0012)も横断一致。
+    const pat = `%${opts.query}%`;
+    where.push(
+      '(name_en LIKE ? OR name_ja LIKE ? OR id IN (SELECT exercise_id FROM exercise_aliases WHERE alias LIKE ?))',
+    );
+    binds.push(pat, pat, pat);
   }
   if (opts.equipment) {
     where.push('equipment = ?');

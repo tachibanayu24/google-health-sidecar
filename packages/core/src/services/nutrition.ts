@@ -1,6 +1,6 @@
 import { insertStmt, runBatch, type Stmt } from '../db/batch-helpers';
 import { ulid } from '../db/ids';
-import { bumpPresetUse, insertMealPreset } from '../db/repositories/meals';
+import { bumpPresetUse, insertMealPreset, listMealPresets } from '../db/repositories/meals';
 import {
   markPushFailed,
   markPushSynced,
@@ -9,9 +9,10 @@ import {
 } from '../db/repositories/sync';
 import type { MealInputMethod, MealType } from '../domain/enums';
 import { MEAL_TYPE_TO_GH } from '../domain/enums';
+import { MealItemInputSchema } from '../domain/inputs';
 import { WRITE_DATATYPE } from '../providers/google-health/discovery-pin';
 import { nowSec, todayJst } from '../util/date';
-import { errorMessage } from '../util/errors';
+import { DomainError, errorMessage } from '../util/errors';
 import { type AppContext, getProvider } from './context';
 
 export interface MealItemInput {
@@ -121,6 +122,53 @@ export async function saveMealPreset(
     defaultMealType: input.defaultMealType,
   });
   return { presetId };
+}
+
+/**
+ * プリセットから食事を記録(§9.4)。`servings` 倍率で全栄養素を按分する。
+ * 例: 30g の WPI を 1 serving として登録 → 40g 摂取は servings=1.3333 で各値 ×1.3333。
+ * スケールは入力整形に留め、書き込みは logMeal(§8.5 全write一点経由)へ委譲。
+ */
+export async function logMealFromPreset(
+  ctx: AppContext,
+  input: {
+    presetId: string;
+    servings?: number;
+    mealType?: MealType;
+    date?: string;
+    loggedAtSec?: number;
+    note?: string;
+    clientRequestId?: string;
+  },
+): Promise<{ mealId: string; ghPushed: boolean }> {
+  const preset = (await listMealPresets(ctx.db)).find((p) => p.id === input.presetId);
+  if (!preset) throw new DomainError(`プリセットが見つかりません: "${input.presetId}"`);
+  const base = MealItemInputSchema.array().parse(JSON.parse(preset.items_json));
+  const m = input.servings ?? 1;
+  if (m <= 0) throw new DomainError('servings は正の数で指定してください');
+  const r1 = (n: number) => Math.round(n * 10) / 10; // 0.1 単位に丸め
+  const scale = (n: number | undefined) => (n == null ? undefined : r1(n * m));
+  const items = base.map((it) => ({
+    ...it,
+    quantity: r1((it.quantity ?? 1) * m),
+    caloriesKcal: r1(it.caloriesKcal * m),
+    proteinG: scale(it.proteinG),
+    fatG: scale(it.fatG),
+    carbsG: scale(it.carbsG),
+    fiberG: scale(it.fiberG),
+    sugarG: scale(it.sugarG),
+    sodiumMg: scale(it.sodiumMg),
+  }));
+  return logMeal(ctx, {
+    mealType: input.mealType ?? (preset.default_meal_type as MealType),
+    items,
+    presetId: input.presetId,
+    date: input.date,
+    loggedAtSec: input.loggedAtSec,
+    note: input.note,
+    inputMethod: 'preset',
+    clientRequestId: input.clientRequestId,
+  });
 }
 
 async function pushMeal(ctx: AppContext, mealId: string, input: LogMealInput): Promise<boolean> {

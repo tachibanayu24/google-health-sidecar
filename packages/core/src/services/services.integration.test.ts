@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { runBatch } from '../db/batch-helpers';
 import { Db } from '../db/client';
 import { ulid } from '../db/ids';
+import { searchExercises } from '../db/repositories/exercises';
 import {
   getPendingPushes,
   markPushDeferred,
@@ -23,11 +24,17 @@ import type {
   ReconcileResult,
 } from '../providers/HealthProvider';
 import { todayJst } from '../util/date';
-import { logWeight } from './body';
+import { deleteBodyMetric, logWeight } from './body';
 import type { AppContext } from './context';
-import { deleteMeal, logMeal, saveMealPreset } from './nutrition';
+import { deleteMeal, logMeal, logMealFromPreset, saveMealPreset } from './nutrition';
 import { retryPendingPushes, runDailyPull } from './sync';
-import { getExerciseHistory, getMuscleCalendar, getMuscleVolume, saveWorkout } from './workout';
+import {
+  getExerciseHistory,
+  getMuscleCalendar,
+  getMuscleVolume,
+  getTrainingFrequency,
+  saveWorkout,
+} from './workout';
 
 /** テスト用 fake provider: push 呼び出しを記録し、reconcile はタイプ別の固定点を返す。 */
 class FakeProvider implements HealthProvider {
@@ -516,5 +523,69 @@ describe('分析(volume / calendar / history)', () => {
     const mains = sets.filter((s) => s.set_type === 'main');
     expect(mains.length).toBe(3);
     expect(mains[0]?.e1rm_kg ?? 0).toBeGreaterThan(30);
+  });
+
+  it('getTrainingFrequency: 胸の最終実施日/週次、未実施部位は null/0', async () => {
+    const ctx = makeCtx();
+    await seedBench(ctx); // dumbbell-bench-press(chest primary)
+    const freq = await getTrainingFrequency(ctx, { weeks: 4 });
+    const chest = freq.find((r) => r.region === '胸');
+    expect(chest?.last_trained_date).toBe(todayJst());
+    expect(chest?.days_since).toBe(0);
+    expect(chest?.weekly_counts[0]).toBe(1);
+    const legs = freq.find((r) => r.region === '脚');
+    expect(legs?.last_trained_date).toBeNull();
+    expect(legs?.weekly_counts).toEqual([0, 0, 0, 0]);
+  });
+});
+
+describe('プリセット按分(logMealFromPreset)', () => {
+  it('servings 倍率で全栄養素をスケールして記録する(WPI 30g→40g = 1.3333)', async () => {
+    const ctx = makeCtx();
+    const { presetId } = await saveMealPreset(ctx, {
+      name: 'WPI 30g',
+      defaultMealType: 'Anytime',
+      items: [{ foodName: 'WPI', caloriesKcal: 113, proteinG: 27, fatG: 0.6, carbsG: 1.8 }],
+    });
+    const r = await logMealFromPreset(ctx, { presetId, servings: 1.3333, mealType: 'Anytime' });
+    const [item] = await ctx.db.raw<{ calories_kcal: number; protein_g: number; quantity: number }>(
+      'SELECT calories_kcal, protein_g, quantity FROM meal_items WHERE meal_id = ?',
+      r.mealId,
+    );
+    expect(item?.calories_kcal).toBe(150.7); // 113 × 1.3333 = 150.66 → 0.1丸め
+    expect(item?.protein_g).toBe(36); // 27 × 1.3333 = 35.999 → 36.0
+    const [meal] = await ctx.db.raw<{ input_method: string }>(
+      'SELECT input_method FROM meals WHERE id = ?',
+      r.mealId,
+    );
+    expect(meal?.input_method).toBe('preset');
+  });
+
+  it('存在しない presetId は DomainError', async () => {
+    const ctx = makeCtx();
+    await expect(logMealFromPreset(ctx, { presetId: 'nope' })).rejects.toThrow();
+  });
+});
+
+describe('体重の取消(deleteBodyMetric)', () => {
+  it('D1 行と台帳を削除し、GH datapoint も best-effort 削除する', async () => {
+    const provider = new FakeProvider();
+    const ctx = makeCtx({ provider, pushInline: true });
+    const { id } = await logWeight(ctx, { entryValue: 71.6, entryUnit: 'kg' });
+    const res = await deleteBodyMetric(ctx, id);
+    expect(res.deleted).toBe(true);
+    expect(res.ghDeleted).toBe(true); // synced 済 datapoint を batchDelete
+    expect(provider.deleteCalls.some((c) => c.type === 'weight')).toBe(true);
+    const n = async (sql: string) => (await ctx.db.raw<{ n: number }>(sql, id))[0]?.n;
+    expect(await n('SELECT count(*) AS n FROM body_metrics WHERE id = ?')).toBe(0);
+    expect(await n('SELECT count(*) AS n FROM gh_sync_state WHERE entity_id = ?')).toBe(0);
+  });
+});
+
+describe('種目エイリアス検索(searchExercises alias)', () => {
+  it('名前に無い略称(OHP)でも alias 経由でヒットする', async () => {
+    const ctx = makeCtx();
+    const rows = await searchExercises(ctx.db, { query: 'OHP' });
+    expect(rows.some((e) => e.id === 'overhead-press')).toBe(true);
   });
 });
