@@ -117,15 +117,18 @@ async function store(ctx: AppContext, dt: ReadDataType, p: ProviderDataPoint): P
 //   既存GH食事の一回限りバックフィルは tools 側で実施済。定期 pull は echo(MCP記録の二重取込)を生むため不採用。
 
 /**
- * 歩数の日次合計集計(§5.4)。GH の `steps` は分単位 interval なので、直近数日分の interval を
- * reconcile し JST 日付で合算 → daily_metrics(steps) に overwrite。/5 cron 全部では重い(429/subrequest)
- * ため、scheduled 側で日数回だけ呼ぶ(時刻ゲート)。cursor は使わず固定窓を毎回読み直して overwrite。
+ * 分単位 interval 型(steps / active-energy-burned)の日次合計集計(§5.4)。直近数日分の interval を
+ * reconcile し JST 日付で合算 → daily_metrics に overwrite。/5 cron 全部では重い(429/subrequest)ため
+ * scheduled 側で日数回だけ呼ぶ(時刻ゲート)。cursor は使わず固定窓を毎回読み直して overwrite。
  */
-export async function pullStepsDaily(
+async function pullIntervalDaily(
   ctx: AppContext,
-  opts: { days?: number } = {},
+  ghDataType: string,
+  metric: DailyMetricKind,
+  unit: string,
+  opts: { days?: number },
 ): Promise<{ dates: number }> {
-  const dt = READ_DATATYPES.find((d) => d.ghDataType === 'steps');
+  const dt = READ_DATATYPES.find((d) => d.ghDataType === ghDataType);
   if (!dt) return { dates: 0 };
   const provider = getProvider(ctx);
   const now = nowSec();
@@ -134,7 +137,7 @@ export async function pullStepsDaily(
   const sums = new Map<string, number>();
   let cursor: string | null = null;
   do {
-    const { points, cursor: next } = await provider.reconcileDataPoints('steps', filter, cursor);
+    const { points, cursor: next } = await provider.reconcileDataPoints(ghDataType, filter, cursor);
     for (const p of points) {
       if (p.value == null) continue;
       const date = toJstDateString((p.timeSec || now) * 1000);
@@ -144,15 +147,23 @@ export async function pullStepsDaily(
   } while (cursor);
   for (const [date, total] of sums) {
     await upsertDailyMetric(ctx.db, {
-      metric: 'steps' as DailyMetricKind,
+      metric,
       value: Math.round(total),
-      unit: 'count',
+      unit,
       date,
       ghExternalId: null,
     });
   }
   return { dates: sums.size };
 }
+
+/** 歩数の日次合計(§5.4)。 */
+export const pullStepsDaily = (ctx: AppContext, opts: { days?: number } = {}) =>
+  pullIntervalDaily(ctx, 'steps', 'steps', 'count', opts);
+
+/** 消費カロリー(active)の日次合計(§5.4・エネルギー収支)。GH `active-energy-burned`=分単位kcal。 */
+export const pullActiveEnergyDaily = (ctx: AppContext, opts: { days?: number } = {}) =>
+  pullIntervalDaily(ctx, 'active-energy-burned', 'active_energy_kcal', 'kcal', opts);
 
 /**
  * gh_sync_state の pending/failed を少数ずつ push(毎30分 cron スロット, §12.2)。

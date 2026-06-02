@@ -1,5 +1,6 @@
 import {
   makeContext,
+  pullActiveEnergyDaily,
   pullStepsDaily,
   retryPendingPushes,
   runDailyPull,
@@ -41,7 +42,11 @@ export default {
         await staleAbandonedSessions(app.db);
         await runDailyPull(app); // GH→D1 reconcile(センシングのみ: weight/sleep/HRV等。own-write除外・冪等)
         // ※ 食事(nutrition)は GH→アプリの pull をしない。食事は app/MCP が D1 正本→GH push の一方向(§5.2)。
-        if (stepsSlot) await pullStepsDaily(app, { days: 2 }).catch(() => undefined); // 歩数=日次集計(重いので日3回)
+        if (stepsSlot) {
+          // 分単位 interval の日次集計(重いので日3回・時刻ゲート)。歩数 + 消費カロリー(エネルギー収支)。
+          await pullStepsDaily(app, { days: 2 }).catch(() => undefined);
+          await pullActiveEnergyDaily(app, { days: 2 }).catch(() => undefined);
+        }
         await retryPendingPushes(app, { max: 20 }); // 失敗/未送 push の再送
       })(),
     );

@@ -27,7 +27,7 @@ import { todayJst } from '../util/date';
 import { deleteBodyMetric, logWeight } from './body';
 import type { AppContext } from './context';
 import { deleteMeal, logMeal, logMealFromPreset, saveMealPreset } from './nutrition';
-import { retryPendingPushes, runDailyPull } from './sync';
+import { pullActiveEnergyDaily, retryPendingPushes, runDailyPull } from './sync';
 import {
   getExerciseHistory,
   getMuscleCalendar,
@@ -589,5 +589,28 @@ describe('種目エイリアス検索(searchExercises alias)', () => {
     const ctx = makeCtx();
     const rows = await searchExercises(ctx.db, { query: 'OHP' });
     expect(rows.some((e) => e.id === 'overhead-press')).toBe(true);
+  });
+});
+
+describe('消費カロリー日次集計(pullActiveEnergyDaily)', () => {
+  it('分単位 kcal を JST 日付で合算して daily_metric(active_energy_kcal) に格納', async () => {
+    const ctx = makeCtx({
+      provider: new FakeProvider({
+        pointsByType: {
+          'active-energy-burned': [
+            { id: 'a', timeSec: 1_750_000_000, value: 5 },
+            { id: 'b', timeSec: 1_750_000_060, value: 7 },
+            { id: 'c', timeSec: 1_750_000_120, value: 3 },
+          ],
+        },
+      }),
+    });
+    const r = await pullActiveEnergyDaily(ctx, { days: 7 });
+    expect(r.dates).toBe(1); // 同一 JST 日に合算
+    const [m] = await ctx.db.raw<{ value: number; unit: string }>(
+      "SELECT value, unit FROM daily_metrics WHERE metric='active_energy_kcal'",
+    );
+    expect(m?.value).toBe(15); // 5+7+3
+    expect(m?.unit).toBe('kcal');
   });
 });

@@ -151,6 +151,7 @@ export const DailyMetricKind = z.enum([
   'resp_rate',
   'skin_temp_c',
   'steps',
+  'active_energy_kcal',
 ]);
 export type DailyMetricKind = z.infer<typeof DailyMetricKind>;
 

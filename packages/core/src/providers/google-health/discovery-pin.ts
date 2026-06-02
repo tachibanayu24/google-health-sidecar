@@ -108,6 +108,16 @@ export const READ_DATATYPES: ReadDataType[] = [
     store: { kind: 'daily_metric', metric: 'skin_temp_c', unit: 'celsius' },
     unverified: true,
   },
+  {
+    // 消費カロリー(active)。実機プローブ(2026-06-02): active-energy-burned が有効・分単位 interval の kcal。
+    // total-*/daily-*/calories 系は全て Invalid。歩数と同様 runDailyPull では集計せず(unverified で skip)、
+    // pullActiveEnergyDaily が時刻ゲートで日次合計して daily_metric(active_energy_kcal) に overwrite。
+    ghDataType: 'active-energy-burned',
+    valueField: 'activeEnergyBurned',
+    timeShape: 'interval',
+    store: { kind: 'daily_metric', metric: 'active_energy_kcal', unit: 'kcal' },
+    unverified: true,
+  },
 ];
 
 function camelToSnake(s: string): string {

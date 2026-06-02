@@ -163,6 +163,8 @@ function extractValue(dataType: string, p: Record<string, unknown>): number | nu
       return asNum(field(p.bodyFat, 'percentage'));
     case 'steps':
       return asNum(field(p.steps, 'count'));
+    case 'active-energy-burned':
+      return asNum(field(p.activeEnergyBurned, 'kcal'));
     case 'daily-resting-heart-rate':
       return asNum(field(p.dailyRestingHeartRate, 'beatsPerMinute'));
     case 'daily-heart-rate-variability':
@@ -200,6 +202,8 @@ function extractTimeSec(dataType: string, p: Record<string, unknown>): number {
       return iso8601ToSec(field(field(p.bodyFat, 'sampleTime'), 'physicalTime'));
     case 'steps':
       return iso8601ToSec(field(field(p.steps, 'interval'), 'startTime'));
+    case 'active-energy-burned':
+      return iso8601ToSec(field(field(p.activeEnergyBurned, 'interval'), 'startTime'));
     case 'sleep':
       return iso8601ToSec(field(field(p.sleep, 'interval'), 'startTime'));
     case 'daily-resting-heart-rate':
