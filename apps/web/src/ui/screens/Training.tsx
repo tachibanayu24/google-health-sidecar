@@ -233,8 +233,8 @@ function Figure({
   );
 }
 
-// ============ トレーニング・カレンダー(週グリッド: 曜日×週で分割リズムを見る) ============
-const WEEK_LABELS = ['今週', '先週', '2週前', '3週前', '4週前', '5週前'];
+// ============ トレーニング・カレンダー(週グリッド: 日付×部位文字で「いつ・何の日」を読む) ============
+const WEEK_LABELS = ['今週', '先週', '2週前', '3週前'];
 const DOW_JA = ['月', '火', '水', '木', '金', '土', '日'];
 
 /** ISO日付の曜日。月=0 … 日=6(週は月曜始まり)。 */
@@ -242,13 +242,9 @@ function isoDow(iso: string): number {
   const [y, m, d] = iso.split('-').map(Number);
   return (new Date(y!, m! - 1, d!).getDay() + 6) % 7;
 }
-/** 2つのISO日付の経過日数(from→to)。 */
-function isoDaysBetween(from: string, to: string): number {
-  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
-}
 
 function TrainingCalendar() {
-  const WEEKS = 5;
+  const WEEKS = 4;
   const days = WEEKS * 7;
   const cal = useQuery({
     queryKey: ['training-calendar', days],
@@ -278,15 +274,6 @@ function TrainingCalendar() {
     Array.from({ length: 7 }, (_, i) => shiftDate(shiftDate(thisMonday, -7 * w), i)),
   );
 
-  // 各部位の最終実施からの経過日(週グリッドでは読みにくい「次にやる部位」を補完)。
-  const lastAgo = new Map<string, number | null>();
-  for (const g of REGION_GROUPS) {
-    let latest: string | null = null;
-    for (const [date, row] of byDate)
-      if ((row.get(g.key) ?? 0) > 0 && (!latest || date > latest)) latest = date;
-    lastAgo.set(g.key, latest ? isoDaysBetween(latest, today) : null);
-  }
-
   const oldest = weeks[WEEKS - 1]![0]!;
   const trainedDays = [...sessionDates].filter((d) => d >= oldest && d <= today).length;
 
@@ -300,31 +287,11 @@ function TrainingCalendar() {
       }
     >
       {cal.isLoading ? (
-        <div className="h-44 animate-pulse rounded-lg bg-line/40" />
+        <div className="h-40 animate-pulse rounded-lg bg-line/40" />
       ) : trainedDays === 0 ? (
         <Empty note="この期間のワークアウト記録がありません。" />
       ) : (
         <>
-          {/* 最終実施サマリ: 空きが長い=次に鍛える候補。7日以上は要刺激。 */}
-          <div className="mb-3 flex flex-wrap gap-1.5">
-            {REGION_GROUPS.map((g) => {
-              const d = lastAgo.get(g.key) ?? null;
-              const stale = d == null || d >= 7;
-              return (
-                <span
-                  key={g.key}
-                  className="flex items-center gap-1 rounded-full border border-line bg-paper px-2 py-0.5 text-[11px]"
-                >
-                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: g.color }} />
-                  <span className="font-semibold text-muted">{g.label}</span>
-                  <span className={stale ? 'font-bold text-accent-ink' : 'tnum text-faint'}>
-                    {d == null ? '—' : d === 0 ? '今日' : `${d}日`}
-                  </span>
-                </span>
-              );
-            })}
-          </div>
-
           {/* 曜日ヘッダ */}
           <div className="flex items-center gap-1">
             <span className="w-9 shrink-0" />
@@ -361,18 +328,8 @@ function TrainingCalendar() {
             ))}
           </div>
 
-          {/* 凡例 */}
-          <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted">
-            {REGION_GROUPS.map((g) => (
-              <span key={g.key} className="flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: g.color }} />
-                {g.label}
-              </span>
-            ))}
-          </div>
           <p className="mt-2 text-[10px] leading-snug text-faint">
-            ※ ドット=その日の主働筋の部位 · 上が今週 · 空マスはレスト日。
-            上部チップは最終実施からの経過(7日以上は要刺激)。
+            ※ 数字=日付 · 文字=その日の主働筋の部位(胸/背/肩/腕/脚/幹) · 上が今週 · 空白はレスト日。
           </p>
         </>
       )}
@@ -395,39 +352,44 @@ function DayCell({
   isFuture: boolean;
   rested: boolean;
 }) {
-  if (isFuture) return <div className="aspect-square" />;
+  const day = Number(date.slice(8, 10));
   const trained = regions.length > 0;
+  // 未来日: カレンダーとして日付だけ薄く置く(部位なし)。
+  if (isFuture) {
+    return (
+      <div className="flex aspect-square items-center justify-center rounded-md">
+        <span className="stat text-base italic leading-none text-faint/40">{day}</span>
+      </div>
+    );
+  }
   const title = trained
     ? `${formatDateForDisplay(date)} ${regions.map((r) => `${r.label}${sets?.get(r.key) ?? 0}`).join(' ')}`
     : rested
       ? `${formatDateForDisplay(date)} 実施(補助のみ)`
       : `${formatDateForDisplay(date)} レスト`;
+  const multi = regions.length > 1;
   return (
     <div
       title={title}
-      className={`flex aspect-square items-center justify-center rounded-md border ${
-        isToday ? 'ring-2 ring-ink/25' : ''
-      } ${
-        trained
-          ? 'border-line/40 bg-card'
-          : rested
-            ? 'border-line bg-line/30'
-            : 'border-line/50 bg-line/15'
-      }`}
+      className={`flex aspect-square flex-col items-center justify-center gap-0.5 rounded-md border ${
+        isToday ? 'ring-2 ring-ink/30' : ''
+      } ${trained ? 'border-line/50 bg-card' : 'border-line/40 bg-line/15'}`}
     >
-      {trained ? (
-        <div className="flex flex-wrap content-center items-center justify-center gap-0.5 p-1">
-          {regions.slice(0, 4).map((r) => (
-            <span
-              key={r.key}
-              className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: r.color }}
-            />
+      <span className={`stat text-base italic leading-none ${trained ? 'text-ink' : 'text-faint'}`}>
+        {day}
+      </span>
+      {trained && (
+        <div
+          className={`flex items-center justify-center font-bold leading-none ${multi ? 'gap-0 text-[9px]' : 'text-[11px]'}`}
+        >
+          {regions.map((r) => (
+            <span key={r.key} style={{ color: r.color }}>
+              {r.label === '体幹' ? '幹' : r.label}
+            </span>
           ))}
         </div>
-      ) : rested ? (
-        <span className="h-1 w-1 rounded-full bg-faint/60" />
-      ) : null}
+      )}
+      {!trained && rested && <span className="h-1 w-1 rounded-full bg-faint/50" />}
     </div>
   );
 }
