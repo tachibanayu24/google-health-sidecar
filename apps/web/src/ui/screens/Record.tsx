@@ -485,7 +485,7 @@ function BodyPicker({
     if (id) onSelect(id);
   };
   return (
-    <div className="grid grid-cols-2 gap-2 [&_svg]:h-auto [&_svg]:max-h-[26vh] [&_svg]:w-full">
+    <div className="grid grid-cols-2 gap-3 [&_svg]:h-auto [&_svg]:max-h-[32vh] [&_svg]:w-full">
       <Model
         type="anterior"
         data={data}
