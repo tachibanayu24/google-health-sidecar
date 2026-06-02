@@ -80,7 +80,9 @@ type Tab = 'workouts' | 'volume' | 'exercises';
 export function TrainingScreen({ onEditWorkout }: { onEditWorkout: (id: string) => void }) {
   const [tab, setTab] = useState<Tab>('workouts');
   const mv = useQuery({ queryKey: ['muscle-volume', 7], queryFn: () => api.muscleVolume(7) });
-  const tr = useQuery({ queryKey: ['trends', 90], queryFn: () => api.trends(90) });
+  // 全期間カバー(getTrends は記録ある日のみ返すので大period でも軽量)。
+  // Performance=全期間の累計、VolumeTab=直近90日に slice して使う。
+  const tr = useQuery({ queryKey: ['trends', 3650], queryFn: () => api.trends(3650) });
   const pr = useQuery({ queryKey: ['prs'], queryFn: api.prs });
 
   if (mv.isLoading) return <Loading />;
@@ -123,13 +125,15 @@ export function TrainingScreen({ onEditWorkout }: { onEditWorkout: (id: string) 
           <PrList prs={pr.data?.prs ?? []} />
         </>
       )}
-      {tab === 'volume' && <VolumeTab volumeDaily={tr.data?.volumeDaily ?? []} muscles={muscles} />}
+      {tab === 'volume' && (
+        <VolumeTab volumeDaily={(tr.data?.volumeDaily ?? []).slice(-90)} muscles={muscles} />
+      )}
       {tab === 'exercises' && <ExerciseTrend />}
     </div>
   );
 }
 
-// ============ Performance スナップショット ============
+// ============ Performance スナップショット(全期間の累計で達成感を出す) ============
 function Performance({
   volumeDaily,
   prs,
@@ -139,34 +143,30 @@ function Performance({
   prs: Array<{ name_ja: string | null; name_en: string; value: number; achieved_at: number }>;
   worked: number;
 }) {
-  // 直近7日 vs その前7日の総ボリューム比較。
-  const last7 = volumeDaily.slice(-7).reduce((a, d) => a + d.volume_kg, 0);
-  const prev7 = volumeDaily.slice(-14, -7).reduce((a, d) => a + d.volume_kg, 0);
-  const pct = prev7 > 0 ? Math.round(((last7 - prev7) / prev7) * 100) : null;
+  // 全期間の累計総ボリューム(これまで挙上した総重量)。達成感の指標。
+  const allTime = volumeDaily.reduce((a, d) => a + d.volume_kg, 0);
+  const tons = allTime / 1000;
   const latestPr = [...prs].sort((a, b) => b.achieved_at - a.achieved_at)[0];
   return (
     <Card>
       <div className="mb-1 font-display text-[11px] font-bold uppercase tracking-[0.12em] text-faint">
-        Performance · 直近7日
+        累計総ボリューム
       </div>
       <div className="flex items-end gap-4">
         <div>
           <div className="flex items-baseline gap-1">
-            <span className="stat text-2xl leading-none">{Math.round(last7).toLocaleString()}</span>
+            <span className="stat text-3xl leading-none">
+              {Math.round(allTime).toLocaleString()}
+            </span>
             <span className="text-sm text-muted">kg</span>
           </div>
           <div className="text-[11px] text-faint">
-            総ボリューム
-            {pct != null && (
-              <span className={`ml-1 font-semibold ${pct >= 0 ? 'text-carb' : 'text-accent-ink'}`}>
-                {pct >= 0 ? '↗' : '↘'}
-                {Math.abs(pct)}%
-              </span>
-            )}
+            ≈ {tons.toLocaleString(undefined, { maximumFractionDigits: 1 })} t をこれまでに挙上
           </div>
         </div>
         <div className="ml-auto text-right">
           <div className="tnum text-sm font-semibold">{worked}/16 部位</div>
+          <div className="text-[10px] text-faint">直近7日</div>
           {latestPr && (
             <div className="mt-0.5 text-[11px] text-faint">
               最新PR {latestPr.name_en} {Math.round(latestPr.value * 10) / 10}kg
