@@ -28,6 +28,7 @@ import {
   getRecentPrs,
   getRecentSessions,
   getSettings,
+  getSleepByDate,
   getTrainingFrequency,
   jstDaysAgo,
   LogMealInputSchema,
@@ -404,12 +405,15 @@ function buildServer(env: Env): McpServer {
       const workouts = (await getRecentSessions(ctx.db, 50)).filter((s) => s.date === d);
       // センシング(D1ミラー): RHR/HRV/SpO2/VO2max/歩数/active_energy_kcal 等。摂取(nutrition)vs 消費の収支に。
       const sensing = await getDailyMetricsByDate(ctx.db, d);
+      // 睡眠サマリ(deep/light/rem/awake/efficiency)。回復分析用。旧 Fitbit MCP の get_sleep 代替。
+      const sleep = await getSleepByDate(ctx.db, d);
       return ok({
         provenance: 'd1_confirmed',
         date: d,
         nutrition: { totals, meals: mealsOut },
         workouts,
         body,
+        sleep,
         sensing,
       });
     },
