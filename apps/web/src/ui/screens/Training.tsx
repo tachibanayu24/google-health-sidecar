@@ -8,7 +8,13 @@ import { axisTick, CHART, ChartFrame, TT } from '../components/chart';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { Empty, ErrorBox, Loading } from '../components/state';
 import { WorkoutReport } from '../components/WorkoutReport';
-import { api, type Exercise, type MuscleVolume, type RecentSession } from '../lib/api';
+import {
+  api,
+  type Exercise,
+  type LandmarkZone,
+  type MuscleVolume,
+  type RecentSession,
+} from '../lib/api';
 import {
   DOW_JA,
   epochToJstMonthDay,
@@ -395,7 +401,10 @@ function VolumeTab({
         )}
       </Card>
       <Card title="部位別ボリューム">
-        <p className="mb-2 text-[11px] text-faint">部位をタップ → 種目を表示</p>
+        <p className="mb-2 text-[11px] leading-snug text-faint">
+          帯=週間セット数の目安(緑=MAV域 最も伸びやすい / 縦線=MEV最低ライン)。
+          研究ベースのガイドライン(RP)で個人差あり・出発点。間接関与も1セットと計上。部位をタップ→種目。
+        </p>
         <ul className="space-y-2">
           {sorted.map((m) => (
             <MuscleRow
@@ -411,6 +420,15 @@ function VolumeTab({
     </>
   );
 }
+// ボリュームランドマーク帯のゾーン表示(§8.9)。色=信号、ラベル=帯の位置。
+const ZONE_META: Record<LandmarkZone, { label: string; color: string }> = {
+  under: { label: '不足', color: '#6b86c9' },
+  building: { label: '育成', color: '#4c9aa0' },
+  optimal: { label: '最適', color: '#2f9e6e' },
+  high: { label: '多め', color: '#c98a2b' },
+  over: { label: '超過', color: '#e0521f' },
+};
+
 function MuscleRow({
   m,
   selected,
@@ -420,9 +438,8 @@ function MuscleRow({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const b = bucket(m.stimulus);
-  const color = b === 0 ? BASE_BODY : RAMP[b - 1];
-  const pct = Math.round(m.stimulus * 100);
+  const zoneMeta = m.landmark_zone ? ZONE_META[m.landmark_zone] : null;
+  const hasLandmarks = m.landmarks.mrv != null;
   return (
     <li>
       <button
@@ -436,17 +453,73 @@ function MuscleRow({
           />
           {MUSCLE_JA[m.muscle] ?? m.muscle}
         </span>
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-line">
-          <div
-            className="h-full rounded-full"
-            style={{ width: `${pct}%`, backgroundColor: color }}
-          />
-        </div>
-        <span className="tnum w-16 shrink-0 text-right text-xs text-muted">
-          {m.actual_sets}set{m.target_sets ? `/${m.target_sets}` : ''}
+        {hasLandmarks ? (
+          <LandmarkBar sets={m.actual_sets} l={m.landmarks} color={zoneMeta?.color ?? BASE_BODY} />
+        ) : (
+          <StimulusBar stimulus={m.stimulus} />
+        )}
+        <span className="flex w-[4.5rem] shrink-0 items-center justify-end gap-1 text-xs">
+          <span className="tnum text-muted">{m.actual_sets}</span>
+          {zoneMeta ? (
+            <span
+              className="rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+              style={{ color: zoneMeta.color, backgroundColor: `${zoneMeta.color}1f` }}
+            >
+              {zoneMeta.label}
+            </span>
+          ) : (
+            <span className="text-faint">set</span>
+          )}
         </span>
       </button>
     </li>
+  );
+}
+
+function StimulusBar({ stimulus }: { stimulus: number }) {
+  const b = bucket(stimulus);
+  const color = b === 0 ? BASE_BODY : RAMP[b - 1];
+  return (
+    <div className="h-2 flex-1 overflow-hidden rounded-full bg-line">
+      <div
+        className="h-full rounded-full"
+        style={{ width: `${Math.round(stimulus * 100)}%`, backgroundColor: color }}
+      />
+    </div>
+  );
+}
+
+/** 週間セット数を MEV〜MAV(sweet spot)〜MRV の帯に位置づける。塗り=現在量、緑帯=最も伸びやすいMAV域。 */
+function LandmarkBar({
+  sets,
+  l,
+  color,
+}: {
+  sets: number;
+  l: MuscleVolume['landmarks'];
+  color: string;
+}) {
+  const scaleMax = Math.max((l.mrv ?? 1) * 1.1, sets * 1.05, 1);
+  const pos = (v: number | null) => (v == null ? 0 : Math.min(100, (v / scaleMax) * 100));
+  const sweetL = pos(l.mav_low);
+  const sweetW = Math.max(0, pos(l.mav_high) - sweetL);
+  return (
+    <div
+      className="relative h-2 flex-1 overflow-hidden rounded-full bg-line"
+      title={`MEV ${l.mev} / MAV ${l.mav_low}–${l.mav_high} / MRV ${l.mrv}(週間セット, 目安)`}
+    >
+      <div
+        className="absolute inset-y-0 left-0 rounded-full"
+        style={{ width: `${pos(sets)}%`, backgroundColor: color, opacity: 0.82 }}
+      />
+      {/* MAV sweet spot 帯(最も伸びやすい量) */}
+      <div
+        className="absolute inset-y-0 border-x border-carb/50 bg-carb/10"
+        style={{ left: `${sweetL}%`, width: `${sweetW}%` }}
+      />
+      {/* MEV 目盛 */}
+      <div className="absolute inset-y-0 w-px bg-faint/70" style={{ left: `${pos(l.mev)}%` }} />
+    </div>
   );
 }
 function MuscleExercises({ muscle, name }: { muscle: string; name: string }) {

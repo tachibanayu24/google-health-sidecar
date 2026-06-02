@@ -67,6 +67,11 @@ export const MuscleGroup = z.object({
   body_side: BodySide,
   svg_region_id: z.string(),
   weekly_target_sets: z.number().int().nullable(),
+  // ボリュームランドマーク(週間ハードセット数, RP/Israetel ガイドライン)。§8.9。null=部位に帯なし。
+  mev_sets: z.number().int().nullable(),
+  mav_low_sets: z.number().int().nullable(),
+  mav_high_sets: z.number().int().nullable(),
+  mrv_sets: z.number().int().nullable(),
   created_at: Unix,
 });
 export type MuscleGroup = z.infer<typeof MuscleGroup>;
@@ -305,5 +310,13 @@ export const MuscleVolume = z.object({
   target_sets: z.number().int().nullable(),
   stimulus: z.number(), // ヒートマップ強度 0..1
   vs_target: z.number().nullable(), // actual/target
+  // ボリュームランドマーク帯(§8.9)。landmarks が null の部位は zone=null。LandmarkZone は volume-landmarks.ts。
+  landmark_zone: z.enum(['under', 'building', 'optimal', 'high', 'over']).nullable(),
+  landmarks: z.object({
+    mev: z.number().int().nullable(),
+    mav_low: z.number().int().nullable(),
+    mav_high: z.number().int().nullable(),
+    mrv: z.number().int().nullable(),
+  }),
 });
 export type MuscleVolume = z.infer<typeof MuscleVolume>;

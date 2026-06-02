@@ -11,6 +11,7 @@ export * from './domain/inputs';
 export * from './domain/metrics';
 export * from './domain/models';
 export * from './domain/readiness';
+export * from './domain/volume-landmarks';
 export * from './providers/google-health/provider';
 export * from './providers/HealthProvider';
 export * from './providers/scopes';

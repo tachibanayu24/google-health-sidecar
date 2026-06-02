@@ -26,6 +26,12 @@ import {
   setTypeStimulusWeight,
 } from '../domain/metrics';
 import type { Exercise, ExerciseHistorySet, MuscleVolume } from '../domain/models';
+import {
+  acuteChronicRatio,
+  classifyLoadTrend,
+  type LoadTrend,
+  volumeLandmarkZone,
+} from '../domain/volume-landmarks';
 import { WRITE_DATATYPE } from '../providers/google-health/discovery-pin';
 import { jstDaysAgo, nowSec, todayJst } from '../util/date';
 import { errorMessage } from '../util/errors';
@@ -490,6 +496,12 @@ export async function getMuscleVolume(
   const maxStim = Math.max(1, ...[...acc.values()].map((v) => v.stimulus));
   return groups.map((g) => {
     const a = acc.get(g.id) ?? { sets: 0, volume: 0, stimulus: 0 };
+    const landmarks = {
+      mev: g.mev_sets,
+      mavLow: g.mav_low_sets,
+      mavHigh: g.mav_high_sets,
+      mrv: g.mrv_sets,
+    };
     return {
       muscle: g.id,
       actual_sets: a.sets,
@@ -499,8 +511,63 @@ export async function getMuscleVolume(
       vs_target: g.weekly_target_sets
         ? Math.round((a.sets / g.weekly_target_sets) * 100) / 100
         : null,
+      // ボリュームランドマーク帯(§8.9)。set 数は間接関与(secondary)も含む既存規約。
+      landmark_zone: volumeLandmarkZone(a.sets, landmarks),
+      landmarks: {
+        mev: g.mev_sets,
+        mav_low: g.mav_low_sets,
+        mav_high: g.mav_high_sets,
+        mrv: g.mrv_sets,
+      },
     };
   });
+}
+
+export interface MuscleLoad {
+  muscle: string;
+  acute7_sets: number; // 直近7日のセット数(間接関与含む)
+  chronic_weekly_sets: number; // 直近28日の週平均セット数
+  ratio: number | null; // acute7 / chronic_weekly(慢性が薄い部位は null)
+  trend: LoadTrend | null;
+}
+
+/**
+ * 部位別 急性/慢性ボリューム比(§8.9 / get_readiness 同梱)。直近7日 vs 直近28日週平均。
+ * **怪我予測(ACWR)としては使わない**(学術的に否定済)。漸進性過負荷の記述指標として
+ * 急増/定常/低下 の事実のみ示す。set 数は getMuscleVolume と同じく間接関与も1と数える既存規約。
+ */
+export async function getMuscleLoadRatios(ctx: AppContext): Promise<MuscleLoad[]> {
+  const since28 = jstDaysAgo(27);
+  const since7 = jstDaysAgo(6);
+  const sets = await getWindowSets(ctx.db, since28);
+  const exerciseIds = [...new Set(sets.map((s) => s.exercise_id))];
+  const linksByExercise = await getExerciseMusclesForExercises(ctx.db, exerciseIds);
+
+  const acc = new Map<string, { acute: number; chronic: number }>();
+  for (const s of sets) {
+    if (!countsTowardVolume(s.set_type as SetType)) continue;
+    const isAcute = s.session_date >= since7;
+    for (const link of linksByExercise.get(s.exercise_id) ?? []) {
+      const a = acc.get(link.muscle_group_id) ?? { acute: 0, chronic: 0 };
+      a.chronic += 1;
+      if (isAcute) a.acute += 1;
+      acc.set(link.muscle_group_id, a);
+    }
+  }
+  const out: MuscleLoad[] = [];
+  for (const [muscle, a] of acc) {
+    const chronicWeekly = Math.round((a.chronic / 4) * 10) / 10;
+    const ratio = acuteChronicRatio(a.acute, chronicWeekly);
+    out.push({
+      muscle,
+      acute7_sets: a.acute,
+      chronic_weekly_sets: chronicWeekly,
+      ratio,
+      trend: classifyLoadTrend(ratio),
+    });
+  }
+  // 比が出る(慢性が十分な)部位を優先し、比の大きい順。
+  return out.sort((x, y) => (y.ratio ?? -1) - (x.ratio ?? -1));
 }
 
 export interface SessionMuscle {

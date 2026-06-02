@@ -25,6 +25,7 @@ import {
   getMealItemsForMeals,
   getMealsByDate,
   getMuscleCalendar,
+  getMuscleLoadRatios,
   getMuscleVolume,
   getReadiness,
   getRecentPrs,
@@ -234,7 +235,7 @@ function buildServer(env: Env): McpServer {
     {
       title: '部位別ボリューム',
       description:
-        '直近 windowDays 日(既定7)の部位別の実施セット数・ボリューム(kg)・週間目標比較・刺激スコアを返す。弱点部位の特定に。',
+        '直近 windowDays 日(既定7)の部位別の実施セット数・ボリューム(kg)・週間目標比較・刺激スコアを返す。弱点部位の特定に。各部位は `landmark_zone`(under=MEV未満/building/optimal=MAV帯=最も伸びやすい/high/over=MRV超)と `landmarks`{mev,mav_low,mav_high,mrv}(RP/Israetel の週間セット数ガイドライン・個人差ありの出発点であって検証済み個人閾値ではない)も返す。set 数は間接関与(secondary)も含むため複合種目の多い部位は高めに出る。',
       inputSchema: { windowDays: z.number().int().min(1).max(365).optional() },
       annotations: READ,
     },
@@ -337,7 +338,7 @@ function buildServer(env: Env): McpServer {
     {
       title: 'コンディション信号(Readiness)',
       description:
-        'その日のコンディションを「個人ベースライン比の相対逸脱」で返す。中核=夜間HRV(rMSSD, ln→7日ローリング平均; Plews/Buchheit)、補助=安静時心拍/呼吸数、文脈=皮膚温/睡眠時間・効率。各 contributor は {current(実測値), baselineMedian, normalLow/High(あなたの平常範囲), deviation(low/normal/high), signal(green/yellow/red)} を持ち、overall は N-of-M(2指標以上同時逸脱で赤)で統合。**偽の0-100合成スコアは出さない。** 学習期間中(<14日)・データ不足は status=learning で判定を出さず learningRemainingDays を返す。**重要: これは医学的診断でもパフォーマンス予測でもなく、本人の過去データに対する相対逸脱の事実のみ。** 「休め/病気だ/成績が上がる」と断定せず、HRVが平常下/呼吸が上がっている等の事実を踏まえて会話で助言すること。date 省略で当日(JST)。',
+        'その日のコンディションを「個人ベースライン比の相対逸脱」で返す。中核=夜間HRV(rMSSD, ln→7日ローリング平均; Plews/Buchheit)、補助=安静時心拍/呼吸数、文脈=皮膚温/睡眠時間・効率。各 contributor は {current(実測値), baselineMedian, normalLow/High(あなたの平常範囲), deviation(low/normal/high), signal(green/yellow/red)} を持ち、overall は N-of-M(2指標以上同時逸脱で赤)で統合。**偽の0-100合成スコアは出さない。** 学習期間中(<14日)・データ不足は status=learning で判定を出さず learningRemainingDays を返す。併せて `muscleLoad`(部位別の急性=直近7日/慢性=直近28日週平均 ボリューム比と trend=detraining/steady/ramping/spiking)を同梱。**これは漸進性過負荷の記述指標であって ACWR の怪我予測ではない**(学術的に否定済)。**重要: 全体として医学的診断でもパフォーマンス予測でもなく、本人の過去データに対する相対逸脱の事実のみ。** 「休め/病気だ/成績が上がる」と断定せず、HRVが平常下/呼吸が上がっている/特定部位を急増させた等の事実を踏まえて会話で助言すること。date 省略で当日(JST)。',
       inputSchema: {
         date: z
           .string()
@@ -348,7 +349,11 @@ function buildServer(env: Env): McpServer {
     },
     async ({ date }) => {
       const ctx = makeContext(env);
-      return ok({ provenance: 'd1_confirmed', ...(await getReadiness(ctx.db, date)) });
+      const [readiness, muscleLoad] = await Promise.all([
+        getReadiness(ctx.db, date),
+        getMuscleLoadRatios(ctx),
+      ]);
+      return ok({ provenance: 'd1_confirmed', ...readiness, muscleLoad });
     },
   );
 

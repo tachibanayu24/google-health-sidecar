@@ -82,6 +82,7 @@ export interface HistorySet {
   set_volume_kg: number;
   e1rm_kg: number | null;
 }
+export type LandmarkZone = 'under' | 'building' | 'optimal' | 'high' | 'over';
 export interface MuscleVolume {
   muscle: string;
   actual_sets: number;
@@ -89,6 +90,13 @@ export interface MuscleVolume {
   target_sets: number | null;
   stimulus: number;
   vs_target: number | null;
+  landmark_zone: LandmarkZone | null;
+  landmarks: {
+    mev: number | null;
+    mav_low: number | null;
+    mav_high: number | null;
+    mrv: number | null;
+  };
 }
 export interface TodayMeal {
   id: string;
