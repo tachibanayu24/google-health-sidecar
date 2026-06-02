@@ -50,6 +50,12 @@ export function HomeScreen({
     queryFn: () => api.muscleVolume(7),
     staleTime: 60_000,
   });
+  // 体組成ミニグラフ用(90日の体重トレンド)。からだ画面と queryKey 共有。
+  const trends = useQuery({
+    queryKey: ['trends', 90],
+    queryFn: () => api.trends(90),
+    staleTime: 60_000,
+  });
 
   if (today.isLoading) return <Loading />;
   if (today.error) return <ErrorBox error={today.error} />;
@@ -71,7 +77,7 @@ export function HomeScreen({
         onToday={() => setDate(todayJst())}
       />
 
-      <BodyStrip body={t.body} onOpen={onOpenRecovery} />
+      <BodyStrip body={t.body} series={trends.data?.body ?? []} onOpen={onOpenRecovery} />
 
       {t.inProgress && isToday && (
         <Card accent>
@@ -186,13 +192,22 @@ function GlanceCard({
   );
 }
 
-// ============ 体組成ストリップ(薄型・タップで からだ) ============
-function BodyStrip({ body, onOpen }: { body: BodyReading; onOpen: () => void }) {
+// ============ 体組成ストリップ(現在値 + 体重ミニグラフ・タップで からだ) ============
+function BodyStrip({
+  body,
+  series,
+  onOpen,
+}: {
+  body: BodyReading;
+  series: Array<{ date: string; weight_kg: number | null; body_fat_pct: number | null }>;
+  onOpen: () => void;
+}) {
   const { weightKg, bodyFatPct, prevWeightKg, source } = body;
   const diff =
     weightKg != null && prevWeightKg != null
       ? Math.round((weightKg - prevWeightKg) * 10) / 10
       : null;
+  const weights = series.map((s) => s.weight_kg).filter((v): v is number => v != null);
   return (
     <button type="button" onClick={onOpen} className="block w-full text-left">
       <Card>
@@ -225,8 +240,48 @@ function BodyStrip({ body, onOpen }: { body: BodyReading; onOpen: () => void }) 
           )}
           <ChevronRight className="ml-1.5 h-4 w-4 text-faint" strokeWidth={2.4} />
         </div>
+        {weights.length >= 2 && (
+          <div className="mt-2.5 border-t border-line/50 pt-2.5">
+            <Sparkline values={weights} />
+            <div className="mt-1 text-right text-[10px] text-faint">体重 直近90日</div>
+          </div>
+        )}
       </Card>
     </button>
+  );
+}
+
+/** 依存なしの軽量スパークライン(recharts を初期バンドルに足さない)。 */
+function Sparkline({ values }: { values: number[] }) {
+  const w = 100;
+  const h = 32;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const pts = values
+    .map((v, i) => {
+      const x = (i / (values.length - 1)) * w;
+      const y = h - 2 - ((v - min) / span) * (h - 4); // 上下2pxパディング
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  return (
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
+      preserveAspectRatio="none"
+      className="h-8 w-full"
+      aria-hidden="true"
+    >
+      <polyline
+        points={pts}
+        fill="none"
+        stroke="var(--color-ink)"
+        strokeWidth={1.5}
+        vectorEffect="non-scaling-stroke"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 

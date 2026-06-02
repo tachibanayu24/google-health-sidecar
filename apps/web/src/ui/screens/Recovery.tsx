@@ -1,248 +1,84 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
+  ChevronLeft,
+  ChevronRight,
   Flame,
   Footprints,
   HeartPulse,
   Moon,
-  Scale,
   Thermometer,
   Wind,
 } from 'lucide-react';
-import { useState } from 'react';
-import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts';
 import { Card, Stat } from '../components/Card';
-import { axisTick, CHART, ChartFrame, TT } from '../components/chart';
-import { Sheet } from '../components/Overlay';
 import { Empty, ErrorBox, Loading } from '../components/state';
 import { api, type SleepSummary } from '../lib/api';
-import { epochToJstHhmm, formatDateForDisplay, shiftDate } from '../lib/datetime';
-import { invalidateBody } from '../lib/invalidate';
+import {
+  DOW_JA,
+  epochToJstHhmm,
+  formatDateForDisplay,
+  jstDayOfWeek,
+  shiftDate,
+  todayJst,
+} from '../lib/datetime';
 import { round } from '../lib/units';
 
 /**
- * からだ = ボディメイクの2問に答える表示専用ダッシュボード:
- *  ① 体は計画どおり変化しているか(体組成の推移・変化ペース)
- *  ② ちゃんと回復できているか(睡眠・HRV・安静時心拍)
- * 記録は GH 同期(表示専用)+ 体重手入力。
+ * からだ = 「ちゃんと回復できているか」を選択日で見る表示専用ダッシュボード(睡眠・HRV・安静時心拍・センシング)。
+ * 日付切替で前日以前の回復も確認可。体組成の推移はホームのミニグラフ、体重記録は中央+ボタンへ移設。
  */
-export function RecoveryScreen() {
-  const today = useQuery({ queryKey: ['today'], queryFn: () => api.today() });
-  const trends = useQuery({ queryKey: ['trends', 90], queryFn: () => api.trends(90) });
+export function RecoveryScreen({
+  date,
+  onDateChange,
+}: {
+  date: string;
+  onDateChange: (date: string) => void;
+}) {
+  const today = useQuery({ queryKey: ['today', date], queryFn: () => api.today(date) });
   if (today.isLoading) return <Loading />;
   if (today.error) return <ErrorBox error={today.error} />;
   const t = today.data!;
   const metric = (m: string) => t.daily.find((d) => d.metric === m)?.value ?? null;
+  const isToday = date === todayJst();
+  const wd = DOW_JA[jstDayOfWeek(date)];
 
   return (
     <div className="mx-auto max-w-md space-y-4">
-      <BodyComposition body={t.body} series={trends.data?.body ?? []} loading={trends.isLoading} />
+      <div className="flex items-center gap-1">
+        <h1 className="font-display text-lg font-bold tracking-tight">からだ</h1>
+        {/* 日付ステッパー(前日以前の睡眠・回復・センシングを確認) */}
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="前日"
+            onClick={() => onDateChange(shiftDate(date, -1))}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-muted active:bg-line/60"
+          >
+            <ChevronLeft className="h-4 w-4" strokeWidth={2.4} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onDateChange(todayJst())}
+            className="min-w-14 text-center text-sm font-semibold"
+          >
+            {isToday ? '今日' : formatDateForDisplay(date)}
+            <span className="ml-1 text-xs text-muted">({wd})</span>
+          </button>
+          <button
+            type="button"
+            aria-label="翌日"
+            onClick={() => onDateChange(shiftDate(date, 1))}
+            disabled={isToday}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-muted active:bg-line/60 disabled:opacity-25"
+          >
+            <ChevronRight className="h-4 w-4" strokeWidth={2.4} />
+          </button>
+        </div>
+      </div>
+
       <RecoveryCard sleep={t.sleep} hrv={metric('hrv_rmssd')} rhr={metric('resting_hr')} />
       <DailySensing daily={t.daily} />
     </div>
-  );
-}
-
-/** series(date昇順 weight)から target 以前で最も近い体重を返す(週次/月次の変化ペース算出用)。 */
-function weightNear(
-  series: Array<{ date: string; weight_kg: number | null }>,
-  targetDate: string,
-): number | null {
-  let best: { date: string; w: number } | null = null;
-  for (const r of series) {
-    if (r.weight_kg == null || r.date > targetDate) continue;
-    if (!best || r.date > best.date) best = { date: r.date, w: r.weight_kg };
-  }
-  return best?.w ?? null;
-}
-
-// ============ 体組成(体重+体脂肪 90日 dual line + 現在値 + 手入力) ============
-function BodyComposition({
-  body,
-  series,
-  loading,
-}: {
-  body: { weightKg: number | null; bodyFatPct: number | null; prevWeightKg: number | null };
-  series: Array<{ date: string; weight_kg: number | null; body_fat_pct: number | null }>;
-  loading: boolean;
-}) {
-  const hasW = series.some((b) => b.weight_kg != null);
-  const hasF = series.some((b) => b.body_fat_pct != null);
-  // 最新体重(今日の手入力 or series 末尾)を基準に、週次/月次の変化ペース(bulk/cut判断の核)。
-  const withW = series.filter((b) => b.weight_kg != null);
-  const latest = withW[withW.length - 1];
-  const curW = body.weightKg ?? latest?.weight_kg ?? null;
-  const baseDate = latest?.date ?? null;
-  const delta = (daysAgo: number): number | null => {
-    if (curW == null || baseDate == null) return null;
-    const past = weightNear(series, shiftDate(baseDate, -daysAgo));
-    return past != null ? Math.round((curW - past) * 10) / 10 : null;
-  };
-  const wk = delta(7);
-  const mo = delta(30);
-  const lean =
-    curW != null && body.bodyFatPct != null
-      ? Math.round(curW * (1 - body.bodyFatPct / 100) * 10) / 10
-      : null;
-  return (
-    <Card title="体組成" right={<span className="text-[11px] text-faint">90日</span>}>
-      <div className="mb-3 flex items-start justify-between">
-        <div className="flex items-end gap-5">
-          <div>
-            <div className="flex items-baseline gap-1">
-              <span className="stat text-3xl leading-none">
-                {curW != null ? round(curW, 1) : '—'}
-              </span>
-              <span className="text-sm text-muted">kg</span>
-            </div>
-            <div className="mt-1 flex gap-2 text-[11px] tnum">
-              {wk != null && (
-                <span className="text-muted">
-                  週
-                  <span className="ml-0.5 font-semibold">
-                    {wk > 0 ? '+' : ''}
-                    {wk}
-                  </span>
-                </span>
-              )}
-              {mo != null && (
-                <span className="text-muted">
-                  月
-                  <span className="ml-0.5 font-semibold">
-                    {mo > 0 ? '+' : ''}
-                    {mo}
-                  </span>
-                </span>
-              )}
-            </div>
-          </div>
-          <div>
-            <div className="flex items-baseline gap-1">
-              <span className="stat text-2xl leading-none" style={{ color: CHART.fat }}>
-                {body.bodyFatPct != null ? round(body.bodyFatPct, 1) : '—'}
-              </span>
-              <span className="text-sm text-muted">%</span>
-            </div>
-            <div className="mt-1 text-[11px] text-faint">
-              {lean != null ? `除脂肪 ${lean}kg` : '体脂肪'}
-            </div>
-          </div>
-        </div>
-        <WeightLogger />
-      </div>
-      {loading ? (
-        <Empty note="読み込み中…" />
-      ) : hasW || hasF ? (
-        <ChartFrame>
-          <LineChart data={series} margin={{ top: 6, right: 0, bottom: 0, left: -18 }}>
-            <CartesianGrid stroke={CHART.line} vertical={false} />
-            <XAxis
-              dataKey="date"
-              tickFormatter={formatDateForDisplay}
-              tick={axisTick}
-              stroke={CHART.line}
-              minTickGap={28}
-            />
-            <YAxis
-              yAxisId="w"
-              tick={axisTick}
-              stroke={CHART.line}
-              domain={[(min: number) => Math.floor(min - 1), (max: number) => Math.ceil(max + 1)]}
-              width={34}
-            />
-            <YAxis yAxisId="f" orientation="right" tick={axisTick} stroke={CHART.line} width={28} />
-            <Tooltip content={<TT unit="" />} />
-            <Line
-              yAxisId="w"
-              type="monotone"
-              dataKey="weight_kg"
-              name="体重"
-              stroke={CHART.ink}
-              strokeWidth={2}
-              dot={false}
-              connectNulls
-            />
-            <Line
-              yAxisId="f"
-              type="monotone"
-              dataKey="body_fat_pct"
-              name="体脂肪"
-              stroke={CHART.fat}
-              strokeWidth={2}
-              dot={false}
-              connectNulls
-            />
-          </LineChart>
-        </ChartFrame>
-      ) : (
-        <Empty note="体重は Google Health 同期 or 手入力で表示されます。" />
-      )}
-    </Card>
-  );
-}
-
-/** 体重(+任意で体脂肪)の手入力。GH へも best-effort push(§5.2)。 */
-function WeightLogger() {
-  const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [w, setW] = useState<number | null>(null);
-  const [bf, setBf] = useState<number | null>(null);
-  const save = useMutation({
-    mutationFn: () =>
-      api.logWeight({ entryValue: w, entryUnit: 'kg', bodyFatPct: bf ?? undefined }),
-    onSuccess: () => {
-      invalidateBody(qc);
-      setOpen(false);
-      setW(null);
-      setBf(null);
-    },
-  });
-  if (!open)
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-xs font-semibold text-muted"
-      >
-        <Scale className="h-3.5 w-3.5" strokeWidth={2.2} /> 記録
-      </button>
-    );
-  return (
-    <Sheet onClose={() => setOpen(false)}>
-      <div className="mb-3 font-display text-base font-bold">体重を記録</div>
-      <div className="flex gap-3">
-        <label className="flex-1">
-          <span className="mb-1 block text-[11px] font-semibold text-faint">体重 (kg)</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            // biome-ignore lint/a11y/noAutofocus: シート展開直後の主入力にフォーカスは妥当
-            autoFocus
-            value={w ?? ''}
-            onChange={(e) => setW(e.target.value === '' ? null : Number(e.target.value))}
-            className="w-full rounded-xl border border-line bg-paper px-3 py-2.5 text-sm font-semibold tnum outline-none focus:border-accent focus:bg-card"
-          />
-        </label>
-        <label className="flex-1">
-          <span className="mb-1 block text-[11px] font-semibold text-faint">体脂肪 (%) 任意</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            value={bf ?? ''}
-            onChange={(e) => setBf(e.target.value === '' ? null : Number(e.target.value))}
-            className="w-full rounded-xl border border-line bg-paper px-3 py-2.5 text-sm font-semibold tnum outline-none focus:border-accent focus:bg-card"
-          />
-        </label>
-      </div>
-      <button
-        type="button"
-        disabled={w == null || save.isPending}
-        onClick={() => save.mutate()}
-        className="mt-4 w-full rounded-xl bg-accent py-2.5 text-sm font-bold text-card disabled:opacity-40"
-      >
-        {save.isPending ? '保存中…' : '保存'}
-      </button>
-    </Sheet>
   );
 }
 
@@ -337,7 +173,7 @@ function RecoveryCard({
   );
 }
 
-// ============ 日次センシング(歩数/SpO2/呼吸/VO2max) ============
+// ============ 日次センシング(歩数/消費/SpO2/呼吸/皮膚温/VO2max) ============
 const SENSING_META: Record<string, { label: string; Icon: typeof HeartPulse; unit?: string }> = {
   steps: { label: '歩数', Icon: Footprints, unit: '歩' },
   active_energy_kcal: { label: '消費', Icon: Flame, unit: 'kcal' }, // 摂取kcal(食事)との収支に

@@ -1,4 +1,4 @@
-import { Dumbbell, HeartPulse, House, Plus, Settings, Utensils } from 'lucide-react';
+import { Dumbbell, HeartPulse, House, Plus, Scale, Settings, Utensils } from 'lucide-react';
 import { lazy, Suspense, useRef, useState } from 'react';
 import {
   createBrowserRouter,
@@ -12,6 +12,7 @@ import {
 import { BrandLogo } from './components/BrandLogo';
 import { Modal, Sheet } from './components/Overlay';
 import { Loading } from './components/state';
+import { WeightLogSheet } from './components/WeightLogSheet';
 import { todayJst } from './lib/datetime';
 import { HomeScreen } from './screens/Home';
 import { MealScreen } from './screens/Meal';
@@ -37,7 +38,7 @@ export const router = createBrowserRouter([
     children: [
       { path: '/', element: <HomeRoute /> },
       { path: '/training', element: <TrainingRoute /> },
-      { path: '/body', element: <RecoveryScreen /> },
+      { path: '/body', element: <RecoveryRoute /> },
       { path: '/settings', element: <SettingsRoute /> },
       { path: '/nutrition', element: <NutritionRoute /> },
       { path: '/nutrition/:mealType', element: <MealCategoryRoute /> },
@@ -66,6 +67,12 @@ function HomeRoute() {
 function TrainingRoute() {
   const navigate = useNavigate();
   return <TrainingScreen onEditWorkout={(id) => navigate(`/record/${id}`)} />;
+}
+
+function RecoveryRoute() {
+  const [sp, setSp] = useSearchParams();
+  const date = sp.get('d') ?? todayJst();
+  return <RecoveryScreen date={date} onDateChange={(d) => setSp({ d }, { replace: true })} />;
 }
 
 function NutritionRoute() {
@@ -159,6 +166,7 @@ function Layout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [chooser, setChooser] = useState(false);
+  const [weightOpen, setWeightOpen] = useState(false);
   const tab: Tab | null =
     pathname === '/'
       ? 'home'
@@ -184,10 +192,12 @@ function Layout() {
           onClose={() => setChooser(false)}
           onPick={(v) => {
             setChooser(false);
-            navigate(v === 'meal' ? '/meal' : '/record');
+            if (v === 'weight') setWeightOpen(true);
+            else navigate(v === 'meal' ? '/meal' : '/record');
           }}
         />
       )}
+      {weightOpen && <WeightLogSheet onClose={() => setWeightOpen(false)} />}
       <BottomNav
         tab={tab}
         onTab={(v) => navigate(v === 'home' ? '/' : `/${v}`)}
@@ -321,14 +331,15 @@ function LogChooser({
   onPick,
 }: {
   onClose: () => void;
-  onPick: (v: 'record' | 'meal') => void;
+  onPick: (v: 'record' | 'meal' | 'weight') => void;
 }) {
   return (
     <Sheet onClose={onClose}>
       <h2 className="mb-3 font-display text-lg font-bold tracking-tight">何を記録する?</h2>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <ChooserButton Icon={Dumbbell} label="ワークアウト" onClick={() => onPick('record')} />
         <ChooserButton Icon={Utensils} label="食事" onClick={() => onPick('meal')} />
+        <ChooserButton Icon={Scale} label="体重" onClick={() => onPick('weight')} />
       </div>
     </Sheet>
   );
