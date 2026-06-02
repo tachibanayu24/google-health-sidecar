@@ -508,7 +508,7 @@ export function RecordScreen({
   );
 }
 
-/** 新自己ベストの祝福オーバーレイ(確定=金 / 暫定[RPE未入力]=銀)。シェア画像へも飛べる。 */
+/** 新自己ベストの祝福オーバーレイ。全PRを等しく祝う(暫定/確定で差をつけない)。シェア画像へも飛べる。 */
 function PrCelebration({
   prs,
   onShare,
@@ -537,13 +537,11 @@ function PrCelebration({
           {prs.map((p) => (
             <div
               key={p.exerciseId}
-              className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2 ${p.isProvisional ? 'bg-line/40' : 'bg-accent-soft'}`}
+              className="flex items-center justify-between gap-3 rounded-xl bg-accent-soft px-3 py-2"
             >
               <span className="flex min-w-0 flex-col">
                 <span className="truncate text-sm font-bold text-ink">{p.name}</span>
-                <span className="text-[10px] text-faint">
-                  {p.isProvisional ? '暫定 · RPE未入力' : '確定'}
-                </span>
+                <span className="text-[10px] text-faint">推定1RM</span>
               </span>
               <span className="tnum shrink-0 text-sm font-semibold">
                 {p.prevValue != null ? (
@@ -551,7 +549,7 @@ function PrCelebration({
                 ) : (
                   <span className="text-faint">初 </span>
                 )}
-                <span className={p.isProvisional ? 'text-muted' : 'text-accent-ink'}>
+                <span className="text-accent-ink">
                   {p.value}
                   {p.unit}
                 </span>
@@ -559,11 +557,6 @@ function PrCelebration({
             </div>
           ))}
         </div>
-        {prs.some((p) => p.isProvisional) && (
-          <div className="mt-2 text-[10px] leading-snug text-faint">
-            暫定PR = RPE未入力で推定の確度が低い。RPEを入れると確定になります。
-          </div>
-        )}
 
         <div className="mt-5 flex gap-2">
           <button

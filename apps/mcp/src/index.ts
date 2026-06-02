@@ -491,7 +491,7 @@ function buildServer(env: Env): McpServer {
     {
       title: 'ワークアウトを記録',
       description:
-        'ワークアウト(種目×セット)を D1 に記録し GH へ push。e1RM/PR/総ボリュームは core が計算。exerciseId は search_exercises で解決した id。重量種目は entryValue 必須(自重は省略可=bodyweight、reps のみでよい)。entryUnit は kg/lb。loadMode 省略時は種目マスタに従う。title は不要(主働筋の部位から自動命名)。clientRequestId は再送で再利用。返り値 newPrs に新自己ベスト(name/recordType/value/prevValue/unit/isProvisional)が入る — あればユーザーを称えてよい(isProvisional=true は「暫定PR(RPE未入力)」として控えめに)。',
+        'ワークアウト(種目×セット)を D1 に記録し GH へ push。e1RM/PR/総ボリュームは core が計算。exerciseId は search_exercises で解決した id。重量種目は entryValue 必須(自重は省略可=bodyweight、reps のみでよい)。entryUnit は kg/lb。loadMode 省略時は種目マスタに従う。title は不要(主働筋の部位から自動命名)。clientRequestId は再送で再利用。返り値 newPrs に新自己ベスト(name/recordType=推定1RM/value/prevValue/unit/isProvisional)が入る — あれば普通に称えてよい。isProvisional=true は RPE 未入力で推定の確度が低い旨を、重量の絶対値を語るときだけ注意に添える(祝福自体は控えめにしない)。',
       inputSchema: SaveWorkoutInputSchema.shape,
       annotations: WRITE_GH,
     },
