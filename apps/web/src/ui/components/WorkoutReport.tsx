@@ -6,7 +6,7 @@ import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter';
 import { createPortal } from 'react-dom';
 import { api, type RecentSession } from '../lib/api';
 import { formatDateLong } from '../lib/datetime';
-import { MUSCLE_JA, MUSCLE_TO_SLUG } from '../lib/muscles';
+import { MUSCLE_JA, MUSCLE_TO_SLUGS } from '../lib/muscles';
 import { HEATMAP_RAMP } from '../lib/theme';
 import { BrandLogo } from './BrandLogo';
 
@@ -60,10 +60,10 @@ export function WorkoutReport({
   // 人体図データ: intensity を 5 段にバケットし slug 単位で最大値を採用。
   const slugBucket = new Map<Muscle, number>();
   for (const m of muscles) {
-    const slug = MUSCLE_TO_SLUG[m.muscle] as Muscle | undefined;
-    if (!slug) continue;
     const b = bucket(m.intensity);
-    if (b > (slugBucket.get(slug) ?? 0)) slugBucket.set(slug, b);
+    for (const slug of MUSCLE_TO_SLUGS[m.muscle] ?? []) {
+      if (b > (slugBucket.get(slug) ?? 0)) slugBucket.set(slug, b);
+    }
   }
   const bodyData: IExerciseData[] = [1, 2, 3, 4, 5].map((b) => ({
     name: `level-${b}`,

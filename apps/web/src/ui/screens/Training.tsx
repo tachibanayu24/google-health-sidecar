@@ -17,7 +17,7 @@ import {
   todayJst,
 } from '../lib/datetime';
 import { invalidateWorkouts } from '../lib/invalidate';
-import { MUSCLE_JA, MUSCLE_TO_SLUG } from '../lib/muscles';
+import { MUSCLE_JA, MUSCLE_TO_SLUGS } from '../lib/muscles';
 import { HEATMAP_RAMP } from '../lib/theme';
 
 // 部位ラベル(MUSCLE_JA)・slug(MUSCLE_TO_SLUG)・ヒートマップランプ(HEATMAP_RAMP)は単一ソースを import。
@@ -154,10 +154,10 @@ function Performance({
 function Heatmap({ muscles, worked }: { muscles: MuscleVolume[]; worked: number }) {
   const slugBucket = new Map<Muscle, number>();
   for (const m of muscles) {
-    const slug = MUSCLE_TO_SLUG[m.muscle] as Muscle | undefined;
-    if (!slug) continue;
     const b = bucket(m.stimulus);
-    if (b > (slugBucket.get(slug) ?? 0)) slugBucket.set(slug, b);
+    for (const slug of MUSCLE_TO_SLUGS[m.muscle] ?? []) {
+      if (b > (slugBucket.get(slug) ?? 0)) slugBucket.set(slug, b);
+    }
   }
   const data: IExerciseData[] = [1, 2, 3, 4, 5].map((b) => ({
     name: `level-${b}`,

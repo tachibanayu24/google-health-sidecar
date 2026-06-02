@@ -11,7 +11,7 @@ import {
   nowDatetimeLocal,
 } from '../lib/datetime';
 import { invalidateWorkouts } from '../lib/invalidate';
-import { MUSCLE_GROUPS, MUSCLE_TO_SLUG, SLUG_TO_MUSCLE } from '../lib/muscles';
+import { MUSCLE_GROUPS, MUSCLE_TO_SLUGS, SLUG_TO_MUSCLE } from '../lib/muscles';
 
 interface SetRow {
   key: string;
@@ -476,9 +476,9 @@ function BodyPicker({
   selected: string | null;
   onSelect: (id: string) => void;
 }) {
-  const slug = selected ? MUSCLE_TO_SLUG[selected] : undefined;
-  const data: IExerciseData[] = slug
-    ? [{ name: 'sel', muscles: [slug] as IExerciseData['muscles'], frequency: 1 }]
+  const slugs = selected ? MUSCLE_TO_SLUGS[selected] : undefined;
+  const data: IExerciseData[] = slugs?.length
+    ? [{ name: 'sel', muscles: slugs, frequency: 1 }]
     : [];
   const onClick = (s: { muscle: string }) => {
     const id = SLUG_TO_MUSCLE[s.muscle];
