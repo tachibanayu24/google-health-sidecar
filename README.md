@@ -9,8 +9,8 @@
 - **Cloudflare Workers + D1 + KV**(Cron でデイリーバッチ)
 - **React 19 + Vite + @cloudflare/vite-plugin**(SPA と Worker API を1プロジェクトで同居)
 - Tailwind v4 / TanStack Query / lucide / recharts / react-body-highlighter
-- **Hono**(API + 認証ゲート) / Google OIDC(系統A ログイン)+ GH OAuth Pattern B(系統B, 未接続)
-- pnpm workspace モノレポ: `packages/core`(ドメイン/DB/services/providers/auth) + `apps/web`(UI+API) + `apps/mcp`(M2) + `tools`(OAuth CLI)
+- **Hono**(API + 認証ゲート) / Google OIDC(系統A ログイン)+ GH OAuth Pattern B(系統B, **接続済・daily pull / push 稼働**)
+- pnpm workspace モノレポ: `packages/core`(ドメイン/DB/services/providers/auth) + `apps/web`(UI+API) + `apps/mcp`(**MCP サーバ, 20ツール・本番稼働・claude.ai 接続済**) + `tools`(OAuth CLI / probe)
 
 ## データフロー(トレーナーAI / Logbook / GH)
 
@@ -53,7 +53,8 @@ flowchart TB
 | 体重・体脂肪 | UI / MCP(`log_weight`)/ GHデバイス | ✓ `body_metrics` | ✓ `weight` / `body-fat` | ✓(デバイス測定) |
 | 睡眠 | GH デバイス | ✓ `sleep_logs` | ✗ | ✓ read-only |
 | 安静時心拍 / HRV / SpO₂ / VO₂max / 呼吸数 | GH デバイス | ✓ `daily_metrics` | ✗ | ✓ read-only |
-| 歩数 / 消費kcal / 皮膚温 | GH デバイス | (`daily_metrics`) | ✗ | ⚠ **未配線**(`unverified`) |
+| 歩数 / 消費kcal | GH デバイス | ✓ `daily_metrics`(`steps`/`active_energy_kcal`) | ✗ | ✓ **配線済**(分単位 interval を日次合算, migration 0014) |
+| 皮膚温 | GH デバイス | — | ✗ | ✗ **恒久除外**(GH 未提供=候補8種すべて Invalid) |
 | 食事プリセット / 栄養目標 | UI / MCP | ✓ | ✗ | ✗ |
 
 - ※ 食事の GH push は **`FEATURE_GH_NUTRITION_PUSH`**(本番 = `true`)が ON のときだけ実行。OFF だと台帳に `skipped_flag_off` で記録され push されない。
@@ -65,7 +66,7 @@ flowchart TB
 
 1. **stale 化** — 放置された `in_progress` セッションを `stale` に倒す
 2. **pull(GH→D1)** — 体重/体脂肪/睡眠/安静時心拍/HRV/SpO₂/VO₂max/呼吸数を取り込み(自分の push 由来は `gh_external_id` で除外しエコーを防止)
-3. **時刻ゲート(JST 7/13/22 時)** — 歩数・消費kcal の日次合計を上書き(※実装途上)
+3. **毎 `*/5`** — 歩数・消費kcal(分単位 interval)を当日分まで日次合計に上書き(pageSize 拡大で軽量化済。早朝7時のみ3日分再集計)
 4. **push 再試行** — 失敗/未送の GH push を最大 20 件再送
 
 > ユーザー期待の「食事をトレーナーAIが入力 → MCP → Logbook(D1)→ GH」は `log_meal` で実装済み(GH 反映は `FEATURE_GH_NUTRITION_PUSH` 依存)。ワークアウト・体重も同様に **MCP / UI のどちらからでも D1 + GH** へ入る。逆に睡眠・心拍などは GH 由来の read-only。
@@ -93,9 +94,10 @@ pnpm --filter @ghs/web build      # vite build(client + worker)
 
 ## 実装状況
 
-- **M0(完了)**: モノレポ基盤、ドメイン/metrics、D1スキーマ(21表)、HealthProvider抽象 + GH v4 provider(discovery doc 準拠)、db層、auth(Pattern B)、OAuth CLI。
-- **M1(進行中・大部分完了)**: services層(全write一点経由)、/api + 認証ゲート、PWA UI(Today / ワークアウトロガー[前回値・kg/lb・部位フィルタ] / 食事[PFC・食塩相当量・オートコンプリート] / 人体筋肉ヒートマップ[前面+背面] / トレンドチャート / 設定)、Googleログイン。
-- 残: 設定編集UI、種目マスタ拡充(free-exercise-db)、食事プリセット、PWA(SW/オフライン/アイコン)、GH実トークン接続(daily pull / push)、MCP(apps/mcp, M2)。詳細は `docs/ux-review.md`。
+- **M0(完了)**: モノレポ基盤、ドメイン/metrics、D1スキーマ、HealthProvider抽象 + GH v4 provider(discovery doc 準拠)、db層、auth(Pattern B)、OAuth CLI。
+- **M1(完了)**: services層(全write一点経由)、/api + 認証ゲート、PWA UI(Today / ワークアウトロガー[前回値・kg/lb・部位フィルタ] / 食事[PFC・食塩相当量・オートコンプリート・プリセット] / 人体筋肉ヒートマップ[前面+背面] / 部位カレンダー・頻度 / トレンドチャート / 設定)、Googleログイン、GH 実トークン接続(daily pull / push 稼働)。
+- **M2(完了)**: `apps/mcp` MCP サーバ(20ツール: 記録→分析→エネルギー収支→GH反映→取消)、`MCP_SHARED_SECRET`+IP 二次防御、claude.ai Custom Connector 接続、種目エイリアス辞書。
+- スキーマは `packages/core/src/db/migrations/0001-0015`(22 テーブル: `exercise_aliases` 含む。0008/0014 は再構築)。詳細は `docs/design.md` / `docs/mcp-design.md` / `docs/remaining-tasks.md`。
 
 ## オーナー側セットアップ(GH連携・本番)
 

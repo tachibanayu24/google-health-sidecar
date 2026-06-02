@@ -219,7 +219,7 @@ export async function saveWorkout(
       endedAt: endedAt ?? now,
       activeDurationSec: activeDurationSec ?? Math.max(60, now - startedAt),
       estCalories,
-      title: input.title ?? 'Workout',
+      title: title ?? 'Workout', // 自動命名(胸・腕等)も GH へ。inline/retry/D1 で displayName 一致
       summary: buildSummaryNote(input, metaCache),
     });
   }
@@ -403,7 +403,7 @@ export async function getMuscleVolume(
   opts: { windowDays?: number } = {},
 ): Promise<MuscleVolume[]> {
   const windowDays = opts.windowDays ?? 7;
-  const since = jstDaysAgo(windowDays);
+  const since = jstDaysAgo(windowDays - 1); // 当日含め windowDays 日(getMuscleCalendar と規約統一)
   const today = todayJst();
   const [sets, groups] = await Promise.all([
     getWindowSets(ctx.db, since),

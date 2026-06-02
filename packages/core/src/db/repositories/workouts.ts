@@ -194,6 +194,21 @@ export async function getRecentSessions(db: Db, limit = 30): Promise<RecentSessi
   );
 }
 
+/** 指定日の完了セッション(get_day 用)。getRecentSessions(limit) のページ外取りこぼしを避ける。 */
+export async function getSessionsByDate(db: Db, date: string): Promise<RecentSessionRow[]> {
+  return db.raw<RecentSessionRow>(
+    `SELECT s.id, s.date, s.title, s.total_volume_kg, s.est_calories,
+            (SELECT count(*) FROM workout_exercises we WHERE we.session_id = s.id) AS exercises,
+            (SELECT count(*) FROM workout_sets ws
+               JOIN workout_exercises we ON we.id = ws.workout_exercise_id
+               WHERE we.session_id = s.id) AS sets
+       FROM workout_sessions s
+      WHERE s.status = 'completed' AND s.date = ?
+      ORDER BY s.started_at DESC`,
+    date,
+  );
+}
+
 /** D1 からセッション削除(workout_exercises/sets は ON DELETE CASCADE)。public は services.deleteWorkout。 */
 export async function deleteSessionRow(db: Db, id: string): Promise<void> {
   await db.run('DELETE FROM workout_sessions WHERE id = ?', id);
@@ -240,13 +255,14 @@ export interface PrRow {
   value: number;
   rep_bucket: number | null;
   pr_basis: string | null;
+  is_provisional: number;
   achieved_at: number;
 }
 
-/** 直近の e1RM PR(種目名つき)。PR タイムライン用。 */
+/** 直近の e1RM PR(種目名つき)。PR タイムライン用。is_provisional は pr_basis==='rpe_less' で立つ暫定フラグ。 */
 export async function getRecentPrs(db: Db, limit = 20): Promise<PrRow[]> {
   return db.raw<PrRow>(
-    `SELECT pr.exercise_id, ex.name_ja, ex.name_en, pr.value, pr.rep_bucket, pr.pr_basis, pr.achieved_at
+    `SELECT pr.exercise_id, ex.name_ja, ex.name_en, pr.value, pr.rep_bucket, pr.pr_basis, pr.is_provisional, pr.achieved_at
        FROM personal_records pr JOIN exercises ex ON ex.id = pr.exercise_id
       WHERE pr.record_type = 'e1rm'
       ORDER BY pr.achieved_at DESC LIMIT ?`,

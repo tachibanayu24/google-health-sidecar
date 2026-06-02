@@ -1,8 +1,16 @@
 # Logbook MCP 設計 — 正典(Single Source of Truth for `apps/mcp`)
 
-> 本書は Logbook の MCP サーバ(`apps/mcp` / `@ghs/mcp`)の唯一の正典設計である。3つの設計案と2名の審査を統合し、プロジェクトの SoT である `docs/design.md`(特に §3 / §6.3 / §10.2 / §10.4 / §11 / §13)と完全整合させた。`apps/mcp` 等のソース/設定コードは本書では作成しない(本書 1 ファイルのみ)。実装は M2 で着手する(`docs/design.md` §13)。
+> 本書は Logbook の MCP サーバ(`apps/mcp` / `@ghs/mcp`)の唯一の正典設計である。3つの設計案と2名の審査を統合し、プロジェクトの SoT である `docs/design.md`(特に §3 / §6.3 / §10.2 / §10.4 / §11 / §13)と完全整合させた。**M2 で実装完了・本番稼働・claude.ai 接続済(2026-06-02)。**
 >
-> 関連: `docs/design.md`(全体設計)、`packages/core/src/domain/inputs.ts`(Zod 入力)、`packages/core/src/services/*`(write 一点経由 §8.5)、`apps/web/src/api/routes.ts`(同型のラッパ参照実装)、`apps/web/wrangler.jsonc`(共有 D1/KV の ID)。
+> 関連: `docs/design.md`(全体設計)、`packages/core/src/domain/inputs.ts`(Zod 入力)、`packages/core/src/services/*`(write 一点経由 §8.5)、`apps/web/src/api/routes.ts`(同型のラッパ参照実装)、`apps/web/wrangler.jsonc`(共有 D1/KV の ID)。実装の実体は `apps/mcp/src/index.ts`。
+
+> **実装ステータス(2026-06-02、設計→実装の差分。実コードが正)**
+> - **ツールは20本**で稼働。本書の R/W/D カタログ(`get_settings`・`get_exercise_history`・`get_muscle_volume`・`get_muscle_calendar`・`get_recent_sessions`・`get_recent_prs`・`search_exercises`・`autocomplete_foods`・`get_day`・`log_meal`・`log_workout`・`log_weight`・`set_nutrition_target`・`delete_recent_log`)に加え、**`get_training_frequency`(§5.5-G 実装)・`get_meal_presets`・`save_meal_preset`・`log_preset`・`delete_meal_preset`・`log_meal_photo`** を実装。
+> - **`get_day`** 返却 = `nutrition`(PFC合計+品目明細, fiber/sugar/sodium 含む)・`workouts`(当日完了セッション。`getSessionsByDate` でページ取りこぼし無し)・`body`・`sleep`(deep/light/rem/awake/efficiency サマリ)・`sensing`(RHR/HRV/SpO2/呼吸/VO2max/歩数/`active_energy_kcal`)。当日 sensing はミラー遅延がありうるが現状一律 `d1_confirmed`(将来 `gh_provisional` 化は §残課題)。
+> - **`delete_recent_log`** の `type` は **`meal`/`workout`/`weight`** の3種。直近の定義: ワークアウト=当日 or 最新3件、食事=当日・前日、体重=当日・前日(§5.5-D を体重対応に拡張)。echo→`confirm:true` の二段(§5.5-E/H)。
+> - **`exercise_aliases` 実装済**(migration 0012/0013/0015)。`searchExercises` は **name_en / name_ja / alias 横断**の部分一致(§5.5-F)。`search_exercises` 返却に `muscles:[{muscle, role(primary|secondary|stabilizer), contribution(1.0/0.5/0.25)}]` を含む。
+> - **MCP server instructions** を `McpServer({instructions})` に明文化: 開発者=利用者本人(チャットで改善依頼可)・単位/JST 規約・食事は app/MCP→D1→GH の一方向同期・`ghPushed`/`ghDeleted` の意味・エネルギー収支 ≈ 推定BMR + `get_day.sensing.active_energy_kcal`(GH は活動分のみ)・当日センシングの遅延。
+> - 認証は確定どおり `MCP_SHARED_SECRET`(URL `?key=` / `x-mcp-secret`, 定数時間比較, fail-closed)+ Anthropic outbound IP allowlist(`160.79.104.0/21`, fail-open)。GH push は web と同一 client の refresh token を共有 KV から再利用。
 
 ---
 

@@ -169,6 +169,7 @@ export interface Pr {
   value: number;
   rep_bucket: number | null;
   pr_basis: string | null;
+  is_provisional: number;
   achieved_at: number;
 }
 export interface MealItemInput {

@@ -1,6 +1,31 @@
 # 残タスク(運用開始後の集中バッチ / ultracode 想定)
 
-2026-06-02 時点。M1(web PWA)+ MCP(M2, 20ツール)は実装・本番稼働済み。以下は「一旦運用に入る」段階で残した、急がない品質・整備タスク。**帰宅後 ultracode で実施想定**。
+2026-06-02 時点。M1(web PWA)+ MCP(M2, 20ツール)は実装・本番稼働済み。以下は「一旦運用に入る」段階で残した、急がない品質・整備タスク。
+
+## 0. 集中バッチ実施結果(2026-06-02 ultracode)
+
+徹底レビュー(workflow, 6次元 + 敵対的検証)→ `docs/review-findings.md`(P0:0 / P1:5 / P2:30 / 却下15)。確定分を triage して反映:
+
+**修正済(コード)**
+- inline GH push のワークアウト displayName が自動命名 title を無視し 'Workout' 固定だった → 導出 title を使用(retry/D1 と一致, `workout.ts`)。
+- `get_recent_prs` が `is_provisional` を返さず説明と矛盾 → SELECT/型/MCP description 修正(`workouts.ts`/`api.ts`/`mcp index.ts`)。
+- `getMuscleVolume` の窓が windowDays+1 日(週次ターゲット比が約1日過大)→ `jstDaysAgo(windowDays-1)` で `getMuscleCalendar` と規約統一。
+- `get_day` のワークアウト取得が `getRecentSessions(50)` 依存で古い日付を取りこぼし得た → `getSessionsByDate(date)` を追加して使用。
+- cron の `staleAbandonedSessions`/`runDailyPull` が throw すると push 再送までスキップ → 各段を個別 `.catch` で隔離。
+- デッドコード削除: `routes.ts` の同一分岐 if/else 統合、未使用 `fmtKg`/`LB_PER_KG`。
+
+**テスト追加(105 件 green, +15)**: retryPendingPushes の workout/body_metric 再送 + RateLimit→deferred / 403→dead_letter 分類、deleteWorkout/deleteMeal の GH delete 分岐(type 取り違え検出)、isKnownOwnWrite の gh_data_origin 第2キー + 空文字ガード、mappers の body-fat/active-energy 抽出、e1RM 境界(12/13・loadKg<=0)、recencyDecay/estStrengthCaloriesKcal。
+
+**docs 最新化**: `design.md`(MANUAL→ACTIVELY_MEASURED・pageSize 1000・3日ルックバック・skin-temp 恒久除外・active_energy_kcal)、`mcp-design.md`(実装ステータス20ツール/get_day/delete weight/aliases/server instructions)、`README.md`(GH・MCP 接続済、active-energy 配線、22表)。
+
+**見送り(判断つき・実害なし)**
+- 塩↔ナトリウム換算 / 部位 slug / `mmdd` の重複統合: いずれも複数の web UI 画面が依存。並行 UI リデザインと衝突するため、UI 確定後に core へ集約。係数 2.54 は全箇所一致で現状バグ無し。
+- `apps/mcp` / `apps/web` の vitest 新規基盤(timingSafeEqual/ipv4InCidr 純関数・認証ゲート 401/403): 認証境界は fail-closed で稼働中。予防的価値が中心のため別途。
+- 食事編集のオフライン退避(delete 成功後 re-log がネット不通だと旧データ喪失): online→途中切断の狭い race。編集を冪等1オペとして outbox 化する設計が要るため別タスク。
+- `active_energy_kcal` の Recovery 画面表示 / `MUSCLE_GROUPS.region` 未使用フィールド削除: UI リデザイン側へ申し送り。
+- 却下 15 件(sleep startAt 未来時刻・IPv6 allowlist 素通り・URL secret・JWT alg 等)は `review-findings.md` 末尾に理由記載。再提起しない。
+
+以下は当初からの整備タスク(一部は §0 で対応済)。
 
 ## 1. 徹底レビュー(全体)
 - 3パッケージ(@ghs/core / apps/web / apps/mcp)横断のバグ・整合性・デッドコード走査。

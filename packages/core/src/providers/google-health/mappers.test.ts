@@ -183,6 +183,24 @@ describe('mapDataPoint: 値は typed sub-object 配下', () => {
     expect(dp.extra?.rem_min).toBe(102);
     expect(dp.extra?.efficiency).toBe(90); // 432/480 = 90%
   });
+
+  it('body-fat: bodyFat.percentage + sampleTime.physicalTime', () => {
+    const dp = mapDataPoint('body-fat', {
+      name: 'bf1',
+      bodyFat: { percentage: 15.5, sampleTime: { physicalTime: '2026-05-30T07:00:00Z' } },
+    });
+    expect(dp.value).toBe(15.5);
+    expect(dp.timeSec).toBe(Math.floor(Date.parse('2026-05-30T07:00:00Z') / 1000));
+  });
+
+  it('active-energy-burned: activeEnergyBurned.kcal + interval.startTime(消費kcal日次集計の回帰防止)', () => {
+    const dp = mapDataPoint('active-energy-burned', {
+      name: 'ae1',
+      activeEnergyBurned: { kcal: 5, interval: { startTime: '2026-05-30T12:00:00Z' } },
+    });
+    expect(dp.value).toBe(5); // フィールド名取り違えだと黙って 0 になる
+    expect(dp.timeSec).toBe(Math.floor(Date.parse('2026-05-30T12:00:00Z') / 1000));
+  });
 });
 
 describe('parseReconcileResponse', () => {

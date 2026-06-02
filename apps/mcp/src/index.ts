@@ -28,6 +28,7 @@ import {
   getMuscleVolume,
   getRecentPrs,
   getRecentSessions,
+  getSessionsByDate,
   getSettings,
   getSleepByDate,
   getTrainingFrequency,
@@ -300,7 +301,7 @@ function buildServer(env: Env): McpServer {
     {
       title: '自己ベスト(PR)',
       description:
-        '最近の PR 台帳(種目・値・rep_bucket・達成日)。is_provisional で暫定/確定を区別。',
+        '最近の e1RM PR 台帳(種目・推定1RM値・pr_basis・達成日)。is_provisional=true は RPE 補完(<実測)で算出した暫定 PR。',
       inputSchema: { limit: z.number().int().min(1).max(100).optional() },
       annotations: READ,
     },
@@ -428,7 +429,7 @@ function buildServer(env: Env): McpServer {
           { kcal: 0, p: 0, f: 0, c: 0, fiber: 0, sugar: 0, sodium_mg: 0 },
         );
       const body = await getBodyForDate(ctx.db, d);
-      const workouts = (await getRecentSessions(ctx.db, 50)).filter((s) => s.date === d);
+      const workouts = await getSessionsByDate(ctx.db, d);
       // センシング(D1ミラー): RHR/HRV/SpO2/VO2max/歩数/active_energy_kcal 等。摂取(nutrition)vs 消費の収支に。
       const sensing = await getDailyMetricsByDate(ctx.db, d);
       // 睡眠サマリ(deep/light/rem/awake/efficiency)。回復分析用。旧 Fitbit MCP の get_sleep 代替。

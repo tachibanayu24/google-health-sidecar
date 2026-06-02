@@ -4,9 +4,11 @@ import {
   computeE1rmKg,
   computeLoadKg,
   computeSetVolumeKg,
+  estStrengthCaloriesKcal,
   isProvisional,
   limbMultiplier,
   prBasisOf,
+  recencyDecay,
   setTypeStimulusWeight,
 } from './metrics';
 
@@ -102,10 +104,36 @@ describe('computeE1rmKg', () => {
   it('reps>12 → null (参考値)', () => {
     expect(computeE1rmKg(60, 15)).toBeNull();
   });
+  it('reps 境界: 12 は非null、13 で null', () => {
+    expect(computeE1rmKg(100, 12)).not.toBeNull();
+    expect(computeE1rmKg(100, 13)).toBeNull();
+  });
+  it('loadKg<=0 ガード(自重種目の偽 PR 混入防止)', () => {
+    expect(computeE1rmKg(0, 5)).toBeNull();
+    expect(computeE1rmKg(-10, 5)).toBeNull();
+  });
   it('brzycki differs from epley', () => {
     const e = computeE1rmKg(100, 5, 'epley');
     const b = computeE1rmKg(100, 5, 'brzycki');
     expect(e).not.toBe(b);
+  });
+});
+
+describe('recencyDecay', () => {
+  it('当日(daysAgo=0)は減衰なし=1、half-life(window/2)で 0.5', () => {
+    expect(recencyDecay(0, 7)).toBe(1);
+    expect(recencyDecay(3.5, 7)).toBeCloseTo(0.5, 6); // half_life = 7/2 = 3.5
+  });
+});
+
+describe('estStrengthCaloriesKcal', () => {
+  it('体重 or 時間が欠けると null(捏造しない)', () => {
+    expect(estStrengthCaloriesKcal(null, 3600)).toBeNull();
+    expect(estStrengthCaloriesKcal(70, 0)).toBeNull();
+    expect(estStrengthCaloriesKcal(70, null)).toBeNull();
+  });
+  it('70kg × 60分 × MET5 ≈ 368kcal', () => {
+    expect(estStrengthCaloriesKcal(70, 3600)).toBe(368); // (5*3.5*70/200)*60
   });
 });
 

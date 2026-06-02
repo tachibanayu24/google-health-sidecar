@@ -3,10 +3,7 @@
  *   pnpm --filter @ghs/tools exec tsx probe-sync-check.ts
  */
 import { GhClient } from '@ghs/core/providers/google-health/client';
-import {
-  buildReadFilter,
-  READ_DATATYPES,
-} from '@ghs/core/providers/google-health/discovery-pin';
+import { buildReadFilter, READ_DATATYPES } from '@ghs/core/providers/google-health/discovery-pin';
 import { parseReconcileResponse } from '@ghs/core/providers/google-health/mappers';
 import { toJstDateString } from '@ghs/core/util/date';
 import { loadAccessToken } from './_token';

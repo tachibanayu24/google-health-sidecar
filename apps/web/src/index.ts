@@ -40,13 +40,15 @@ export default {
     const catchupSlot = jst.getUTCMinutes() === 0 && jst.getUTCHours() === 7;
     ctx.waitUntil(
       (async () => {
-        await staleAbandonedSessions(app.db);
-        await runDailyPull(app); // GH→D1 reconcile(センシング: weight/sleep/HRV等。3日ルックバック・own-write除外・冪等)
+        // 各段を独立に隔離(前段の throw で後段=特に push 再送(真実保全の核)がスキップされないように)。
+        await staleAbandonedSessions(app.db).catch(() => undefined);
+        // GH→D1 reconcile(センシング: weight/sleep/HRV等。3日ルックバック・own-write除外・冪等)
+        await runDailyPull(app).catch(() => undefined);
         // ※ 食事(nutrition)は GH→アプリの pull をしない。食事は app/MCP が D1 正本→GH push の一方向(§5.2)。
         // 分単位 interval の日次集計。pageSize 拡大(1000)で軽くなったため毎回(*/5)当日分を集計=高頻度。
         await pullStepsDaily(app, { days: catchupSlot ? 3 : 1 }).catch(() => undefined);
         await pullActiveEnergyDaily(app, { days: catchupSlot ? 3 : 1 }).catch(() => undefined);
-        await retryPendingPushes(app, { max: 20 }); // 失敗/未送 push の再送
+        await retryPendingPushes(app, { max: 20 }).catch(() => undefined); // 失敗/未送 push の再送
       })(),
     );
   },

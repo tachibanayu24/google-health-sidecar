@@ -72,7 +72,7 @@
 ### 2.1 体重の扱いを単一方針に確定(レビュー指摘: 3箇所矛盾の解消)
 旧ドラフトは Today=read-only バッジ、§9.7=「GHに書き戻す」、§14=「閲覧のみが安全」と食い違っていた。**以下に一本化する**:
 - **デバイス測定値**(スマートスケール等)= GH が真実。daily batch で D1 にミラー(`source='google_health'`, `gh_external_id` あり)。UI上 **read-only**(出所バッジ表示)。
-- **手入力値**(器具なしで体重を記録したい時)= D1 が正本(`source='app'`, `gh_external_id` なし)。GH へは `health_metrics_and_measurements.writeonly` で best-effort push し、`recordingMethod="MANUAL"` を付ける。
+- **手入力値**(器具なしで体重を記録したい時)= D1 が正本(`source='app'`, `gh_external_id` なし)。GH へは `health_metrics_and_measurements.writeonly` で best-effort push し、`recordingMethod="ACTIVELY_MEASURED"` を付ける(MANUAL は GH enum に無く 400。echo 除外は recordingMethod でなく `gh_datapoint_id`/`gh_data_origin` 照合=`isKnownOwnWrite`、§17.5)。
 - **dedupe**: 同日に GH ミラーと手入力が並ぶ場合、**デバイス測定(GHミラー)を優先表示**し手入力は補助。`measured_at` の近接(同日)を重複判定キーにする。
 - §9.2 Today はデバイス測定があればそれを read-only 表示、無ければ手入力を編集可能表示。§9.7 の体重編集UIは「手入力値のみ編集可、デバイス測定は GH 側が真実」と明示。
 
@@ -182,7 +182,7 @@ base: `https://health.googleapis.com/v4` / package: `google.devicesandservices.h
 
 **reconcile verb の確定方針**(レビュー指摘): daily batch の中核呼び出しなので「両方試す」では実装が固まらない。**M0で discovery doc(`health.googleapis.com` の `$discovery/rest`)を唯一の真実として verb を確定**し、本文の暫定表記を実値へ更新。discovery doc を CI で取得/pin し、reconcile を含む全エンドポイントの method を契約テストで固定(§14リスク#7 breaking change検知と統合)。
 
-DataPoint 共通: `name` / `dataSource`{`recordingMethod`, `device`, ...} / data(union)。**手入力は `recordingMethod="MANUAL"` を付ける**【確定】。
+DataPoint 共通: `name` / `dataSource`{`recordingMethod`, `device`, ...} / data(union)。**全 push は `recordingMethod="ACTIVELY_MEASURED"`**(MANUAL は GH enum に無く 400、ACTIVELY_RECORDED も 400 → §17.5 で訂正済)。
 
 create例(body-fat、公式verbatim):
 ```json
@@ -238,16 +238,17 @@ POST /v4/users/me/dataTypes/body-fat/dataPoints
 | `vo2max` | `daily-vo2-max` | activity_and_fitness | `daily_metrics(metric='vo2max', unit='ml/kg/min')` | 【確定】 |
 | `resp-rate` | `daily-respiratory-rate` | health_metrics_and_measurements | `daily_metrics(metric='resp_rate', unit='/min')` | ✅【確定: 2026-06-01 実データ取得 `breathsPerMinute`, §17.5】 |
 | `skin-temp` | (なし) | health_metrics_and_measurements | `daily_metrics(metric='skin_temp_c', unit='celsius', 絶対℃)` | 【恒久除外: 候補8種すべて Invalid data type ID と実機確定(2026-06-01)→ GH 未提供, §17.5】 |
-| `steps` | `steps` | activity_and_fitness | `daily_metrics(metric='steps', unit='count')` | 【確定・MVP任意】 |
+| `steps` | `steps` | activity_and_fitness | `daily_metrics(metric='steps', unit='count')` | 【確定・MVP任意。分単位 interval を日次合算→overwrite, §12.2】 |
+| `active-energy` | `active-energy-burned` | activity_and_fitness | `daily_metrics(metric='active_energy_kcal', unit='kcal')` | ✅【確定: 2026-06-02 実機 probe。分単位 interval kcal を日次合算→overwrite。エネルギー収支(摂取 vs 消費)用, migration 0014】 |
 
 - **体重/体脂肪の合流**: `weight` と `body-fat` は別 dataType・別 sync_runs 行として個別に pull し、**日付キーで `body_metrics` の同一行へ合流(upsert)**する。`vo2max` は `daily-vo2-max` を主とし、`run-vo2-max` が必要なら別内部キーで追加(MVPは `daily-vo2-max` のみ)。
 - **steps はMVP任意**(ボディメイク主目的では従。enum/loopには載せるが §13 で後回し可)。`resp-rate`/`skin-temp` は dataType ID をM0 discovery docで確定してから loop 有効化(未確定なら一時 skip、表・enum・loop・SoTの4箇所は本表に揃える)。
-- **エコーループ防止(監査 blocker)**: `weight`/`body-fat` は手入力 push(`recordingMethod=MANUAL`, source='app')が reconcile で戻ってくる。pull 時に **自分の書込み(gh_sync_state に記録した `gh_datapoint_id`/`gh_data_origin` に一致 or `recordingMethod=MANUAL` かつ自前 dataSource)を own-write と判定し、既存 source='app' 行へ `gh_external_id` を紐付けるだけで source は上書きしない**(§12.2に実装、§2.1 dedupeが手入力をデバイス測定と誤認するのを防ぐ)。
+- **エコーループ防止(監査 blocker)**: `weight`/`body-fat` は手入力 push(`recordingMethod=ACTIVELY_MEASURED`, source='app')が reconcile で戻ってくる。pull 時に **自分の書込み(gh_sync_state に記録した `gh_datapoint_id` 一致、または `gh_data_origin`(アプリ固有の application name)一致)を own-write と判定し(`isKnownOwnWrite`, recordingMethod 非依存)、既存 source='app' 行へ `gh_external_id` を紐付けるだけで source は上書きしない**(§12.2に実装、§2.1 dedupeが手入力をデバイス測定と誤認するのを防ぐ)。
 
 読む対象 dataType ID(参考・旧表記): 上のマスタ表が唯一の正。
 
 - **list** = 生データ(device/manual, source付き、複数デバイス重複は自己dedupe要)。**reconcile** = Google突合済の単一ストリーム。**daily batchの「最終的な1日の値」は reconcile が楽**【確定】。
-- `list` filter は AIP-160構文。時間範囲は形状依存(interval系=`interval.start_time`、sample系=`sample_time.physical_time`、daily系=`date`)。RFC-3339 or civil。**interval start 降順、`pageToken` でページング。exercise/sleep は pageSize 上限25**【確定】。
+- `list` filter は AIP-160構文。時間範囲は形状依存(interval系=`interval.start_time`、sample系=`sample_time.physical_time`、daily系=`date`)。RFC-3339 or civil。**interval start 降順、`pageToken` でページング。reconcile は `pageSize>=1000` を許容**(実機で 1ページ 661 点取得を確認、2026-06-02。当初の「上限25」想定は誤りだった→ §12.2 サブリクエスト予算が大幅減)。
 - **intraday注意**【確定】: Fitbitの detailLevel(1sec/5min)が無く、ネイティブ~5秒サンプルを `dataPoints.list` + RFC3339秒精度filter で取りクライアント側ダウンサンプルが必要。**daily batchでは intraday を引かず日次集計値だけミラー**。
 - 皮膚温は**日次・絶対℃**(Fitbitの相対値と非互換)→ `daily_metrics.unit='celsius'` で保存、過去Fitbitデータは「相対」ラベルで分離。
 - **レート制限の数値は公式未掲載**【要検証】→ daily batch は直列+指数バックオフ(429想定)、実機で観測後に並列度調整。cron予算見積りは §12.2。
@@ -590,9 +591,9 @@ CREATE INDEX idx_sleep_date ON sleep_logs(date);
 -- ============ その他センシング日次ミラー(SpO2/HRV/皮膚温/安静時心拍/VO2max等) ============
 CREATE TABLE daily_metrics (
   date          TEXT NOT NULL,
-  metric        TEXT NOT NULL,                    -- 'spo2_avg'|'resp_rate'|'hrv_rmssd'|'skin_temp_c'|'resting_hr'|'vo2max'|'steps'(§5.4マスタ表と一致)
+  metric        TEXT NOT NULL,                    -- 'spo2_avg'|'resp_rate'|'hrv_rmssd'|'resting_hr'|'vo2max'|'steps'|'active_energy_kcal'(§5.4マスタ表と一致。skin_temp_c は GH 未提供で恒久除外)
   value         REAL NOT NULL,
-  unit          TEXT NOT NULL,                    -- '%'|'/min'|'ms'|'celsius'|'bpm'|'ml/kg/min'|'count'
+  unit          TEXT NOT NULL,                    -- '%'|'/min'|'ms'|'bpm'|'ml/kg/min'|'count'|'kcal'
   source        TEXT NOT NULL DEFAULT 'google_health',
   gh_external_id TEXT,
   updated_at    INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -971,7 +972,7 @@ google-health-sidecar/
 apps/mcp の wrangler.jsonc は同じD1/KVバインド + `MCP_SHARED_SECRET`/`ANTHROPIC_OUTBOUND_CIDR`、cron無し。
 
 ### 12.2 daily batch(scheduled)— cron予算と再入(レビュー major への対応)
-**cron予算見積り(概算)**: 読む dataType 8種。多くは daily 系で1日1〜数点(ページング不要)。ページングが要るのは exercise/sleep(pageSize上限25)程度で、単一ユーザー1日分なら各 1〜2ページ。サブリクエスト概算 = 8 dataType ×(reconcile 1 + 追加ページ最大2)≒ 最大 ~24 サブリクエスト/回 + token refresh 1。Workers のサブリクエスト上限(有料1000)に対し**大幅に余裕**、wall-clock も数秒想定。→ **MVP は cron 同期処理で足りる**。
+**cron予算見積り(概算)**: 読む dataType は daily 系が中心(1日1〜数点)。`pageSize>=1000` が通る(§5.1)ため単一ユーザー1日分は各 dataType ほぼ1ページで完結し、サブリクエストは dataType 数 + interval 集計(steps/active-energy)+ token refresh 程度。Workers のサブリクエスト上限(有料1000)に対し**大幅に余裕**、wall-clock も数秒想定。→ pageSize 拡大で軽くなったため `*/5` 毎回 pull + 当日 interval 集計を回している(§12.2 cron)。
 
 **設計上の安全策**:
 - **cron は単一式(`*/5`)に集約**(2026-06-01 実デプロイで判明: Cloudflare 無料プランは **account 合計5本** が cron 上限。当初の4式=pull3+push1 では他プロジェクト分と合算で超過)。枠コストは「式の本数」で頻度ではないため、`*/5` 1本で **5分毎に pull(GH→D1 増分)+ push再送 + stale化を毎回実行**する。これで枠1本のまま当初の日3回 pull より高頻度な同期になる。同期頻度を変えたいときはこの周期だけ変更(枠は1のまま)。GH のデバイス同期遅延的に `*/5` が実効上限(それより速くても新データは増えず 429 リスクのみ)。
@@ -990,19 +991,23 @@ async scheduled(_controller, env, ctx) {
   // 以降の pull 詳細(参考: runDailyPull の内部ループ):
   const provider = new GoogleHealthProvider(env);  // 系統BトークンをKV共通getAccessTokenで
   // ★ループ単位は §5.4 マスタ表の「GH dataType ID」粒度(内部キー=GH dataType ID)。
-  //   resp-rate/skin-temp は dataType ID がM0未確定なら DATATYPES から除外(表と一致させる)。
+  //   skin-temp は GH 未提供で恒久除外。steps/active-energy-burned は分単位 interval のため
+  //   この reconcile ループでは扱わず pullStepsDaily/pullActiveEnergyDaily が日次合算→overwrite(§5.4)。
   const DATATYPES = ["weight","body-fat","sleep","daily-resting-heart-rate",
                      "daily-heart-rate-variability","daily-oxygen-saturation","daily-vo2-max",
-                     "daily-respiratory-rate","daily-skin-temperature","steps"];
+                     "daily-respiratory-rate"];
   for (const type of DATATYPES) {
     const st = await getSyncRun(env.DB, type);            // sync_runs.data_type = GH dataType ID
     try {
-      const since = st?.last_synced_at ?? daysAgo(14);
+      // 後着データ対策(実バグ修正, 2026-06-02): Fitbit→GH ミラーは数時間遅れ、睡眠 end_time は
+      // 朝(=同期実行時刻より過去)。since=last_synced_at のままだと「実行時刻より過去の時刻を持つ
+      // 後着データ」を恒久的に取りこぼす(今朝の睡眠が来ない)。最低3日は再スキャン(own-write除外+upsertで冪等)。
+      const since = Math.min(st?.last_synced_at ?? daysAgo(14), now() - 3 * 86400);
       // reconcile verb は discovery doc で確定済(§5.1)。cursor から再開。
       const { points, cursor } = await provider.reconcileDataPoints(type, since, now(), st?.last_cursor);
       // ★own-writeフィルタ(エコーループ防止, §5.4): 自分が push した手入力(weight/body-fat)を
       //   除外/紐付けのみにし、source='app' を 'google_health' で上書きしない。
-      const external = points.filter(p => !isOwnWrite(env, type, p)); // gh_datapoint_id/dataSource/MANUAL照合
+      const external = points.filter(p => !isOwnWrite(env, type, p)); // isKnownOwnWrite: gh_datapoint_id/gh_data_origin 照合(recordingMethod 非依存)
       await mergeIntoStore(env.DB, type, external);  // weight/body-fat は date キーで body_metrics 同一行へ合流
       await markOk(env.DB, type, now(), cursor);
     } catch (e) { await markError(env.DB, type, e); } // consecutive_failures++

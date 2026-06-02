@@ -9,6 +9,7 @@ import { ulid } from '../db/ids';
 import { searchExercises } from '../db/repositories/exercises';
 import {
   getPendingPushes,
+  isKnownOwnWrite,
   markPushDeferred,
   markPushFailed,
   markPushSynced,
@@ -24,11 +25,13 @@ import type {
   ReconcileResult,
 } from '../providers/HealthProvider';
 import { todayJst } from '../util/date';
+import { ProviderApiError, RateLimitError } from '../util/errors';
 import { deleteBodyMetric, logWeight } from './body';
 import type { AppContext } from './context';
 import { deleteMeal, logMeal, logMealFromPreset, saveMealPreset } from './nutrition';
 import { pullActiveEnergyDaily, retryPendingPushes, runDailyPull } from './sync';
 import {
+  deleteWorkout,
   getExerciseHistory,
   getMuscleCalendar,
   getMuscleVolume,
@@ -47,12 +50,15 @@ class FakeProvider implements HealthProvider {
       pointsByType?: Record<string, ProviderDataPoint[]>;
       failBodyFat?: boolean;
       failNutrition?: boolean;
+      failExercise?: Error; // pushExercise が投げる例外(RateLimit/ProviderApiError 分類検証用)
+      failBody?: Error; // pushBodyMetric(全 kind)が投げる例外
     } = {},
   ) {}
   async reconcileDataPoints(ghDataType: string): Promise<ReconcileResult> {
     return { points: this.opts.pointsByType?.[ghDataType] ?? [], cursor: null };
   }
   async pushExercise(input: ExercisePushInput) {
+    if (this.opts.failExercise) throw this.opts.failExercise;
     this.exerciseCalls.push(input);
     return { datapointId: `ex-${input.clientTag}`, dataOrigin: 'logbook' };
   }
@@ -62,6 +68,7 @@ class FakeProvider implements HealthProvider {
     return { datapointId: `nut-${input.clientTag}`, dataOrigin: 'logbook' };
   }
   async pushBodyMetric(input: BodyPushInput) {
+    if (this.opts.failBody) throw this.opts.failBody;
     if (this.opts.failBodyFat && input.kind === 'body-fat') throw new Error('body-fat push failed');
     this.bodyCalls.push(input);
     return { datapointId: `${input.kind}-${input.clientTag}`, dataOrigin: 'logbook' };
@@ -627,5 +634,158 @@ describe('消費カロリー日次集計(pullActiveEnergyDaily)', () => {
     );
     expect(m?.value).toBe(15); // 5+7+3
     expect(m?.unit).toBe('kcal');
+  });
+});
+
+describe('retryPendingPushes 再送経路と例外分類 (§12.2)', () => {
+  const now = () => Math.floor(Date.now() / 1000);
+
+  it('workout pending を再送して synced にする(displayName は保存済み自動命名 title)', async () => {
+    const provider = new FakeProvider();
+    const ctx = makeCtx({ provider, pushInline: false }); // inline 送らず → 台帳 pending のまま
+    const r = await saveWorkout(ctx, {
+      exercises: [
+        {
+          exerciseId: 'dumbbell-bench-press', // primary=chest → 自動命名「胸」
+          sets: [{ setType: 'main' as const, entryValue: 30, reps: 10, entryUnit: 'kg' as const }],
+        },
+      ],
+    });
+    const res = await retryPendingPushes(ctx);
+    expect(res.synced).toBe(1);
+    expect(provider.exerciseCalls.length).toBe(1);
+    expect(provider.exerciseCalls[0]?.displayName).toBe('胸'); // 'Workout' 固定でない(inline と一致)
+    const [row] = await ctx.db.raw<{ sync_status: string; gh_datapoint_id: string | null }>(
+      "SELECT sync_status, gh_datapoint_id FROM gh_sync_state WHERE entity_type='workout' AND entity_id=?",
+      r.sessionId,
+    );
+    expect(row?.sync_status).toBe('synced');
+  });
+
+  it('body_metric(weight) pending を再送して synced にする', async () => {
+    const provider = new FakeProvider();
+    const ctx = makeCtx({ provider, pushInline: false });
+    await logWeight(ctx, { entryValue: 75, entryUnit: 'kg' });
+    const res = await retryPendingPushes(ctx);
+    expect(res.synced).toBe(1);
+    expect(provider.bodyCalls.some((c) => c.kind === 'weight')).toBe(true);
+    const [row] = await ctx.db.raw<{ sync_status: string }>(
+      "SELECT sync_status FROM gh_sync_state WHERE entity_type='body_metric'",
+    );
+    expect(row?.sync_status).toBe('synced');
+  });
+
+  it('RateLimitError は retry_count を消費せず pending 据え置き + next_retry_at 未来(dead_letter 化しない)', async () => {
+    const provider = new FakeProvider({ failExercise: new RateLimitError(120) });
+    const ctx = makeCtx({ provider, pushInline: false });
+    const r = await saveWorkout(ctx, {
+      exercises: [
+        {
+          exerciseId: 'dumbbell-bench-press',
+          sets: [{ setType: 'main' as const, entryValue: 30, reps: 10, entryUnit: 'kg' as const }],
+        },
+      ],
+    });
+    const res = await retryPendingPushes(ctx);
+    expect(res.failed).toBe(1);
+    const [row] = await ctx.db.raw<{
+      sync_status: string;
+      retry_count: number;
+      next_retry_at: number | null;
+    }>(
+      "SELECT sync_status, retry_count, next_retry_at FROM gh_sync_state WHERE entity_type='workout' AND entity_id=?",
+      r.sessionId,
+    );
+    expect(row?.sync_status).toBe('pending');
+    expect(row?.retry_count).toBe(0);
+    expect(row?.next_retry_at ?? 0).toBeGreaterThan(now());
+  });
+
+  it('ProviderApiError(403) は1回で即 dead_letter(scope 不足 push の暴走防止)', async () => {
+    const provider = new FakeProvider({ failExercise: new ProviderApiError(403, 'forbidden') });
+    const ctx = makeCtx({ provider, pushInline: false });
+    const r = await saveWorkout(ctx, {
+      exercises: [
+        {
+          exerciseId: 'dumbbell-bench-press',
+          sets: [{ setType: 'main' as const, entryValue: 30, reps: 10, entryUnit: 'kg' as const }],
+        },
+      ],
+    });
+    await retryPendingPushes(ctx);
+    const [row] = await ctx.db.raw<{ sync_status: string; retry_count: number }>(
+      "SELECT sync_status, retry_count FROM gh_sync_state WHERE entity_type='workout' AND entity_id=?",
+      r.sessionId,
+    );
+    expect(row?.sync_status).toBe('dead_letter');
+    expect(row?.retry_count).toBe(1);
+  });
+});
+
+describe('削除の GH 連携 (§8.5)', () => {
+  it('deleteWorkout: D1 正本 + 台帳を削除し、push 済み exercise datapoint を batchDelete する', async () => {
+    const provider = new FakeProvider();
+    const ctx = makeCtx({ provider, pushInline: true }); // inline push → 台帳 synced + gh_datapoint_id
+    const r = await saveWorkout(ctx, {
+      exercises: [
+        {
+          exerciseId: 'dumbbell-bench-press',
+          sets: [{ setType: 'main' as const, entryValue: 30, reps: 10, entryUnit: 'kg' as const }],
+        },
+      ],
+    });
+    expect(r.ghPushed).toBe(true);
+    const del = await deleteWorkout(ctx, r.sessionId);
+    expect(del.ghDeleted).toBe(true);
+    expect(provider.deleteCalls.some((c) => c.type === 'exercise')).toBe(true); // nutrition-log と取り違えない
+    const [sess] = await ctx.db.raw<{ n: number }>(
+      'SELECT count(*) AS n FROM workout_sessions WHERE id=?',
+      r.sessionId,
+    );
+    expect(sess?.n).toBe(0);
+    const [sets] = await ctx.db.raw<{ n: number }>('SELECT count(*) AS n FROM workout_sets');
+    expect(sets?.n).toBe(0); // CASCADE
+    const [led] = await ctx.db.raw<{ n: number }>(
+      "SELECT count(*) AS n FROM gh_sync_state WHERE entity_type='workout' AND entity_id=?",
+      r.sessionId,
+    );
+    expect(led?.n).toBe(0);
+  });
+
+  it('deleteMeal: featureGhNutritionPush 時は nutrition-log datapoint も batchDelete する', async () => {
+    const provider = new FakeProvider();
+    const ctx = makeCtx({ provider, featureGhNutritionPush: true, pushInline: true });
+    const r = await logMeal(ctx, {
+      mealType: 'Lunch',
+      items: [{ foodName: '鶏胸肉', caloriesKcal: 165, proteinG: 31 }],
+    });
+    const del = await deleteMeal(ctx, r.mealId);
+    expect(del.ghDeleted).toBe(true);
+    expect(provider.deleteCalls.some((c) => c.type === 'nutrition-log')).toBe(true);
+    const [meal] = await ctx.db.raw<{ n: number }>(
+      'SELECT count(*) AS n FROM meals WHERE id=?',
+      r.mealId,
+    );
+    expect(meal?.n).toBe(0);
+  });
+});
+
+describe('isKnownOwnWrite(echo ループ防止=二重計上防止の核)', () => {
+  it('gh_data_origin 一致(datapoint_id 不一致)でも own-write と判定する', async () => {
+    const db = makeTestDb();
+    await runBatch(db, [pendingPushStmt('meal', 'm1')]);
+    await markPushSynced(db, 'meal', 'm1', 'dp-A', 'logbook', null);
+    // 別 datapoint_id でも同じ origin('logbook')→ 自分の書き込み
+    expect(await isKnownOwnWrite(db, 'dp-DIFFERENT', 'logbook')).toBe(true);
+    // datapoint も origin も未知(他デバイス測定)→ 取り込む
+    expect(await isKnownOwnWrite(db, 'dp-foreign', 'fitbit-mirror')).toBe(false);
+  });
+
+  it('空文字 origin は誤一致しない(空 origin の外部点を own-write 扱いしない)', async () => {
+    const db = makeTestDb();
+    await runBatch(db, [pendingPushStmt('meal', 'm1')]);
+    await markPushSynced(db, 'meal', 'm1', 'dp-A', '', null); // origin 空で synced
+    expect(await isKnownOwnWrite(db, 'dp-EXTERNAL', '')).toBe(false); // ''='' の誤一致なし
+    expect(await isKnownOwnWrite(db, 'dp-A', '')).toBe(true); // datapoint_id 一致は有効
   });
 });
