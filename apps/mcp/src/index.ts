@@ -10,9 +10,13 @@
 import {
   autocompleteFoods,
   type Db,
+  deleteMeal,
+  deleteWorkout,
   getActiveNutritionTarget,
   getBodyForDate,
   getExerciseHistory,
+  getMealById,
+  getMealItems,
   getMealItemsForMeals,
   getMealsByDate,
   getMuscleCalendar,
@@ -20,6 +24,7 @@ import {
   getRecentPrs,
   getRecentSessions,
   getSettings,
+  jstDaysAgo,
   LogMealInputSchema,
   logMeal,
   logWeight,
@@ -127,7 +132,7 @@ async function resolveExerciseId(
 
 /** リクエスト毎に McpServer を新規生成(ステートレス)。M2-a: get_settings / M2-b: read / M2-c: write。 */
 function buildServer(env: Env): McpServer {
-  const server = new McpServer({ name: 'logbook-mcp', version: '0.3.0' });
+  const server = new McpServer({ name: 'logbook-mcp', version: '0.4.0' });
 
   server.registerTool(
     'get_settings',
@@ -174,7 +179,22 @@ function buildServer(env: Env): McpServer {
           hint: '候補の id を exercise に渡して再呼び出し、または search_exercises で確認',
         });
       }
-      const sets = await getExerciseHistory(ctx, r.id, { since, limit });
+      // 分析に使う意味のあるフィールドのみ返す(workout_exercise_id/created_at 等のプレースホルダは省く)。
+      const sets = (await getExerciseHistory(ctx, r.id, { since, limit })).map((s) => ({
+        session_id: s.session_id,
+        session_date: s.session_date,
+        set_index: s.set_index,
+        set_type: s.set_type,
+        load_mode: s.load_mode,
+        entry_value: s.entry_value,
+        entry_unit: s.entry_unit,
+        weight_kg: s.weight_kg,
+        reps: s.reps,
+        rpe: s.rpe,
+        load_kg: s.load_kg,
+        set_volume_kg: s.set_volume_kg,
+        e1rm_kg: s.e1rm_kg,
+      }));
       return ok({ provenance: 'd1_confirmed', exerciseId: r.id, sets });
     },
   );
@@ -468,6 +488,98 @@ function buildServer(env: Env): McpServer {
       const ctx = makeContext(env);
       await setNutritionTarget(ctx, args);
       return ok({ ok: true });
+    },
+  );
+
+  server.registerTool(
+    'log_meal_photo',
+    {
+      title: '写真から食事を記録',
+      description:
+        '食事写真を見て解析した内容(items[])を記録し GH へ push。画像は **あなた(Claude)が視覚解析**して栄養値(kcal/PFC 等)を見積もり items[] に変換して渡す(画像バイナリは渡さない)。inputMethod は photo 固定。それ以外は log_meal と同契約。',
+      inputSchema: LogMealInputSchema.shape,
+      annotations: WRITE_GH,
+    },
+    async (args) => {
+      const ctx = makeContext(env);
+      const input = LogMealInputSchema.parse(args);
+      const clientRequestId = ensureCrid(input.clientRequestId);
+      const res = await logMeal(ctx, { ...input, inputMethod: 'photo', clientRequestId });
+      return ok({ ...res, clientRequestId });
+    },
+  );
+
+  // ===== M2-d: destructive(直近の取消のみ。echo+confirm 二段, §5.5-D/E・§6.4)=====
+  server.registerTool(
+    'delete_recent_log',
+    {
+      title: '直近の記録を取消',
+      description:
+        '直近の食事 or ワークアウトを取消(D1 削除 + GH datapoint も削除)。confirm 省略時は削除せず対象内容を echo するので、確認して confirm:true で実行する。**訂正は「取消→再記録」が公式フロー**(編集ツールは無い)。対象は当日(JST)作成、ワークアウトは加えて最新3件まで。範囲外はエラー。',
+      inputSchema: {
+        type: z.enum(['meal', 'workout']),
+        id: z.string().min(1),
+        confirm: z.boolean().optional(),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    async ({ type, id, confirm }) => {
+      const ctx = makeContext(env);
+      const today = todayJst();
+      if (type === 'workout') {
+        const sessions = await getRecentSessions(ctx.db, 20);
+        const target = sessions.find((s) => s.id === id);
+        const recent =
+          !!target && (target.date === today || sessions.slice(0, 3).some((s) => s.id === id));
+        if (!target || !recent) {
+          return ok({
+            error: 'not_recent',
+            message:
+              '直近(当日 or 最新3件)のワークアウトのみ取消可能。get_recent_sessions で対象 id を確認してください。',
+          });
+        }
+        if (!confirm) {
+          return ok({
+            requireConfirm: true,
+            target: {
+              id: target.id,
+              date: target.date,
+              title: target.title,
+              total_volume_kg: target.total_volume_kg,
+              exercises: target.exercises,
+              sets: target.sets,
+            },
+            message: `${target.date} ${target.title ?? 'ワークアウト'}(${target.exercises}種目 ${target.sets}set)を削除します。confirm:true で実行。`,
+          });
+        }
+        return ok(await deleteWorkout(ctx, id));
+      }
+      // meal: 当日/前日のみ取消可
+      const meal = await getMealById(ctx.db, id);
+      if (!meal || meal.date < jstDaysAgo(1)) {
+        return ok({
+          error: 'not_recent',
+          message: '直近(当日/前日)の食事のみ取消可能。get_day で対象 id を確認してください。',
+        });
+      }
+      if (!confirm) {
+        const items = await getMealItems(ctx.db, id);
+        const kcal = Math.round(items.reduce((a, it) => a + it.calories_kcal, 0));
+        const label = items[0]
+          ? `${items[0].food_name}${items.length > 1 ? ` 他${items.length - 1}品` : ''}`
+          : '食事';
+        return ok({
+          requireConfirm: true,
+          target: { id, date: meal.date, meal_type: meal.meal_type, label, kcal },
+          message: `${meal.date} ${meal.meal_type} / ${label}(${kcal}kcal)を削除します。confirm:true で実行。`,
+        });
+      }
+      return ok(await deleteMeal(ctx, id));
     },
   );
 
