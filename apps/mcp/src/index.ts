@@ -147,7 +147,18 @@ async function resolveExerciseId(
 
 /** リクエスト毎に McpServer を新規生成(ステートレス)。M2-a: get_settings / M2-b: read / M2-c: write。 */
 function buildServer(env: Env): McpServer {
-  const server = new McpServer({ name: 'logbook-mcp', version: '0.7.0' });
+  const server = new McpServer(
+    { name: 'logbook-mcp', version: '0.8.0' },
+    {
+      instructions:
+        'Logbook = オーナー1名のボディメイク用ログ(食事/ワークアウト/体重)+ Google Health センシング。\n' +
+        '開発者=利用者(オーナー本人)。ツールの不足・誤り・改善要望があれば遠慮なくチャットで伝えてよい(その場で実装・修正される)。\n' +
+        '規約: 単位は kg/kcal/g(sodium は mg)、日付は JST の YYYY-MM-DD。種目は search_exercises で id を解決(日本語俗称・略称も可)。\n' +
+        '食事は app→D1→GH の一方向(GH から栄養は読まない)。write の ghPushed / delete の ghDeleted は GH 反映の真偽。冪等は clientRequestId を再利用。\n' +
+        'エネルギー収支: 総消費 ≈ 推定BMR + get_day.sensing の active_energy_kcal(GH は活動分のみ。BMR は別途推定)。\n' +
+        '当日のセンシング/睡眠は Fitbit→GH ミラーで数時間遅れることがある(前日まではほぼ確定)。',
+    },
+  );
 
   server.registerTool(
     'get_settings',
@@ -355,7 +366,8 @@ function buildServer(env: Env): McpServer {
     {
       title: '日次の俯瞰',
       description:
-        '指定日(既定 今日JST)の食事(PFC合計+品目明細)・ワークアウト・体重をまとめて返す。1日の横断把握に。',
+        '指定日(既定 今日JST)の 食事(PFC合計+品目明細)・ワークアウト・体重・睡眠サマリ(deep/light/rem/efficiency)・' +
+        'センシング(RHR/HRV/SpO2/呼吸/VO2max/歩数/active_energy_kcal)をまとめて返す。1日の総合評価・エネルギー収支に。',
       inputSchema: {
         date: z
           .string()
