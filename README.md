@@ -12,6 +12,64 @@
 - **Hono**(API + 認証ゲート) / Google OIDC(系統A ログイン)+ GH OAuth Pattern B(系統B, 未接続)
 - pnpm workspace モノレポ: `packages/core`(ドメイン/DB/services/providers/auth) + `apps/web`(UI+API) + `apps/mcp`(M2) + `tools`(OAuth CLI)
 
+## データフロー(トレーナーAI / Logbook / GH)
+
+**D1 が唯一の正本**。食事・ワークアウト・体重は **UI(PWA)とトレーナーAI(MCP)の両方**から書け、保存と同時に GH へ best-effort で push する。体重・睡眠などのセンシングは GH デバイスが真実で、cron が pull して表示する。**食事・ワークアウトは GH から pull しない**(app/MCP→GH の一方向。pull すると二重取込になるため)。
+
+```mermaid
+flowchart TB
+  subgraph T["① トレーナーAI(Claude)"]
+    AI["MCP クライアント"]
+  end
+  subgraph L["② Logbook(このアプリ)"]
+    MCP["MCP サーバ<br/>apps/mcp"]
+    UI["PWA UI<br/>apps/web"]
+    API["HTTP /api<br/>routes.ts"]
+    SVC["services<br/>workout / nutrition / body"]
+    D1[("D1 = 正本")]
+    SYNC["sync<br/>cron */5"]
+  end
+  subgraph G["③ Google Health"]
+    GHX[("GH datatypes")]
+  end
+
+  AI -- "write: log_meal / log_workout / log_weight ほか<br/>read: history / muscle_volume / day ほか" --> MCP
+  UI -- "HTTP" --> API
+  MCP --> SVC
+  API --> SVC
+  SVC -- "原子的 batch" --> D1
+  SVC -- "push(記録時 inline・best-effort)" --> GHX
+  GHX -- "pull(cron・read-only)" --> SYNC
+  SYNC --> D1
+  SYNC -. "push 再試行(pending/failed)" .-> GHX
+```
+
+### データ種別ごとの流れ(現状の実装)
+
+| データ | 入力元 | D1 正本 | GH push | GH pull |
+|---|---|---|---|---|
+| ワークアウト | UI / MCP(`log_workout`) | ✓ `workout_sessions` | ✓ `exercise`(STRENGTH_TRAINING) | ✗ |
+| 食事 | UI / MCP(`log_meal`/`log_preset`/`log_meal_photo`) | ✓ `meals` | ✓ `nutrition-log` ※フラグ依存 | ✗(一方向) |
+| 体重・体脂肪 | UI / MCP(`log_weight`)/ GHデバイス | ✓ `body_metrics` | ✓ `weight` / `body-fat` | ✓(デバイス測定) |
+| 睡眠 | GH デバイス | ✓ `sleep_logs` | ✗ | ✓ read-only |
+| 安静時心拍 / HRV / SpO₂ / VO₂max / 呼吸数 | GH デバイス | ✓ `daily_metrics` | ✗ | ✓ read-only |
+| 歩数 / 消費kcal / 皮膚温 | GH デバイス | (`daily_metrics`) | ✗ | ⚠ **未配線**(`unverified`) |
+| 食事プリセット / 栄養目標 | UI / MCP | ✓ | ✗ | ✗ |
+
+- ※ 食事の GH push は **`FEATURE_GH_NUTRITION_PUSH`**(本番 = `true`)が ON のときだけ実行。OFF だと台帳に `skipped_flag_off` で記録され push されない。
+- push は失敗しても D1 には残る(best-effort)。`gh_sync_state` 台帳が `pending → synced / failed → dead_letter`(403/401/400 は恒久失敗)を追跡し、cron が再試行する。冪等性は `client_request_id` で担保。
+
+### 同期(cron `*/5` — `apps/web/src/index.ts`)
+
+毎5分ごとに順に実行:
+
+1. **stale 化** — 放置された `in_progress` セッションを `stale` に倒す
+2. **pull(GH→D1)** — 体重/体脂肪/睡眠/安静時心拍/HRV/SpO₂/VO₂max/呼吸数を取り込み(自分の push 由来は `gh_external_id` で除外しエコーを防止)
+3. **時刻ゲート(JST 7/13/22 時)** — 歩数・消費kcal の日次合計を上書き(※実装途上)
+4. **push 再試行** — 失敗/未送の GH push を最大 20 件再送
+
+> ユーザー期待の「食事をトレーナーAIが入力 → MCP → Logbook(D1)→ GH」は `log_meal` で実装済み(GH 反映は `FEATURE_GH_NUTRITION_PUSH` 依存)。ワークアウト・体重も同様に **MCP / UI のどちらからでも D1 + GH** へ入る。逆に睡眠・心拍などは GH 由来の read-only。
+
 ## ローカル起動
 
 ```bash
