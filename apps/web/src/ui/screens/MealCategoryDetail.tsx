@@ -48,9 +48,12 @@ export function MealCategoryDetail({
       c: a.c + it.carbs_g,
       sodium: a.sodium + (it.sodium_mg ?? 0),
       fiber: a.fiber + (it.fiber_g ?? 0),
+      sugar: a.sugar + (it.sugar_g ?? 0),
     }),
-    { kcal: 0, p: 0, f: 0, c: 0, sodium: 0, fiber: 0 },
+    { kcal: 0, p: 0, f: 0, c: 0, sodium: 0, fiber: 0, sugar: 0 },
   );
+  // 糖質は手入力では未取得もあり得る。1品でも値があるときだけ「うち糖質」を出す。
+  const hasSugar = items.some((it) => it.sugar_g != null);
   const nutrients = {
     p: tot.p,
     f: tot.f,
@@ -101,6 +104,11 @@ export function MealCategoryDetail({
                 {Math.round(tot.kcal).toLocaleString()}
               </span>
               <span className="text-sm text-muted">kcal</span>
+              {hasSugar && (
+                <span className="ml-2 text-[11px]" style={{ color: 'var(--color-sugar)' }}>
+                  うち糖質 {Math.round(tot.sugar)}g
+                </span>
+              )}
               <span className="ml-2 text-[11px] text-faint">{items.length}品</span>
             </div>
           </Card>
@@ -127,6 +135,11 @@ export function MealCategoryDetail({
                         <span style={{ color: 'var(--color-carb)' }}>
                           C{Math.round(it.carbs_g)}
                         </span>
+                        {it.sugar_g != null && (
+                          <span style={{ color: 'var(--color-sugar)' }}>
+                            糖{Math.round(it.sugar_g)}
+                          </span>
+                        )}
                       </span>
                     </span>
                     <span className="flex shrink-0 items-center gap-2">

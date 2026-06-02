@@ -50,7 +50,6 @@ export function RecordScreen({
   const qc = useQueryClient();
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
   const [unit, setUnit] = useState<'kg' | 'lb'>('kg');
-  const [title, setTitle] = useState('');
   const [bodyweight, setBodyweight] = useState<number | null>(null);
   const [items, setItems] = useState<LoggedExercise[]>([]);
   const [search, setSearch] = useState('');
@@ -65,7 +64,7 @@ export function RecordScreen({
   });
   useEffect(() => {
     if (!editQ.data) return;
-    setTitle(editQ.data.session.title ?? '');
+    // セッション名は保存時に内容から再命名するため prefill しない。
     setBodyweight(editQ.data.session.bodyweightKg ?? null);
     // 登録日時は元の started_at(無ければ日付の正午)を JST 壁時計で prefill。
     setWhen(
@@ -108,6 +107,32 @@ export function RecordScreen({
       unitInit.current = true;
     }
   }, [settings.data]);
+
+  // 新規記録は最新体重を初期値に(自重種目の挙上重量・消費カロリー算出に使う。毎回入力する摩擦を解消)。
+  // 編集時は既存セッションの体重を尊重するため自動入力しない。
+  const bodyQ = useQuery({
+    queryKey: ['today'],
+    queryFn: () => api.today(),
+    enabled: !editWorkoutId,
+  });
+  const bwInit = useRef(false);
+  useEffect(() => {
+    if (editWorkoutId || bwInit.current || !bodyQ.data) return;
+    const latest = bodyQ.data.body.weightKg ?? bodyQ.data.body.prevWeightKg;
+    if (latest != null) setBodyweight(Math.round(latest * 10) / 10);
+    bwInit.current = true;
+  }, [bodyQ.data, editWorkoutId]);
+
+  // 部位選択(身体図/チップ連動)時、選択チップが横スクロールで画面外なら中央へ寄せる。
+  const selectedChipRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (muscle)
+      selectedChipRef.current?.scrollIntoView({
+        inline: 'center',
+        block: 'nearest',
+        behavior: 'smooth',
+      });
+  }, [muscle]);
 
   // テキスト検索 or 部位チップ のどちらかが指定されたら候補を引く(部位タップで種目候補, 要望)。
   const found = useQuery({
@@ -191,7 +216,7 @@ export function RecordScreen({
       const endedAtSec = datetimeLocalToEpochSec(when);
       const estDurationSec = Math.max(300, totalSets * 180);
       return api.saveWorkout({
-        title: title || undefined,
+        // title は送らない: サービス側が内容(主働筋の部位)から自動命名する。
         date: datetimeLocalToJstDate(when),
         bodyweightKg: bodyweight,
         startedAtSec: endedAtSec - estDurationSec,
@@ -219,21 +244,18 @@ export function RecordScreen({
 
   // 未保存の入力があるか(離脱時の破棄ガード用)。保存成功後は画面が遷移するので report 不要。
   useEffect(() => {
-    const dirty =
-      !save.isSuccess && (items.length > 0 || title.trim() !== '' || bodyweight != null);
+    const dirty = !save.isSuccess && items.length > 0;
     onDirty?.(dirty);
     return () => onDirty?.(false);
-  }, [items, title, bodyweight, save.isSuccess, onDirty]);
+  }, [items, save.isSuccess, onDirty]);
 
   return (
     <div className="mx-auto max-w-md space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="セッション名(例: Push A)"
-          className="min-w-0 flex-1 border-b border-line bg-transparent pb-1 font-display text-lg font-bold tracking-tight outline-none placeholder:text-faint focus:border-accent"
-        />
+        {/* セッション名は内容(主働筋の部位)から自動命名。手入力は廃止。 */}
+        <h1 className="font-display text-lg font-bold tracking-tight">
+          {editWorkoutId ? 'ワークアウトを編集' : 'ワークアウトを記録'}
+        </h1>
         <UnitToggle unit={unit} onChange={setUnit} />
       </div>
 
@@ -342,23 +364,19 @@ export function RecordScreen({
       )}
 
       <Card title="種目を追加">
-        {/* 部位タップ起点(要望#5): 身体図をタップ → その部位の種目を表示 */}
-        <p className="mb-1 text-[11px] text-faint">
-          {muscle
-            ? `${MUSCLE_GROUPS.find((m) => m.id === muscle)?.ja ?? ''}の種目`
-            : '部位をタップして種目を選ぶ'}
-        </p>
+        {/* 身体図 or チップをタップ → その部位の種目を表示。選択中はチップがハイライトされる。 */}
         <BodyPicker
           selected={muscle}
           onSelect={(id) => setMuscle((cur) => (cur === id ? null : id))}
         />
 
-        {/* 代替: 部位チップ(図が押しにくい時) */}
+        {/* 部位チップ(横スクロール)。選択は身体図とも連動し、画面外なら中央へスクロールする。 */}
         <div className="mt-2 -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
           {MUSCLE_GROUPS.map((mg) => (
             <button
               type="button"
               key={mg.id}
+              ref={muscle === mg.id ? selectedChipRef : null}
               onClick={() => setMuscle((cur) => (cur === mg.id ? null : mg.id))}
               className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
                 muscle === mg.id ? 'bg-accent text-card' : 'bg-paper text-muted border border-line'
@@ -375,7 +393,7 @@ export function RecordScreen({
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="または名前で探す(例: ベンチ)"
+            placeholder="または名前で探す"
             className="w-full bg-transparent text-sm outline-none placeholder:text-faint"
           />
         </div>
@@ -384,7 +402,7 @@ export function RecordScreen({
           <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto">
             {found.isLoading && <li className="px-3 py-2 text-sm text-faint">検索中…</li>}
             {found.data?.exercises.length === 0 && (
-              <li className="px-3 py-2 text-sm text-faint">該当なし(種目シードは順次拡充)</li>
+              <li className="px-3 py-2 text-sm text-faint">該当なし</li>
             )}
             {found.data?.exercises.map((ex) => (
               <li key={ex.id}>
@@ -405,7 +423,12 @@ export function RecordScreen({
       </Card>
 
       <div className="flex items-center justify-between rounded-2xl border border-line bg-card px-4 py-3">
-        <span className="text-sm text-muted">体重({unit})</span>
+        <span className="flex flex-col">
+          <span className="text-sm text-muted">体重({unit})</span>
+          {!editWorkoutId && bwInit.current && bodyweight != null && (
+            <span className="text-[10px] text-faint">最新の記録から · 自重種目/消費kcalに使用</span>
+          )}
+        </span>
         <div className="w-24">
           <NumInput value={bodyweight} onChange={setBodyweight} />
         </div>

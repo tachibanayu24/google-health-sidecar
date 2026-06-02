@@ -14,6 +14,7 @@ import {
   getMealItems,
   getMealItemsForMeals,
   getMealsByDate,
+  getMuscleCalendar,
   getMuscleVolume,
   getPushQueueStats,
   getRecentPrs,
@@ -158,6 +159,13 @@ api.get('/muscle-volume', async (c) => {
   const windowDays = Number(c.req.query('window') ?? '7') || 7;
   const muscles = await getMuscleVolume(ctx, { windowDays });
   return c.json({ windowDays, provenance: 'd1_confirmed', muscles });
+});
+
+api.get('/training-calendar', async (c) => {
+  const ctx = makeContext(c.env);
+  const days = Math.min(120, Number(c.req.query('days') ?? '30') || 30);
+  const cal = await getMuscleCalendar(ctx, { days });
+  return c.json({ provenance: 'd1_confirmed', ...cal });
 });
 
 api.get('/today', async (c) => {

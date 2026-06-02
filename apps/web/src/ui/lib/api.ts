@@ -102,6 +102,7 @@ export interface TodayMeal {
     carbs_g: number;
     sodium_mg: number | null;
     fiber_g: number | null;
+    sugar_g: number | null;
   }>;
 }
 export interface SleepSummary {
@@ -213,6 +214,12 @@ export const api = {
     ),
   muscleVolume: (windowDays = 7) =>
     req<{ windowDays: number; muscles: MuscleVolume[] }>(`/muscle-volume?window=${windowDays}`),
+  muscleCalendar: (days = 30) =>
+    req<{
+      days: number;
+      sessionDates: string[];
+      cells: Array<{ date: string; muscle: string; sets: number }>;
+    }>(`/training-calendar?days=${days}`),
   trends: (days = 90) => req<Trends>(`/trends?days=${days}`),
   today: (date?: string) => req<Today>(`/today${date ? `?date=${date}` : ''}`),
   foodAutocomplete: (q: string) =>

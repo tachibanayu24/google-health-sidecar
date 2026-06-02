@@ -8,7 +8,7 @@ import { axisTick, CHART, ChartFrame, mmdd, TT } from '../components/chart';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { Empty, ErrorBox, Loading } from '../components/state';
 import { api, type Exercise, type MuscleVolume, type RecentSession } from '../lib/api';
-import { epochToJstMonthDay } from '../lib/datetime';
+import { epochToJstMonthDay, formatDateForDisplay, shiftDate, todayJst } from '../lib/datetime';
 import { invalidateWorkouts } from '../lib/invalidate';
 
 const NAME_JA: Record<string, string> = {
@@ -49,6 +49,34 @@ const TO_SLUG: Record<string, Muscle> = {
 };
 const RAMP = ['#f6e7b0', '#f3c97a', '#ef9f53', '#e96f38', '#df4a26'];
 const BASE_BODY = '#e6e1d5';
+
+/** カレンダー表示用の部位グルーピング(16筋群 → 6行)。トレーニング分割の粒度で「何の日か」を示す。 */
+const REGION_GROUPS: Array<{ key: string; label: string; color: string; muscles: string[] }> = [
+  { key: 'chest', label: '胸', color: '#df4a26', muscles: ['chest'] },
+  { key: 'back', label: '背', color: '#1d6f6f', muscles: ['lats', 'traps'] },
+  {
+    key: 'shoulders',
+    label: '肩',
+    color: '#b7791f',
+    muscles: ['front_delts', 'side_delts', 'rear_delts'],
+  },
+  { key: 'arms', label: '腕', color: '#7c5cad', muscles: ['biceps', 'triceps', 'forearms'] },
+  {
+    key: 'legs',
+    label: '脚',
+    color: '#3f7d52',
+    muscles: ['quads', 'hamstrings', 'glutes', 'calves'],
+  },
+  { key: 'core', label: '体幹', color: '#9c6b4a', muscles: ['abs', 'obliques', 'lower_back'] },
+];
+/** セット数 → セル濃度(GitHub草風の4段階)。 */
+function setAlpha(n: number): number {
+  if (n <= 0) return 0;
+  if (n <= 3) return 0.32;
+  if (n <= 6) return 0.55;
+  if (n <= 9) return 0.75;
+  return 0.95;
+}
 function bucket(s: number): number {
   if (s <= 0.02) return 0;
   return Math.min(5, Math.max(1, Math.ceil(s * 5)));
@@ -75,6 +103,7 @@ export function TrainingScreen({ onEditWorkout }: { onEditWorkout: (id: string) 
         prs={pr.data?.prs ?? []}
         worked={worked}
       />
+      <TrainingCalendar />
       <Heatmap muscles={muscles} worked={worked} />
 
       <div className="flex rounded-xl border border-line bg-paper p-0.5 text-sm font-semibold">
@@ -209,6 +238,95 @@ function Figure({
       <Model type={type} data={data} highlightedColors={RAMP} bodyColor={BASE_BODY} />
       <span className="mt-1 text-[11px] font-semibold text-faint">{label}</span>
     </div>
+  );
+}
+
+// ============ トレーニング・カレンダー(直近30日 部位×日マトリクス) ============
+function TrainingCalendar() {
+  const days = 30;
+  const cal = useQuery({
+    queryKey: ['training-calendar', days],
+    queryFn: () => api.muscleCalendar(days),
+  });
+  // 列: 最古→当日(右端が今日)。日付は JST で生成。
+  const today = todayJst();
+  const dates = Array.from({ length: days }, (_, i) => shiftDate(today, -(days - 1 - i)));
+  const sessionDates = new Set(cal.data?.sessionDates ?? []);
+  // muscle → 表示グループ。グループ別 date→sets を集計。
+  const muscleToRegion = new Map<string, string>();
+  for (const g of REGION_GROUPS) for (const m of g.muscles) muscleToRegion.set(m, g.key);
+  const grid = new Map<string, Map<string, number>>(REGION_GROUPS.map((g) => [g.key, new Map()]));
+  for (const cell of cal.data?.cells ?? []) {
+    const region = muscleToRegion.get(cell.muscle);
+    if (!region) continue;
+    const row = grid.get(region);
+    if (row) row.set(cell.date, (row.get(cell.date) ?? 0) + cell.sets);
+  }
+  const trainedDays = dates.filter((d) => sessionDates.has(d)).length;
+
+  return (
+    <Card
+      title="部位カレンダー"
+      right={
+        <span className="text-[11px] text-faint">
+          直近30日 · <span className="font-semibold text-muted">{trainedDays}</span>日実施
+        </span>
+      }
+    >
+      {cal.isLoading ? (
+        <div className="h-24 animate-pulse rounded-lg bg-line/40" />
+      ) : trainedDays === 0 ? (
+        <Empty note="この30日間のワークアウト記録がありません。" />
+      ) : (
+        <>
+          <div className="space-y-[3px]">
+            {REGION_GROUPS.map((g) => {
+              const row = grid.get(g.key);
+              const count = dates.filter((d) => (row?.get(d) ?? 0) > 0).length;
+              return (
+                <div key={g.key} className="flex items-center gap-1.5">
+                  <span className="w-6 shrink-0 text-right text-[11px] font-semibold text-muted">
+                    {g.label}
+                  </span>
+                  <div
+                    className="grid flex-1 gap-[2px]"
+                    style={{ gridTemplateColumns: `repeat(${days}, minmax(0, 1fr))` }}
+                  >
+                    {dates.map((d, i) => {
+                      const n = row?.get(d) ?? 0;
+                      const a = setAlpha(n);
+                      const isToday = i === days - 1;
+                      return (
+                        <div
+                          // biome-ignore lint/suspicious/noArrayIndexKey: 固定長の日付列(並べ替えなし)
+                          key={`${g.key}:${i}`}
+                          title={n > 0 ? `${formatDateForDisplay(d)} ${g.label} ${n}set` : d}
+                          className={`h-2.5 rounded-[2px] ${a === 0 ? 'bg-line/50' : ''} ${isToday ? 'ring-1 ring-ink/15' : ''}`}
+                          style={a === 0 ? undefined : { backgroundColor: g.color, opacity: a }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <span className="w-7 shrink-0 text-right text-[11px] tnum text-faint">
+                    {count}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          {/* 日付の目盛り(左=最古 / 右=今日) */}
+          <div className="mt-1.5 flex justify-between pl-[30px] pr-[34px] text-[9px] text-faint">
+            <span>{formatDateForDisplay(dates[0]!)}</span>
+            <span>{formatDateForDisplay(dates[Math.floor(days / 2)]!)}</span>
+            <span>今日</span>
+          </div>
+          <p className="mt-2 text-[10px] leading-snug text-faint">
+            ※ 各セットを種目の主働筋に帰属。濃いほどセット数多 ·
+            右端の数字は30日の実施日数。空の列はレスト日。
+          </p>
+        </>
+      )}
+    </Card>
   );
 }
 

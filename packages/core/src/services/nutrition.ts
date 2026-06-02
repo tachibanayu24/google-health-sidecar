@@ -127,14 +127,18 @@ async function pushMeal(ctx: AppContext, mealId: string, input: LogMealInput): P
   try {
     const provider = getProvider(ctx);
     // 食事は items を合算した1 nutrition-log として push(anonymous food)。
+    // sodium/fiber/sugar も含め GH へ忠実に送る(claude→logbook→GH の一方向同期の完全性, §5.2)。
     const sum = input.items.reduce(
       (a, it) => ({
         kcal: a.kcal + it.caloriesKcal,
         p: a.p + (it.proteinG ?? 0),
         f: a.f + (it.fatG ?? 0),
         c: a.c + (it.carbsG ?? 0),
+        na: a.na + (it.sodiumMg ?? 0),
+        fiber: a.fiber + (it.fiberG ?? 0),
+        sugar: a.sugar + (it.sugarG ?? 0),
       }),
-      { kcal: 0, p: 0, f: 0, c: 0 },
+      { kcal: 0, p: 0, f: 0, c: 0, na: 0, fiber: 0, sugar: 0 },
     );
     const name =
       input.items.length === 1
@@ -148,6 +152,9 @@ async function pushMeal(ctx: AppContext, mealId: string, input: LogMealInput): P
       proteinG: sum.p,
       fatG: sum.f,
       carbsG: sum.c,
+      sodiumMg: sum.na || undefined,
+      fiberG: sum.fiber || undefined,
+      sugarG: sum.sugar || undefined,
       clientTag: mealId,
     });
     await markPushSynced(ctx.db, 'meal', mealId, res.datapointId, res.dataOrigin, null);

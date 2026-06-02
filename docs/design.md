@@ -1035,6 +1035,24 @@ async scheduled(_controller, env, ctx) {
 ### 12.5 D1 読み取りレプリケーション方針(レビュー minor への対応)
 D1 読み取りレプリカは結果整合(レプリカ遅延〜数百ms、非保証)で、write 直後の read が古い値を返しうる。本構成は web/mcp 2Worker が同一D1共有 + 「全write一点経由・冪等」を謳うため整合に齟齬が出ないよう、**当面 D1 読み取りレプリケーションは無効(プライマリのみ)**とする(単一ユーザー・低QPSでレプリカの地理分散メリットは薄く、整合の単純さを優先)。将来有効化時は **Sessions API(withSession + bookmark)で write-after-read 整合**を取る。
 
+### 12.6 バックアップ・リストアと運用スコープ判断(個人アプリの「やりすぎない」基準)
+正本は D1。**D1 Time Travel(自動 PITR・直近30日)が標準で有効**なので、バックアップ実装は不要。誤削除/誤マイグレーション時は時刻指定で巻き戻す:
+
+```bash
+# 直近30日の任意時刻へ復元(まず復元先のブックマークを確認 → 復元)
+npx wrangler d1 time-travel info ghsidecar --timestamp=2026-06-01T09:00:00Z
+npx wrangler d1 time-travel restore ghsidecar --timestamp=2026-06-01T09:00:00Z
+# 任意: 移行前の手動スナップショットを取りたいときは export
+npx wrangler d1 export ghsidecar --remote --output=backup-$(date +%F).sql
+```
+
+D1 正本が消えても **GH 側に push 済みの体重/運動/食事は残る**ため、二重に冗長(センシングデータは元来 GH が正本)。
+
+**意図的に「やらない」運用項目**(単一ユーザー・低QPSのため費用対効果が見合わない。将来マルチユーザー化時に再評価):
+- **KV 書込み監視の作問化** — §4.2 の二層キャッシュで実書込みは1日数十回に収まり無料枠(〜1000/日)に余裕。ダッシュボードの目視で十分、専用監視は作らない。
+- **`ALLOWED_SUB` の実配線** — 認証ゲートは検証済み固定 email(`email_verified===true` + `ALLOWED_EMAIL` 完全一致)で既に単一オーナーに限定済み(§6.1)。sub 併用は理屈上の堅牢化だが、自分の Google アカウント email が変わる確率は実質ゼロで効果が小さい。設計(§6.1)に席は残しつつ実装は保留。
+- **OAuth PKCE** — 系統A/Bとも client_secret を持つ confidential サーバサイドフローで、認可コード横取りの実害が小さい。保留。
+
 ---
 
 ## 13. ロードマップ(Fitbit→GH切替の9月期限)

@@ -199,8 +199,10 @@ export async function retryPendingPushes(
             f: a.f + it.fat_g,
             c: a.c + it.carbs_g,
             na: a.na + (it.sodium_mg ?? 0),
+            fiber: a.fiber + (it.fiber_g ?? 0),
+            sugar: a.sugar + (it.sugar_g ?? 0),
           }),
-          { kcal: 0, pr: 0, f: 0, c: 0, na: 0 },
+          { kcal: 0, pr: 0, f: 0, c: 0, na: 0, fiber: 0, sugar: 0 },
         );
         const name = items.length === 1 && items[0] ? items[0].food_name : `${meal.meal_type}`;
         const res = await provider.pushNutrition({
@@ -212,6 +214,8 @@ export async function retryPendingPushes(
           fatG: sum.f,
           carbsG: sum.c,
           sodiumMg: sum.na || undefined,
+          fiberG: sum.fiber || undefined,
+          sugarG: sum.sugar || undefined,
           clientTag: meal.id,
         });
         await markPushSynced(ctx.db, 'meal', p.entity_id, res.datapointId, res.dataOrigin, null);

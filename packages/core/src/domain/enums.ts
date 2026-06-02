@@ -106,6 +106,31 @@ export type MuscleGroupId = z.infer<typeof MuscleGroupId>;
 export const MuscleRegion = z.enum(['upper_push', 'upper_pull', 'legs', 'core']);
 export type MuscleRegion = z.infer<typeof MuscleRegion>;
 
+/**
+ * 部位の表示グルーピング(16筋群 → 6表示区分の日本語ラベル)。トレーニング分割の粒度。
+ * セッション自動命名(主働筋 → 「胸・腕」等)に使う。
+ * ※ apps/web の部位カレンダー(Training.tsx REGION_GROUPS)も同じグルーピングを色付きで持つ。
+ *    解剖学的グルーピングなので両者は一致させること(変更時は両方更新)。
+ */
+export const MUSCLE_REGION_JA: Record<string, string> = {
+  chest: '胸',
+  lats: '背',
+  traps: '背',
+  front_delts: '肩',
+  side_delts: '肩',
+  rear_delts: '肩',
+  biceps: '腕',
+  triceps: '腕',
+  forearms: '腕',
+  quads: '脚',
+  hamstrings: '脚',
+  glutes: '脚',
+  calves: '脚',
+  abs: '体幹',
+  obliques: '体幹',
+  lower_back: '体幹',
+};
+
 export const BodySide = z.enum(['front', 'back']);
 export type BodySide = z.infer<typeof BodySide>;
 

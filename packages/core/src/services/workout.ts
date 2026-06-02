@@ -12,7 +12,7 @@ import {
   getWindowSets,
   type WindowSetRow,
 } from '../db/repositories/workouts';
-import type { LoadMode, SetType, WeightUnit } from '../domain/enums';
+import { type LoadMode, MUSCLE_REGION_JA, type SetType, type WeightUnit } from '../domain/enums';
 import {
   computeE1rmKg,
   computeLoadKg,
@@ -86,6 +86,15 @@ export async function saveWorkout(
       metaCache.set(ex.exerciseId, await resolveExercise(ctx.db, ex.exerciseId));
     }
   }
+
+  // セッション名は内容(主働筋の部位)から自動命名(手入力廃止。例「胸・腕」)。明示指定があれば尊重。
+  const muscleLinks = await getExerciseMusclesForExercises(ctx.db, [...metaCache.keys()]);
+  const title =
+    input.title ??
+    deriveSessionTitle(
+      input.exercises.map((e) => e.exerciseId),
+      muscleLinks,
+    );
 
   const stmts: Stmt[] = [];
   let totalVolumeKg = 0;
@@ -169,7 +178,7 @@ export async function saveWorkout(
       date,
       started_at: startedAt,
       ended_at: input.endedAtSec ?? null,
-      title: input.title ?? null,
+      title: title ?? null,
       template_id: null,
       note: null,
       client_request_id: input.clientRequestId ?? null,
@@ -434,6 +443,71 @@ export async function getMuscleVolume(
         : null,
     };
   });
+}
+
+export interface MuscleCalendarCell {
+  date: string;
+  muscle: string;
+  sets: number;
+}
+
+/**
+ * トレーニング・カレンダー(§8.3 派生): 直近 days 日の「いつ・どの部位を鍛えたか」マトリクス。
+ * 各ワーキングセットを種目の **primary mover** 部位にのみ帰属させ (date, muscle) 別にセット数を集計する。
+ * 補助筋(secondary/stabilizer)は「何の日か」を曖昧にするため帰属に含めない(ベンチ=胸であって腕ではない)。
+ * rest 日判別のため、ウォームアップのみでも実施日を sessionDates に含める。表示の部位グルーピングは UI 側。
+ */
+export async function getMuscleCalendar(
+  ctx: AppContext,
+  opts: { days?: number } = {},
+): Promise<{ days: number; sessionDates: string[]; cells: MuscleCalendarCell[] }> {
+  const days = opts.days ?? 30;
+  const since = jstDaysAgo(days - 1); // 当日を含めて days 列分
+  const sets = await getWindowSets(ctx.db, since);
+  const exerciseIds = [...new Set(sets.map((s) => s.exercise_id))];
+  const linksByExercise = await getExerciseMusclesForExercises(ctx.db, exerciseIds);
+  const primaryByExercise = new Map<string, string[]>();
+  for (const [exId, ms] of linksByExercise) {
+    primaryByExercise.set(
+      exId,
+      ms.filter((m) => m.role === 'primary').map((m) => m.muscle_group_id),
+    );
+  }
+  const acc = new Map<string, number>(); // `${date}|${muscle}` → working set 数
+  const sessionDates = new Set<string>();
+  for (const s of sets) {
+    sessionDates.add(s.session_date);
+    if (!countsTowardVolume(s.set_type as SetType)) continue;
+    for (const muscle of primaryByExercise.get(s.exercise_id) ?? []) {
+      const k = `${s.session_date}|${muscle}`;
+      acc.set(k, (acc.get(k) ?? 0) + 1);
+    }
+  }
+  const cells: MuscleCalendarCell[] = [...acc].map(([k, n]) => {
+    const sep = k.indexOf('|');
+    return { date: k.slice(0, sep), muscle: k.slice(sep + 1), sets: n };
+  });
+  return { days, sessionDates: [...sessionDates].sort(), cells };
+}
+
+/** 主働筋の部位から会話的なセッション名を生成(例「胸・腕」)。primary のみ採用。最大3区分、超過は「他」。 */
+function deriveSessionTitle(
+  exerciseIds: string[],
+  linksByExercise: Map<string, Array<{ muscle_group_id: string; role: string }>>,
+): string | null {
+  const tally = new Map<string, number>(); // 部位ラベル → 採用種目数
+  for (const exId of exerciseIds) {
+    const regions = new Set<string>();
+    for (const m of linksByExercise.get(exId) ?? []) {
+      if (m.role !== 'primary') continue;
+      const label = MUSCLE_REGION_JA[m.muscle_group_id];
+      if (label) regions.add(label);
+    }
+    for (const r of regions) tally.set(r, (tally.get(r) ?? 0) + 1);
+  }
+  if (tally.size === 0) return null;
+  const ordered = [...tally.entries()].sort((a, b) => b[1] - a[1]).map(([r]) => r);
+  return ordered.length <= 3 ? ordered.join('・') : `${ordered.slice(0, 3).join('・')}他`;
 }
 
 function loadKgOf(s: WindowSetRow): number {
