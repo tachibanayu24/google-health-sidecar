@@ -170,9 +170,7 @@ export function RecordScreen({
       // 単位違いは重量だけ空に、種別は本番/ウォームアップへ集約。
       const h = await api.exerciseHistory(ex.id, { limit: 100 });
       const lastSessionId = h.sets[0]?.session_id;
-      const lastSets = lastSessionId
-        ? h.sets.filter((s) => s.session_id === lastSessionId)
-        : [];
+      const lastSets = lastSessionId ? h.sets.filter((s) => s.session_id === lastSessionId) : [];
       if (lastSets.length > 0) {
         prefill = lastSets.map((s) =>
           newSet({
