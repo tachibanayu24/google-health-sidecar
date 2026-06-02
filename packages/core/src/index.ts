@@ -10,6 +10,7 @@ export * from './domain/enums';
 export * from './domain/inputs';
 export * from './domain/metrics';
 export * from './domain/models';
+export * from './domain/readiness';
 export * from './providers/google-health/provider';
 export * from './providers/HealthProvider';
 export * from './providers/scopes';

@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Flame,
   Footprints,
+  Gauge,
   HeartPulse,
   Moon,
   Thermometer,
@@ -12,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Card, Stat } from '../components/Card';
 import { Empty, ErrorBox, Loading } from '../components/state';
-import { api, type SleepSummary } from '../lib/api';
+import { api, type Readiness, type ReadinessContributor, type SleepSummary } from '../lib/api';
 import {
   DOW_JA,
   epochToJstHhmm,
@@ -35,6 +36,7 @@ export function RecoveryScreen({
   onDateChange: (date: string) => void;
 }) {
   const today = useQuery({ queryKey: ['today', date], queryFn: () => api.today(date) });
+  const readiness = useQuery({ queryKey: ['readiness', date], queryFn: () => api.readiness(date) });
   if (today.isLoading) return <Loading />;
   if (today.error) return <ErrorBox error={today.error} />;
   const t = today.data!;
@@ -76,8 +78,91 @@ export function RecoveryScreen({
         </div>
       </div>
 
+      {readiness.data && <ReadinessCard data={readiness.data} />}
       <RecoveryCard sleep={t.sleep} hrv={metric('hrv_rmssd')} rhr={metric('resting_hr')} />
       <DailySensing daily={t.daily} />
+    </div>
+  );
+}
+
+// ============ Readiness(コンディション信号 = 個人ベースライン比の相対逸脱) ============
+const SIGNAL_STYLE = {
+  green: { color: '#2f9e6e', label: '良好' },
+  yellow: { color: '#c98a2b', label: '注意' },
+  red: { color: '#e0521f', label: '要注意' },
+} as const;
+
+/**
+ * 偽の合成スコアは出さず「信号 + 実測値 + あなたの平常範囲」を見せる(実測主義)。
+ * 学習中・データ不足は判定を出さず正直に表示。これは診断・予測ではなく自分比の逸脱の提示。
+ */
+function ReadinessCard({ data }: { data: Readiness }) {
+  const { overall } = data;
+  const sig = overall.signal ? SIGNAL_STYLE[overall.signal] : null;
+  const shown = data.contributors.filter((c) => c.status !== 'no-data' || c.isCore);
+  return (
+    <Card
+      title="コンディション"
+      right={<Gauge className="h-4 w-4 text-accent" strokeWidth={2.2} />}
+    >
+      {/* 総合: 信号ドット + 文言。学習中は灰で正直に。 */}
+      <div className="flex items-center gap-2.5">
+        <span
+          className="h-3 w-3 shrink-0 rounded-full"
+          style={{ backgroundColor: sig?.color ?? '#b8ab97' }}
+        />
+        <div className="min-w-0">
+          <div className="text-sm font-bold" style={{ color: sig?.color ?? 'var(--color-muted)' }}>
+            {sig?.label ?? '学習中'}
+          </div>
+          <div className="text-[11px] leading-snug text-muted">{overall.summary}</div>
+        </div>
+      </div>
+
+      {shown.length > 0 && (
+        <div className="mt-3 space-y-2 border-t border-line/60 pt-3">
+          {shown.map((c) => (
+            <ContributorRow key={c.metric} c={c} />
+          ))}
+        </div>
+      )}
+
+      <p className="mt-3 text-[10px] leading-snug text-faint">{data.disclaimer}</p>
+    </Card>
+  );
+}
+
+function ContributorRow({ c }: { c: ReadinessContributor }) {
+  const sig = c.signal ? SIGNAL_STYLE[c.signal] : null;
+  // 矢印は実際にフラグ(黄/赤)が立った逸脱のみ(緑+矢印の紛らわしさを避ける)。
+  const flagged = c.signal === 'yellow' || c.signal === 'red';
+  const arrow =
+    flagged && c.deviation === 'low' ? '↓' : flagged && c.deviation === 'high' ? '↑' : null;
+  return (
+    <div className="flex items-baseline gap-2 text-sm">
+      <span className={`shrink-0 ${c.isCore ? 'font-bold text-ink' : 'text-muted'}`}>
+        {c.label}
+      </span>
+      {c.status === 'learning' ? (
+        <span className="ml-auto text-[11px] text-faint">学習中(あと{c.daysOfData}日分)</span>
+      ) : c.status === 'no-data' ? (
+        <span className="ml-auto text-[11px] text-faint">データなし</span>
+      ) : (
+        <>
+          <span className="tnum font-semibold" style={{ color: sig?.color ?? 'var(--color-ink)' }}>
+            {c.current}
+            <span className="ml-0.5 text-[11px] font-normal text-muted">{c.unit}</span>
+            {arrow && (
+              <span className="ml-0.5" style={{ color: sig?.color ?? 'var(--color-muted)' }}>
+                {arrow}
+              </span>
+            )}
+          </span>
+          <span className="tnum ml-auto text-[11px] text-faint">
+            平常 {c.normalLow}–{c.normalHigh}
+          </span>
+        </>
+      )}
     </div>
   );
 }

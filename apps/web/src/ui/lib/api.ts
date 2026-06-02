@@ -185,6 +185,35 @@ export interface WeeklySummary {
   target: NutritionTarget | null;
 }
 
+export type ReadinessSignal = 'green' | 'yellow' | 'red';
+export interface ReadinessContributor {
+  metric: string;
+  label: string;
+  unit: string;
+  isCore: boolean;
+  status: 'ready' | 'learning' | 'no-data';
+  daysOfData: number;
+  current: number | null;
+  baselineMedian: number | null;
+  normalLow: number | null;
+  normalHigh: number | null;
+  deviation: 'low' | 'normal' | 'high' | null;
+  signal: ReadinessSignal | null;
+}
+export interface Readiness {
+  date: string;
+  overall: {
+    signal: ReadinessSignal | null;
+    status: 'ready' | 'learning';
+    deviating: number;
+    evaluated: number;
+    summary: string;
+    learningRemainingDays: number;
+  };
+  contributors: ReadinessContributor[];
+  disclaimer: string;
+}
+
 export interface RecentSession {
   id: string;
   date: string;
@@ -255,6 +284,7 @@ export const api = {
       cells: Array<{ date: string; muscle: string; sets: number }>;
     }>(`/training-calendar?days=${days}`),
   trends: (days = 90) => req<Trends>(`/trends?days=${days}`),
+  readiness: (date?: string) => req<Readiness>(`/readiness${date ? `?date=${date}` : ''}`),
   weeklySummary: () => req<WeeklySummary>('/weekly-summary'),
   today: (date?: string) => req<Today>(`/today${date ? `?date=${date}` : ''}`),
   foodAutocomplete: (q: string) =>

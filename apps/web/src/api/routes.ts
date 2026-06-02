@@ -19,6 +19,7 @@ import {
   getMuscleCalendar,
   getMuscleVolume,
   getPushQueueStats,
+  getReadiness,
   getRecentPrs,
   getRecentSessions,
   getSessionDetail,
@@ -165,6 +166,13 @@ api.get('/weekly-summary', async (c) => {
     getActiveNutritionTarget(ctx.db),
   ]);
   return c.json({ provenance: 'd1_confirmed', ...summary, target });
+});
+
+// Readiness(コンディション信号)= 個人ベースライン比の相対逸脱。MCP get_readiness と共有。
+api.get('/readiness', async (c) => {
+  const ctx = makeContext(c.env);
+  const date = c.req.query('date') ?? undefined;
+  return c.json({ provenance: 'd1_confirmed', ...(await getReadiness(ctx.db, date)) });
 });
 
 api.get('/muscle-volume', async (c) => {

@@ -26,6 +26,7 @@ import {
   getMealsByDate,
   getMuscleCalendar,
   getMuscleVolume,
+  getReadiness,
   getRecentPrs,
   getRecentSessions,
   getSessionsByDate,
@@ -328,6 +329,26 @@ function buildServer(env: Env): McpServer {
         getActiveNutritionTarget(ctx.db),
       ]);
       return ok({ provenance: 'd1_confirmed', ...summary, target });
+    },
+  );
+
+  server.registerTool(
+    'get_readiness',
+    {
+      title: 'コンディション信号(Readiness)',
+      description:
+        'その日のコンディションを「個人ベースライン比の相対逸脱」で返す。中核=夜間HRV(rMSSD, ln→7日ローリング平均; Plews/Buchheit)、補助=安静時心拍/呼吸数、文脈=皮膚温/睡眠時間・効率。各 contributor は {current(実測値), baselineMedian, normalLow/High(あなたの平常範囲), deviation(low/normal/high), signal(green/yellow/red)} を持ち、overall は N-of-M(2指標以上同時逸脱で赤)で統合。**偽の0-100合成スコアは出さない。** 学習期間中(<14日)・データ不足は status=learning で判定を出さず learningRemainingDays を返す。**重要: これは医学的診断でもパフォーマンス予測でもなく、本人の過去データに対する相対逸脱の事実のみ。** 「休め/病気だ/成績が上がる」と断定せず、HRVが平常下/呼吸が上がっている等の事実を踏まえて会話で助言すること。date 省略で当日(JST)。',
+      inputSchema: {
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+      },
+      annotations: READ,
+    },
+    async ({ date }) => {
+      const ctx = makeContext(env);
+      return ok({ provenance: 'd1_confirmed', ...(await getReadiness(ctx.db, date)) });
     },
   );
 
