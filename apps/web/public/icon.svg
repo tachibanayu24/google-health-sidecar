@@ -1,8 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <!-- Logbook app icon: ink 背景 + Lucide Dumbbell(accent vermilion)。full-bleed=maskable 安全 -->
-  <rect width="512" height="512" fill="#19160f"/>
+  <!-- Logbook app icon: 明るいウォーム・グラデーション + Lucide Dumbbell(accent vermilion)。full-bleed=maskable 安全 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fffdf8"/>
+      <stop offset="0.5" stop-color="#f7ece2"/>
+      <stop offset="1" stop-color="#f2dccf"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.74" cy="0.8" r="0.75">
+      <stop offset="0" stop-color="#df4a26" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#df4a26" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <rect width="512" height="512" fill="url(#glow)"/>
   <g transform="translate(124 124) scale(11.0)" fill="none" stroke="#df4a26"
-     stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+     stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
     <path d="M14.4 14.4 9.6 9.6"/>
     <path d="M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z"/>
     <path d="m21.5 21.5-1.4-1.4"/>

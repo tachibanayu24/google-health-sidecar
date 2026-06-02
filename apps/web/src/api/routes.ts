@@ -1,4 +1,5 @@
 import {
+  aggregateSessionMuscles,
   autocompleteFoods,
   deleteMeal,
   deleteMealPresetRow,
@@ -8,6 +9,7 @@ import {
   getBodyForDate,
   getDailyMetricsByDate,
   getExerciseHistory,
+  getExerciseMusclesForExercises,
   getGhAuthError,
   getInProgressSession,
   getMealById,
@@ -240,6 +242,11 @@ api.get('/workouts/:id', async (c) => {
   const rows = await getSessionDetail(ctx.db, c.req.param('id'));
   if (rows.length === 0) return c.json({ error: 'not found' }, 404);
   const first = rows[0]!;
+  // セッションの部位内訳(シェアレポートの人体図用)。種目→部位リンクを一括ロードして集計。
+  const links = await getExerciseMusclesForExercises(ctx.db, [
+    ...new Set(rows.map((r) => r.exercise_id)),
+  ]);
+  const muscles = aggregateSessionMuscles(rows, links);
   // 平坦行を 種目×セット に再構成。
   const byEx = new Map<
     string,
@@ -269,15 +276,7 @@ api.get('/workouts/:id', async (c) => {
       };
       byEx.set(`${r.exercise_id}:${r.order_index}`, e);
     }
-    if (r.set_index != null && r.entry_value != null) {
-      e.sets.push({
-        setType: r.set_type,
-        entryValue: r.entry_value,
-        entryUnit: r.entry_unit,
-        reps: r.reps,
-        rpe: r.rpe,
-      });
-    } else if (r.set_index != null) {
+    if (r.set_index != null) {
       e.sets.push({
         setType: r.set_type,
         entryValue: r.entry_value,
@@ -296,6 +295,7 @@ api.get('/workouts/:id', async (c) => {
       bodyweightKg: first.bodyweight_kg,
     },
     exercises: [...byEx.values()].sort((a, b) => a.order - b.order),
+    muscles,
   });
 });
 

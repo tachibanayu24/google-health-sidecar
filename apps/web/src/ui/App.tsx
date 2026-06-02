@@ -230,8 +230,15 @@ function Header({ onSettings }: { onSettings: () => void }) {
   return (
     <header className="safe-top sticky top-0 z-20 border-b border-line bg-paper/85 backdrop-blur-md">
       <div className="relative mx-auto flex max-w-md items-center justify-center gap-2 px-5 pb-3 pt-4">
-        <Dumbbell className="h-[18px] w-[18px] text-accent" strokeWidth={2.5} />
-        <span className="font-mono text-base font-bold tracking-tight">Logbook</span>
+        <span
+          className="flex h-7 w-7 items-center justify-center rounded-[9px] shadow-sm shadow-accent/25 ring-1 ring-black/5"
+          style={{ background: 'linear-gradient(135deg, #ef6a44 0%, #df4a26 55%, #b53914 100%)' }}
+        >
+          <Dumbbell className="h-[17px] w-[17px] text-card" strokeWidth={2.6} />
+        </span>
+        <span className="font-display text-[17px] font-extrabold leading-none tracking-tight text-ink">
+          Logbook
+        </span>
         <button
           type="button"
           aria-label="設定"

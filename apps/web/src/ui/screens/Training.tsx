@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, Pencil, Search, Trash2, Trophy } from 'lucide-react';
+import { ChevronDown, ChevronRight, Pencil, Search, Share2, Trash2, Trophy } from 'lucide-react';
 import { useState } from 'react';
 import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts';
@@ -7,6 +7,7 @@ import { Card } from '../components/Card';
 import { axisTick, CHART, ChartFrame, mmdd, TT } from '../components/chart';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { Empty, ErrorBox, Loading } from '../components/state';
+import { WorkoutReport } from '../components/WorkoutReport';
 import { api, type Exercise, type MuscleVolume, type RecentSession } from '../lib/api';
 import { epochToJstMonthDay, formatDateForDisplay, shiftDate, todayJst } from '../lib/datetime';
 import { invalidateWorkouts } from '../lib/invalidate';
@@ -156,13 +157,11 @@ function Performance({
         <div>
           <div className="flex items-baseline gap-1">
             <span className="stat text-3xl leading-none">
-              {Math.round(allTime).toLocaleString()}
+              {tons.toLocaleString(undefined, { maximumFractionDigits: 1 })}
             </span>
-            <span className="text-sm text-muted">kg</span>
+            <span className="text-sm text-muted">t</span>
           </div>
-          <div className="text-[11px] text-faint">
-            ≈ {tons.toLocaleString(undefined, { maximumFractionDigits: 1 })} t をこれまでに挙上
-          </div>
+          <div className="text-[11px] text-faint">これまでに挙上</div>
         </div>
         <div className="ml-auto text-right">
           <div className="tnum text-sm font-semibold">{worked}/16 部位</div>
@@ -359,18 +358,19 @@ function DayCell({
   return (
     <div
       title={title}
-      className={`flex aspect-square flex-col items-center justify-center gap-0.5 rounded-md border ${
+      className={`relative flex aspect-square items-center justify-center rounded-md border ${
         isToday ? 'ring-2 ring-ink/30' : ''
       } ${trained ? 'border-line/50 bg-card' : 'border-line/40 bg-line/15'}`}
     >
+      {/* 日付は薄地で背面に置き、トレ日は部位ラベルを上に重ねる。 */}
       <span
-        className={`stat text-base italic leading-none ${dowColor} ${trained ? '' : 'opacity-40'}`}
+        className={`stat text-base italic leading-none ${dowColor} ${trained ? 'opacity-25' : 'opacity-40'}`}
       >
         {day}
       </span>
       {trained && (
         <div
-          className={`flex items-center justify-center font-bold leading-none ${multi ? 'gap-0 text-[9px]' : 'text-[11px]'}`}
+          className={`absolute inset-0 flex items-center justify-center font-bold leading-none ${multi ? 'gap-0 text-[9px]' : 'text-[11px]'}`}
         >
           {regions.map((r) => (
             <span key={r.key} style={{ color: r.color }}>
@@ -379,7 +379,9 @@ function DayCell({
           ))}
         </div>
       )}
-      {!trained && rested && <span className="h-1 w-1 rounded-full bg-faint/50" />}
+      {!trained && rested && (
+        <span className="absolute bottom-1 h-1 w-1 rounded-full bg-faint/50" />
+      )}
     </div>
   );
 }
@@ -729,6 +731,7 @@ function WorkoutSessionRow({
   onAskDelete: (s: RecentSession) => void;
 }) {
   const [open, setOpen] = useState(initiallyOpen);
+  const [report, setReport] = useState(false);
   const detail = useQuery({
     queryKey: ['workout', s.id],
     queryFn: () => api.getWorkout(s.id),
@@ -772,27 +775,28 @@ function WorkoutSessionRow({
             return (
               <div key={ex.exerciseId} className="mt-2.5 first:mt-0">
                 <div className="text-sm font-semibold text-ink">{ex.name_en}</div>
-                <div className="mt-0.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-                  {groups.map((g, gi) => (
-                    <span
-                      // biome-ignore lint/suspicious/noArrayIndexKey: 読み取り専用の静的リスト(並べ替えなし)
-                      key={gi}
-                      className="tnum text-[12px] text-muted"
-                    >
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {groups.flatMap((g, gi) => {
+                    const isTop = g.value != null && g.value === top;
+                    return g.reps.map((r, ri) => (
                       <span
-                        className={
-                          g.value != null && g.value === top
-                            ? 'font-bold text-ink'
-                            : 'font-semibold text-ink/80'
-                        }
+                        // biome-ignore lint/suspicious/noArrayIndexKey: 読み取り専用の静的リスト(並べ替えなし)
+                        key={`${gi}-${ri}`}
+                        className={`tnum inline-flex items-baseline gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] leading-none ${
+                          isTop
+                            ? 'bg-accent-soft font-bold text-ink'
+                            : 'bg-paper font-semibold text-muted'
+                        }`}
                       >
-                        {g.value ?? 'BW'}
-                        {g.unit}
+                        <span>
+                          {g.value ?? 'BW'}
+                          {g.unit}
+                        </span>
+                        <span className="text-faint">×</span>
+                        <span>{r ?? '—'}</span>
                       </span>
-                      {' ×'}
-                      {g.reps.map((r) => r ?? '—').join(',')}
-                    </span>
-                  ))}
+                    ));
+                  })}
                 </div>
                 {warm.length > 0 && (
                   <div className="tnum mt-0.5 text-[11px] text-faint">
@@ -806,6 +810,14 @@ function WorkoutSessionRow({
             );
           })}
           <div className="mt-2.5 flex items-center gap-1">
+            <button
+              type="button"
+              aria-label="シェア画像"
+              onClick={() => setReport(true)}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-muted active:text-accent"
+            >
+              <Share2 className="h-3.5 w-3.5" strokeWidth={2.2} /> シェア
+            </button>
             <button
               type="button"
               aria-label="編集"
@@ -825,6 +837,7 @@ function WorkoutSessionRow({
           </div>
         </div>
       )}
+      {report && <WorkoutReport session={s} onClose={() => setReport(false)} />}
     </Card>
   );
 }

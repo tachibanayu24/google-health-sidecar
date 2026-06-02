@@ -10,6 +10,7 @@ import { markPushFailed, markPushSynced, pendingPushStmt } from '../db/repositor
 import {
   getExerciseHistoryRows,
   getWindowSets,
+  type SessionDetailRow,
   type WindowSetRow,
 } from '../db/repositories/workouts';
 import { type LoadMode, MUSCLE_REGION_JA, type SetType, type WeightUnit } from '../domain/enums';
@@ -452,6 +453,46 @@ export async function getMuscleVolume(
         : null,
     };
   });
+}
+
+export interface SessionMuscle {
+  muscle: string;
+  sets: number; // この部位を primary mover とするワーキングセット数(「効かせた主働部位」ラベル用)
+  intensity: number; // 0..1。primary/secondary/stabilizer の contribution 加重をセッション内最大で正規化(人体図シェーディング用)
+}
+
+/**
+ * 単一セッションの部位内訳。シェアレポートの人体図(intensity でグラデーション)と
+ * 主働部位ラベル(sets)に使う。getMuscleVolume と異なり期間減衰・体積は持たず、
+ * このセッションのワーキングセットだけを contribution 加重で集計する。
+ */
+export function aggregateSessionMuscles(
+  rows: SessionDetailRow[],
+  linksByExercise: Map<
+    string,
+    Array<{ muscle_group_id: string; role: string; contribution: number }>
+  >,
+): SessionMuscle[] {
+  const acc = new Map<string, { sets: number; intensity: number }>();
+  for (const r of rows) {
+    if (r.set_index == null) continue; // セット行のみ(LEFT JOIN の種目見出し行を除外)
+    if (!countsTowardVolume(r.set_type as SetType)) continue; // ウォームアップ等は除外
+    for (const link of linksByExercise.get(r.exercise_id) ?? []) {
+      const a = acc.get(link.muscle_group_id) ?? { sets: 0, intensity: 0 };
+      if (link.role === 'primary') a.sets += 1;
+      a.intensity += link.contribution;
+      acc.set(link.muscle_group_id, a);
+    }
+  }
+  const maxIntensity = Math.max(1, ...[...acc.values()].map((v) => v.intensity));
+  return [...acc]
+    .map(([muscle, a]) => ({
+      muscle,
+      sets: a.sets,
+      intensity: Math.round((a.intensity / maxIntensity) * 1000) / 1000,
+    }))
+    .filter((m) => m.intensity > 0)
+    .sort((a, b) => b.intensity - a.intensity);
 }
 
 export interface MuscleCalendarCell {

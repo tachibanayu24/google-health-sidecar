@@ -278,6 +278,7 @@ export const api = {
           rpe: number | null;
         }>;
       }>;
+      muscles: Array<{ muscle: string; sets: number; intensity: number }>;
     }>(`/workouts/${encodeURIComponent(id)}`),
   deleteWorkout: (id: string) =>
     req<{ deleted: boolean; ghDeleted: boolean }>(`/workouts/${encodeURIComponent(id)}`, {
