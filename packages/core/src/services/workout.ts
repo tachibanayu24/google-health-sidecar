@@ -381,7 +381,17 @@ export async function deleteWorkout(
     }
   }
   // §8.5: 台帳と本体を単一 batch で原子的に削除(workout_exercises/sets は CASCADE)。
+  // ⚠ personal_records.achieved_set_id は ON DELETE SET NULL のため、セッション削除後は null 化されて
+  //   追えなくなり PR が orphan 化する。セットが生きているうちに、このセッションで達成した PR を先に消す。
+  //   (PR 台帳は履歴ログなので、以前のベスト行が残り次回 PR 判定の上限が正しく前のベストへ戻る。)
   await runBatch(ctx.db, [
+    {
+      sql: `DELETE FROM personal_records WHERE achieved_set_id IN (
+              SELECT ws.id FROM workout_sets ws
+                JOIN workout_exercises we ON we.id = ws.workout_exercise_id
+               WHERE we.session_id = ?)`,
+      binds: [sessionId],
+    },
     {
       sql: "DELETE FROM gh_sync_state WHERE entity_type='workout' AND entity_id=?",
       binds: [sessionId],

@@ -750,6 +750,9 @@ describe('削除の GH 連携 (§8.5)', () => {
       r.sessionId,
     );
     expect(led?.n).toBe(0);
+    // セッションで達成した PR も消える(achieved_set_id ON DELETE SET NULL の orphan を残さない)。
+    const [pr] = await ctx.db.raw<{ n: number }>('SELECT count(*) AS n FROM personal_records');
+    expect(pr?.n).toBe(0);
   });
 
   it('deleteMeal: featureGhNutritionPush 時は nutrition-log datapoint も batchDelete する', async () => {
