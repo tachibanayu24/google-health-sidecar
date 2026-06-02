@@ -20,20 +20,6 @@ function bucket(i: number): number {
   return Math.min(5, Math.max(1, Math.ceil(i * 5)));
 }
 
-/** 同一重量×単位の連続セットをまとめる(BW=自重)。warmup は除外。top=最大重量。 */
-function workingSets(
-  sets: Array<{
-    setType: string;
-    entryValue: number | null;
-    entryUnit: string;
-    reps: number | null;
-  }>,
-) {
-  const main = sets.filter((s) => s.setType !== 'warmup');
-  const top = main.reduce((m, s) => Math.max(m, s.entryValue ?? 0), 0);
-  return { main, top };
-}
-
 /**
  * ワークアウトのシェアレポート(SNS 投稿品質の画像を出力)。
  * 人体図で効かせた部位を可視化 + 種目ごとの重量×レップを chip 表示。
@@ -204,41 +190,32 @@ export function WorkoutReport({
                 </>
               )}
 
-              {/* 種目内訳(重量 × レップを chip 表示) */}
+              {/* 種目内訳(重量 × レップを chip 表示。ウォームアップ含む全セットを均一表示) */}
               {exercises.length > 0 && (
                 <div className="mt-5 space-y-3">
-                  {exercises.map((ex) => {
-                    const { main, top } = workingSets(ex.sets);
-                    if (main.length === 0) return null;
-                    return (
+                  {exercises.map((ex) =>
+                    ex.sets.length === 0 ? null : (
                       <div key={ex.exerciseId}>
                         <div className="text-[13px] font-bold text-ink">{ex.name_en}</div>
                         <div className="mt-1 flex flex-wrap gap-1">
-                          {main.map((s, i) => {
-                            const isTop = s.entryValue != null && s.entryValue === top;
-                            return (
-                              <span
-                                // biome-ignore lint/suspicious/noArrayIndexKey: 読み取り専用の静的リスト
-                                key={i}
-                                className={`tnum inline-flex items-baseline gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] leading-none ${
-                                  isTop
-                                    ? 'bg-accent-soft font-bold text-ink'
-                                    : 'bg-card/80 font-semibold text-muted ring-1 ring-line/60'
-                                }`}
-                              >
-                                <span>
-                                  {s.entryValue ?? 'BW'}
-                                  {s.entryUnit}
-                                </span>
-                                <span className="text-faint">×</span>
-                                <span>{s.reps ?? '—'}</span>
+                          {ex.sets.map((s, i) => (
+                            <span
+                              // biome-ignore lint/suspicious/noArrayIndexKey: 読み取り専用の静的リスト
+                              key={i}
+                              className="tnum inline-flex items-baseline gap-0.5 rounded-md bg-card/80 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-muted ring-1 ring-line/60"
+                            >
+                              <span>
+                                {s.entryValue ?? 'BW'}
+                                {s.entryUnit}
                               </span>
-                            );
-                          })}
+                              <span className="text-faint">×</span>
+                              <span>{s.reps ?? '—'}</span>
+                            </span>
+                          ))}
                         </div>
                       </div>
-                    );
-                  })}
+                    ),
+                  )}
                 </div>
               )}
             </div>
