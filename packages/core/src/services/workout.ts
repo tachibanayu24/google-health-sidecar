@@ -167,9 +167,15 @@ export async function saveWorkout(
     });
   });
 
-  const activeDurationSec = input.endedAtSec ? input.endedAtSec - startedAt : null;
-  const estCalories = estStrengthCaloriesKcal(bodyweightKg, activeDurationSec);
   const status = input.status ?? 'completed';
+  const totalSetCount = input.exercises.reduce((a, e) => a + e.sets.length, 0);
+  // 終了時刻: 未指定かつ completed なら セット数から所要を概算して導出(1セット≈3分・最低5分)。
+  // MCP 経由は started/ended を省くため両者が now になり GH exercise(start<end 必須)が 400 になる問題の修正。
+  const endedAt =
+    input.endedAtSec ??
+    (status === 'completed' ? startedAt + Math.max(300, totalSetCount * 180) : null);
+  const activeDurationSec = endedAt != null ? endedAt - startedAt : null;
+  const estCalories = estStrengthCaloriesKcal(bodyweightKg, activeDurationSec);
 
   // セッション本体(子より先頭でなくとも単一 batch 内なら参照整合は確保される)。
   stmts.unshift(
@@ -177,7 +183,7 @@ export async function saveWorkout(
       id: sessionId,
       date,
       started_at: startedAt,
-      ended_at: input.endedAtSec ?? null,
+      ended_at: endedAt,
       title: title ?? null,
       template_id: null,
       note: null,
@@ -209,7 +215,7 @@ export async function saveWorkout(
     ghPushed = await pushWorkoutSummary(ctx, {
       sessionId,
       startedAt,
-      endedAt: input.endedAtSec ?? now,
+      endedAt: endedAt ?? now,
       activeDurationSec: activeDurationSec ?? Math.max(60, now - startedAt),
       estCalories,
       title: input.title ?? 'Workout',
@@ -298,7 +304,7 @@ async function pushWorkoutSummary(
     const provider = getProvider(ctx);
     const res = await provider.pushExercise({
       startSec: s.startedAt,
-      endSec: s.endedAt,
+      endSec: Math.max(s.endedAt, s.startedAt + 60), // GH は start<end 必須(防御)
       exerciseType: 'STRENGTH_TRAINING',
       displayName: s.title,
       activeDurationSec: s.activeDurationSec,
