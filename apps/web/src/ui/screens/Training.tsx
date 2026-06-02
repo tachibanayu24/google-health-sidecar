@@ -198,7 +198,7 @@ function Heatmap({ muscles, worked }: { muscles: MuscleVolume[]; worked: number 
   return (
     <Card>
       <div className="mb-1 flex items-center justify-between text-[11px] text-faint">
-        <span className="tnum">{range} の刺激</span>
+        <span className="tnum">{range} のトレーニング</span>
         <span>
           <span className="font-semibold text-muted">{worked}</span>/16 部位
         </span>
