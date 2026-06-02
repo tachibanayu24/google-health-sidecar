@@ -736,7 +736,16 @@ UI(IndexedDBアウトボックス)と MCP(Claude経由)が同一の食事/ワー
 - **学習ゲート**: ベースライン点が `LEARNING_MIN_DAYS=14`(文献は28が頑健、一部14–28。やや保守的に14で開始、増えるほど鋭くなる)未満は判定を出さず `learning` + 残日数を返す。評価可能が2指標未満なら全体も `learning`。欠測を埋めて系列を歪めない。
 - **絶対に主張しないこと**(UI に免責表示・MCP description にも明記): 0–100 合成スコア / 因果・処方・診断(「休め/病気だ/成績が上がる」)/ p値・医学的安全保証 / 他人・母集団との比較 / 消費者デバイス絶対値での良否断定 / deep・REM 量からの回復断定。提示は本人比の相対逸脱の事実まで。
 - **v1 既知の簡略化**(運用しながら調整): 呼吸数・皮膚温の「2晩連続ゲート」未実装(単発で点灯)。ただし N-of-M で単発逸脱は黄止まりなので過剰アラートは抑制済。
-- **既存差別化ビュー(§8.6)との関係**: §8.6 が将来項として挙げた「HRV・安静時心拍・睡眠 × トレ刺激でオーバーリーチ警告」のうち**回復信号部分をここで実装**。部位別 ACWR との合成(`get_readiness` への同梱)は将来拡張(enhancements.md ⑨)。
+- **既存差別化ビュー(§8.6)との関係**: §8.6 が将来項として挙げた「HRV・安静時心拍・睡眠 × トレ刺激でオーバーリーチ警告」のうち**回復信号部分をここで実装**。トレ刺激(部位別ボリューム)との合成は §8.9 の muscleLoad を `get_readiness` に同梱して実現。
+
+### 8.9 ボリュームランドマーク + 急性/慢性ボリューム比【実装済: 2026-06-03 / enhancements.md ⑧⑨】
+部位別週間ボリュームを「伸びやすい量に入っているか」「漸進性を保てているか」の2軸で見せる。純関数 `packages/core/src/domain/volume-landmarks.ts`(テスト9件)。**検証された用量反応・記述指標は出すが、検証されていない予測・閾値は主張しない**(実測主義)。
+
+- **MEV/MAV/MRV ランドマーク帯**: `muscle_groups` に `mev_sets / mav_low_sets / mav_high_sets / mrv_sets`(週間ハードセット数)を追加(migration 0016, RP/Israetel 由来)。`volumeLandmarkZone(sets, landmarks)` が `under(MEV未満)/building/optimal(MAV帯=最も伸びやすい)/high/over(MRV超)` を返す。`getMuscleVolume` の各行に `landmark_zone` + `landmarks` を同梱(MCP `get_muscle_volume` / Training「部位別ボリューム」の帯バー)。
+  - **エビデンス**: 用量反応(週10–20セットが productive)はメタ解析で支持(Schoenfeld 2017 / Pelland 2024)。**部位別の具体値は RP のヒューリスティック=「ガイドライン・個人差ありの出発点」であって検証済み個人閾値ではない**(UI/MCP に明示)。RP が肥大ランドマークを示さない部位(obliques / lower_back)は NULL=帯なし。
+- **急性/慢性ボリューム比**: `getMuscleLoadRatios` が部位別に 直近7日 ÷ 直近28日週平均 を出す。`classifyLoadTrend` が `detraining/steady/ramping/spiking`。MCP `get_readiness` に `muscleLoad` として同梱(自律神経の回復 × 筋負荷を1コールでClaudeへ)。
+  - **重要(看板を外す)**: 元の ACWR(0.8–1.3 で怪我予防)の**怪我予測としての妥当性は学術的に否定されている**(mathematical coupling 等, Impellizzeri 2020 / Lolli 2019)。よって**怪我リスク・魔法のスイートゾーンは主張せず**、漸進性過負荷の**記述指標**(急増/定常/低下の事実)としてのみ提示する。
+- **v1 既知の簡略化**: セット数は間接関与(secondary mover)も1と数える既存規約(`getMuscleVolume.actual_sets` と統一)。複合種目の多い部位(例: 三頭=各プレスで加算)は高めに出る — これは RP が「間接で十分入る部位は直接量を抑える」と説く事実とも整合。将来 contribution 加重の「実効セット」を別途出す余地(remaining-tasks)。
 
 ---
 

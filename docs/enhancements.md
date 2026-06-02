@@ -114,7 +114,8 @@
   - 1指標のブレでは鳴らさない(誤報抑制)。
 - 参照: Apple Watch(Vitals の N-of-M)。
 
-### 8. 部位別ボリュームを MEV/MAV ランドマーク帯で 〔中〕
+### 8. 部位別ボリュームを MEV/MAV ランドマーク帯で 〔中〕 ✅実装済(2026-06-03, design.md §8.9)
+> migration 0016 で MEV/MAV/MRV をシード(RP/Israetel・ガイドライン明示)。`get_muscle_volume` に `landmark_zone` 露出、Training に帯バー。obliques/lower_back は帯なし。
 - 概要: 「全部位グリーンゾーン」が映える + 弱点埋めが楽しい。
 - 設計:
   - `muscle_groups.weekly_target_sets`(単一値)を MV/MEV/MAV/MRV のレンジ列へ拡張(migration + シード。RP値は出典明記)。
@@ -123,7 +124,8 @@
   - データ: 既存 + `weekly_target_sets` 拡張シード。
 - 参照: Renaissance Periodization(Dr. Mike Israetel)。
 
-### 9. 部位別 ACWR(急性:慢性 負荷比) 〔中〕
+### 9. 部位別 ACWR(急性:慢性 負荷比) 〔中〕 ✅実装済(2026-06-03, design.md §8.9)— ただし看板変更
+> ACWR の**怪我予測は学術的に否定済**(Impellizzeri 2020 等)。実装は怪我リスクを主張せず「直近7日 vs 28日週平均の記述指標(detraining/steady/ramping/spiking)」に限定。`get_readiness` に muscleLoad 同梱。0.8–1.3 の魔法ゾーンは出さない。
 - 概要: 「今日この部位は攻める/守る」。直近7日合計 ÷ 直近28日週平均。
 - 設計:
   - 16筋群×日次ボリュームから筋群ごとに ACWR 算出。>1.5=橙(攻めすぎ)/0.8-1.3=緑/<0.8=伸びしろ。
