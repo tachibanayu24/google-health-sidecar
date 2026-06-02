@@ -1,15 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronLeft, Pencil, Plus, Share2, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Card } from '../components/Card';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
+import { MealReport } from '../components/MealReport';
 import { NutrientBars } from '../components/NutrientBars';
 import { Empty, Loading } from '../components/state';
 import { api } from '../lib/api';
 import { formatDateForDisplay } from '../lib/datetime';
 import { invalidateMeals } from '../lib/invalidate';
+import { mealTypeJa } from '../lib/meals';
 import { saltFromSodiumMg } from '../lib/units';
-import { mealTypeJa } from './Nutrition';
 
 /** 食事カテゴリの詳細(タップで開く)。栄養素を対目標バーで可視化(全画面共通の NutrientBars)+ 品目別内訳。 */
 export function MealCategoryDetail({
@@ -29,6 +30,7 @@ export function MealCategoryDetail({
   const today = useQuery({ queryKey: ['today', date], queryFn: () => api.today(date) });
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
   const [confirm, setConfirm] = useState<{ id: string; label: string } | null>(null);
+  const [share, setShare] = useState(false);
   const del = useMutation({
     mutationFn: api.deleteMeal,
     onSuccess: () => {
@@ -74,9 +76,19 @@ export function MealCategoryDetail({
           <ChevronLeft className="h-5 w-5" strokeWidth={2.4} />
         </button>
         <h1 className="font-display text-lg font-bold tracking-tight">{mealTypeJa(mealType)}</h1>
-        <span className="ml-auto text-sm font-semibold text-muted">
-          {formatDateForDisplay(date)}
-        </span>
+        <div className="ml-auto flex items-center gap-2">
+          {items.length > 0 && (
+            <button
+              type="button"
+              aria-label="この区分を画像で保存"
+              onClick={() => setShare(true)}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-muted active:bg-line/60"
+            >
+              <Share2 className="h-4 w-4" strokeWidth={2.2} />
+            </button>
+          )}
+          <span className="text-sm font-semibold text-muted">{formatDateForDisplay(date)}</span>
+        </div>
       </div>
 
       {items.length === 0 ? (
@@ -201,6 +213,14 @@ export function MealCategoryDetail({
           isPending={del.isPending}
           onConfirm={() => del.mutate(confirm.id)}
           onCancel={() => setConfirm(null)}
+        />
+      )}
+      {share && (
+        <MealReport
+          mode="category"
+          date={date}
+          mealType={mealType}
+          onClose={() => setShare(false)}
         />
       )}
     </div>

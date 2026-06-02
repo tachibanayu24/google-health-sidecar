@@ -1,33 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bookmark, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react';
-import { useMemo } from 'react';
+import { Bookmark, ChevronLeft, ChevronRight, Plus, Share2, Trash2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { Card } from '../components/Card';
+import { MealReport } from '../components/MealReport';
 import { NutrientBars } from '../components/NutrientBars';
 import { Loading } from '../components/state';
 import { api, type TodayMeal } from '../lib/api';
 import { DOW_JA, formatDateForDisplay, jstDayOfWeek, shiftDate, todayJst } from '../lib/datetime';
-
-// meal_type の表示順(朝→夜)+ 日本語ラベル。
-export const MEAL_ORDER = [
-  'Breakfast',
-  'MorningSnack',
-  'Lunch',
-  'AfternoonSnack',
-  'Dinner',
-  'Anytime',
-];
-export function mealTypeJa(t: string): string {
-  return (
-    {
-      Breakfast: '朝食',
-      MorningSnack: '午前間食',
-      Lunch: '昼食',
-      AfternoonSnack: '午後間食',
-      Dinner: '夕食',
-      Anytime: '間食',
-    }[t] ?? t
-  );
-}
+import { MEAL_ORDER, mealTypeJa } from '../lib/meals';
 
 /** 栄養画面(サブスクリーン)。kcal残ヒーロー + マクロ + 食事区分(タップで詳細レーダー)+ 記録導線。 */
 export function NutritionScreen({
@@ -49,6 +29,7 @@ export function NutritionScreen({
   const isToday = date === todayJst();
   const today = useQuery({ queryKey: ['today', date], queryFn: () => api.today(date) });
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
+  const [shareDay, setShareDay] = useState(false);
   if (today.isLoading) return <Loading />;
   const t = today.data;
   const target = settings.data?.nutritionTarget ?? null;
@@ -64,6 +45,16 @@ export function NutritionScreen({
         <h1 className="font-display text-lg font-bold tracking-tight">食事</h1>
         {/* 日付ステッパー(過去日の食事も確認可能) */}
         <div className="ml-auto flex items-center gap-1">
+          {(t?.meals?.length ?? 0) > 0 && (
+            <button
+              type="button"
+              aria-label="1日の食事を画像で保存"
+              onClick={() => setShareDay(true)}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-muted active:bg-line/60"
+            >
+              <Share2 className="h-4 w-4" strokeWidth={2.2} />
+            </button>
+          )}
           <button
             type="button"
             aria-label="前日"
@@ -158,6 +149,8 @@ export function NutritionScreen({
           目標調整
         </button>
       </div>
+
+      {shareDay && <MealReport mode="day" date={date} onClose={() => setShareDay(false)} />}
     </div>
   );
 }
