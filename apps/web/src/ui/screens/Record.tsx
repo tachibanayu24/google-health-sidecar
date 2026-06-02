@@ -1,9 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, ChevronUp, Clock, Plus, Search, Trophy, X } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Plus,
+  Search,
+  Share2,
+  Trophy,
+  X,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Model, { type IExerciseData } from 'react-body-highlighter';
+import { createPortal } from 'react-dom';
 import { Card } from '../components/Card';
-import { api, type Exercise } from '../lib/api';
+import { WorkoutReport } from '../components/WorkoutReport';
+import {
+  api,
+  type Exercise,
+  type NewPr,
+  type RecentSession,
+  type SaveWorkoutResult,
+} from '../lib/api';
 import {
   datetimeLocalToEpochSec,
   datetimeLocalToJstDate,
@@ -208,6 +226,8 @@ export function RecordScreen({
   const totalSets = items.reduce((a, it) => a + it.sets.length, 0);
 
   const reqId = useState(() => crypto.randomUUID())[0]; // 冪等キー(このセッションドラフト1回ぶん)
+  const [celebrate, setCelebrate] = useState<SaveWorkoutResult | null>(null);
+  const [shareSession, setShareSession] = useState<RecentSession | null>(null);
   const save = useMutation({
     mutationFn: async () => {
       // 編集 = 旧セッション削除(GH datapoint も)→ 元の日付で再記録。
@@ -236,8 +256,8 @@ export function RecordScreen({
     },
     onSuccess: (r) => {
       invalidateWorkouts(qc);
-      // PR があれば祝福を一瞬見せてから Home へ。無ければ即遷移(alert は使わない)。
-      if (r.newPrs.length > 0) setTimeout(onSaved, 1600);
+      // PR があれば祝福オーバーレイ → ユーザー操作で完了/シェア。無ければ即遷移。
+      if (r.newPrs.length > 0) setCelebrate(r);
       else onSaved();
     },
   });
@@ -464,7 +484,106 @@ export function RecordScreen({
       {save.error && (
         <p className="text-center text-sm text-accent-ink">{(save.error as Error).message}</p>
       )}
+
+      {celebrate && (
+        <PrCelebration
+          prs={celebrate.newPrs}
+          onShare={() => {
+            setShareSession({
+              id: celebrate.sessionId,
+              date: datetimeLocalToJstDate(when),
+              title: celebrate.title,
+              total_volume_kg: celebrate.totalVolumeKg,
+              est_calories: null,
+              exercises: items.length,
+              sets: totalSets,
+            });
+            setCelebrate(null);
+          }}
+          onClose={onSaved}
+        />
+      )}
+      {shareSession && <WorkoutReport session={shareSession} onClose={onSaved} />}
     </div>
+  );
+}
+
+/** 新自己ベストの祝福オーバーレイ(確定=金 / 暫定[RPE未入力]=銀)。シェア画像へも飛べる。 */
+function PrCelebration({
+  prs,
+  onShare,
+  onClose,
+}: {
+  prs: NewPr[];
+  onShare: () => void;
+  onClose: () => void;
+}) {
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-6">
+      <button
+        type="button"
+        aria-label="閉じる"
+        onClick={onClose}
+        className="absolute inset-0 bg-ink/60 backdrop-blur-[2px]"
+      />
+      <div className="rise relative w-full max-w-sm rounded-3xl bg-card px-6 pb-6 pt-7 text-center shadow-[0_24px_60px_-16px] shadow-ink/50">
+        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent text-card shadow-sm shadow-accent/30">
+          <Trophy className="h-7 w-7" strokeWidth={2.4} />
+        </div>
+        <div className="font-display text-xl font-extrabold tracking-tight">自己ベスト更新!</div>
+        <div className="mt-0.5 text-[12px] text-faint">{prs.length}件のPR(推定1RM)</div>
+
+        <div className="mt-4 space-y-2 text-left">
+          {prs.map((p) => (
+            <div
+              key={p.exerciseId}
+              className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2 ${p.isProvisional ? 'bg-line/40' : 'bg-accent-soft'}`}
+            >
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-sm font-bold text-ink">{p.name}</span>
+                <span className="text-[10px] text-faint">
+                  {p.isProvisional ? '暫定 · RPE未入力' : '確定'}
+                </span>
+              </span>
+              <span className="tnum shrink-0 text-sm font-semibold">
+                {p.prevValue != null ? (
+                  <span className="text-faint">{p.prevValue}→</span>
+                ) : (
+                  <span className="text-faint">初 </span>
+                )}
+                <span className={p.isProvisional ? 'text-muted' : 'text-accent-ink'}>
+                  {p.value}
+                  {p.unit}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+        {prs.some((p) => p.isProvisional) && (
+          <div className="mt-2 text-[10px] leading-snug text-faint">
+            暫定PR = RPE未入力で推定の確度が低い。RPEを入れると確定になります。
+          </div>
+        )}
+
+        <div className="mt-5 flex gap-2">
+          <button
+            type="button"
+            onClick={onShare}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl bg-accent py-3 text-sm font-bold text-card active:scale-[0.99]"
+          >
+            <Share2 className="h-4 w-4" strokeWidth={2.4} /> シェア画像
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-2xl border border-line px-5 py-3 text-sm font-semibold text-muted"
+          >
+            完了
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

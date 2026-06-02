@@ -25,7 +25,7 @@ import {
   getSettings,
   getSleepByDate,
   getTrends,
-  getWeeklySummary,
+  getWeeklySummaryNow,
   jstDaysAgo,
   LogMealInputSchema,
   type LogWeightInput,
@@ -42,7 +42,6 @@ import {
   saveWorkout,
   searchExercises,
   setNutritionTarget,
-  todayJst,
   type UpdateSettingsInput,
   updateSettings,
 } from '@ghs/core';
@@ -158,15 +157,11 @@ api.get('/trends', async (c) => {
   return c.json({ days, provenance: 'd1_confirmed', ...trends });
 });
 
-// 週間サマリー(直近7日)= 画像エクスポート用の総合ラップ。
+// 週間サマリー(直近7日)= 画像エクスポート + MCP get_weekly_summary と共有。
 api.get('/weekly-summary', async (c) => {
   const ctx = makeContext(c.env);
-  const end = todayJst();
-  const start = jstDaysAgo(6); // 当日含め7日
-  const startSec = Math.floor(Date.parse(`${start}T00:00:00+09:00`) / 1000);
-  const endSec = Math.floor(Date.parse(`${end}T23:59:59+09:00`) / 1000);
   const [summary, target] = await Promise.all([
-    getWeeklySummary(ctx.db, start, end, startSec, endSec),
+    getWeeklySummaryNow(ctx.db),
     getActiveNutritionTarget(ctx.db),
   ]);
   return c.json({ provenance: 'd1_confirmed', ...summary, target });

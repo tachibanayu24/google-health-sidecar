@@ -32,6 +32,7 @@ import {
   getSettings,
   getSleepByDate,
   getTrainingFrequency,
+  getWeeklySummaryNow,
   jstDaysAgo,
   LogMealInputSchema,
   listMealPresets,
@@ -312,6 +313,25 @@ function buildServer(env: Env): McpServer {
   );
 
   server.registerTool(
+    'get_weekly_summary',
+    {
+      title: '週間サマリー(直近7日)',
+      description:
+        '直近7日(当日含む)の総合サマリー。トレ(sessions/総挙上volumeKg/PR数)・栄養1日平均(avgKcal/P/F/C/sodium/fiber + daysLogged)・睡眠(主睡眠の平均分/効率)・センシング(歩数/消費kcal/HRV/安静時心拍の平均)・体重(開始/終了/差)+ 栄養目標。週の振り返り・講評・調子の把握に。値は実測集計(欠損は null)。',
+      inputSchema: {},
+      annotations: READ,
+    },
+    async () => {
+      const ctx = makeContext(env);
+      const [summary, target] = await Promise.all([
+        getWeeklySummaryNow(ctx.db),
+        getActiveNutritionTarget(ctx.db),
+      ]);
+      return ok({ provenance: 'd1_confirmed', ...summary, target });
+    },
+  );
+
+  server.registerTool(
     'search_exercises',
     {
       title: '種目検索',
@@ -471,7 +491,7 @@ function buildServer(env: Env): McpServer {
     {
       title: 'ワークアウトを記録',
       description:
-        'ワークアウト(種目×セット)を D1 に記録し GH へ push。e1RM/PR/総ボリュームは core が計算。exerciseId は search_exercises で解決した id。重量種目は entryValue 必須(自重は省略可=bodyweight、reps のみでよい)。entryUnit は kg/lb。loadMode 省略時は種目マスタに従う。title は不要(主働筋の部位から自動命名)。clientRequestId は再送で再利用。',
+        'ワークアウト(種目×セット)を D1 に記録し GH へ push。e1RM/PR/総ボリュームは core が計算。exerciseId は search_exercises で解決した id。重量種目は entryValue 必須(自重は省略可=bodyweight、reps のみでよい)。entryUnit は kg/lb。loadMode 省略時は種目マスタに従う。title は不要(主働筋の部位から自動命名)。clientRequestId は再送で再利用。返り値 newPrs に新自己ベスト(name/recordType/value/prevValue/unit/isProvisional)が入る — あればユーザーを称えてよい(isProvisional=true は「暫定PR(RPE未入力)」として控えめに)。',
       inputSchema: SaveWorkoutInputSchema.shape,
       annotations: WRITE_GH,
     },

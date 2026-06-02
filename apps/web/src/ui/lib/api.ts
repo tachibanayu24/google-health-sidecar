@@ -131,11 +131,21 @@ export interface Today {
   daily: Array<{ metric: string; value: number; unit: string }>;
 }
 
+export interface NewPr {
+  exerciseId: string;
+  name: string;
+  recordType: string;
+  value: number;
+  prevValue: number | null;
+  unit: string;
+  isProvisional: boolean;
+}
 export interface SaveWorkoutResult {
   sessionId: string;
   totalVolumeKg: number;
-  newPrs: string[];
+  newPrs: NewPr[];
   ghPushed: boolean;
+  title: string | null;
 }
 export interface FoodSuggestion {
   food_name: string;
@@ -254,7 +264,14 @@ export const api = {
       '/workouts',
       'workout',
       body,
-      (crid) => ({ sessionId: crid, totalVolumeKg: 0, newPrs: [], ghPushed: false, queued: true }),
+      (crid) => ({
+        sessionId: crid,
+        totalVolumeKg: 0,
+        newPrs: [],
+        ghPushed: false,
+        title: null,
+        queued: true,
+      }),
     ),
   logMeal: (body: unknown) =>
     submitOrQueue<{ mealId: string; ghPushed: boolean; queued?: boolean }>(

@@ -1,3 +1,4 @@
+import { jstDaysAgo, todayJst } from '../../util/date';
 import type { Db } from '../client';
 
 /**
@@ -121,4 +122,13 @@ export async function getWeeklySummary(
       deltaKg: startKg != null && endKg != null ? Math.round((endKg - startKg) * 10) / 10 : null,
     },
   };
+}
+
+/** 直近7日(当日含む)の週間サマリー。日付/epoch 算出を一元化し web route と MCP で共有。 */
+export function getWeeklySummaryNow(db: Db): Promise<WeeklySummary> {
+  const end = todayJst();
+  const start = jstDaysAgo(6); // 当日含め7日
+  const startSec = Math.floor(Date.parse(`${start}T00:00:00+09:00`) / 1000);
+  const endSec = Math.floor(Date.parse(`${end}T23:59:59+09:00`) / 1000);
+  return getWeeklySummary(db, start, end, startSec, endSec);
 }

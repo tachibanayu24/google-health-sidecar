@@ -62,10 +62,27 @@ export interface SaveWorkoutInput {
  * ワークアウト保存(§8.5: セッション+種目+セット+gh_sync pending を単一 batch で原子的に)。
  * 派生(PR)は保存後に再計算。GH push はサマリを best-effort(D1正本に影響させない)。
  */
+/** 新自己ベスト(saveWorkout 返り値。Web のPR演出 + MCP 返り値=Claudeの祝福に共用)。 */
+export interface NewPr {
+  exerciseId: string;
+  name: string;
+  recordType: 'e1rm';
+  value: number;
+  prevValue: number | null; // 旧ベスト(初記録なら null)
+  unit: string;
+  isProvisional: boolean; // RPE レス由来=暫定
+}
+
 export async function saveWorkout(
   ctx: AppContext,
   input: SaveWorkoutInput,
-): Promise<{ sessionId: string; totalVolumeKg: number; newPrs: string[]; ghPushed: boolean }> {
+): Promise<{
+  sessionId: string;
+  totalVolumeKg: number;
+  newPrs: NewPr[];
+  ghPushed: boolean;
+  title: string | null;
+}> {
   const now = nowSec();
   // 冪等: 同じ client_request_id のセッションが既にあれば再登録しない(オフライン再送/MCPリトライ, §9.8)。
   if (input.clientRequestId) {
@@ -73,7 +90,8 @@ export async function saveWorkout(
       'SELECT id FROM workout_sessions WHERE client_request_id = ? LIMIT 1',
       input.clientRequestId,
     );
-    if (ex[0]) return { sessionId: ex[0].id, totalVolumeKg: 0, newPrs: [], ghPushed: false };
+    if (ex[0])
+      return { sessionId: ex[0].id, totalVolumeKg: 0, newPrs: [], ghPushed: false, title: null };
   }
   const date = input.date ?? todayJst();
   const startedAt = input.startedAtSec ?? now;
@@ -224,7 +242,13 @@ export async function saveWorkout(
     });
   }
 
-  return { sessionId, totalVolumeKg: Math.round(totalVolumeKg * 100) / 100, newPrs, ghPushed };
+  return {
+    sessionId,
+    totalVolumeKg: Math.round(totalVolumeKg * 100) / 100,
+    newPrs,
+    ghPushed,
+    title,
+  };
 }
 
 function buildSummaryNote(input: SaveWorkoutInput, meta: Map<string, Exercise>): string {
@@ -250,8 +274,8 @@ async function detectE1rmPrs(
     rpe: number | null;
   }>,
   at: number,
-): Promise<string[]> {
-  const newPrs: string[] = [];
+): Promise<NewPr[]> {
+  const newPrs: NewPr[] = [];
   // 種目ごとに最良 e1RM のセットを抽出。
   const bestByExercise = new Map<
     string,
@@ -265,25 +289,39 @@ async function detectE1rmPrs(
       bestByExercise.set(c.exerciseId, { setId: c.setId, e1rm, setType: c.setType, rpe: c.rpe });
   }
   for (const [exerciseId, best] of bestByExercise) {
-    const rows = await ctx.db.raw<{ value: number }>(
-      `SELECT value FROM personal_records WHERE exercise_id=? AND record_type='e1rm' ORDER BY value DESC LIMIT 1`,
+    const rows = await ctx.db.raw<{ name_ja: string | null; name_en: string; prev: number | null }>(
+      `SELECT ex.name_ja AS name_ja, ex.name_en AS name_en,
+              (SELECT pr.value FROM personal_records pr
+                WHERE pr.exercise_id=ex.id AND pr.record_type='e1rm'
+                ORDER BY pr.value DESC LIMIT 1) AS prev
+         FROM exercises ex WHERE ex.id = ?`,
       exerciseId,
     );
-    const prevBest = rows[0]?.value ?? 0;
+    const row = rows[0];
+    const prevBest = row?.prev ?? 0;
     if (best.e1rm > prevBest) {
       const basis = prBasisOf(best.setType, best.rpe);
+      const provisional = isProvisional(basis);
       await ctx.db.run(
         `INSERT INTO personal_records (id, exercise_id, record_type, value, unit, is_provisional, pr_basis, achieved_set_id, achieved_at)
          VALUES (?, ?, 'e1rm', ?, 'kg', ?, ?, ?, ?)`,
         ulid(),
         exerciseId,
         best.e1rm,
-        isProvisional(basis) ? 1 : 0,
+        provisional ? 1 : 0,
         basis,
         best.setId,
         at,
       );
-      newPrs.push(exerciseId);
+      newPrs.push({
+        exerciseId,
+        name: row?.name_ja ?? row?.name_en ?? exerciseId,
+        recordType: 'e1rm',
+        value: Math.round(best.e1rm * 10) / 10,
+        prevValue: row?.prev != null ? Math.round(row.prev * 10) / 10 : null,
+        unit: 'kg',
+        isProvisional: provisional,
+      });
     }
   }
   return newPrs;
