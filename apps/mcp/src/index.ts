@@ -19,6 +19,7 @@ import {
   getBodyMetricById,
   getDailyMetricsByDate,
   getExerciseHistory,
+  getExerciseMusclesForExercises,
   getMealById,
   getMealItems,
   getMealItemsForMeals,
@@ -148,7 +149,7 @@ async function resolveExerciseId(
 /** リクエスト毎に McpServer を新規生成(ステートレス)。M2-a: get_settings / M2-b: read / M2-c: write。 */
 function buildServer(env: Env): McpServer {
   const server = new McpServer(
-    { name: 'logbook-mcp', version: '0.8.0' },
+    { name: 'logbook-mcp', version: '0.9.0' },
     {
       instructions:
         'Logbook = オーナー1名のボディメイク用ログ(食事/ワークアウト/体重)+ Google Health センシング。\n' +
@@ -314,19 +315,27 @@ function buildServer(env: Env): McpServer {
     {
       title: '種目検索',
       description:
-        '種目を部分一致検索(name_en / name_ja。日本語名でも可)。id 解決の起点。query か muscle のどちらかを指定。muscle は chest/lats/traps/front_delts/side_delts/rear_delts/biceps/triceps/forearms/abs/obliques/quads/hamstrings/glutes/calves/lower_back。',
+        '種目を部分一致検索(name_en / name_ja / エイリアス。日本語俗称・略称も可)。id 解決の起点 + 部位マッピング検証用。' +
+        '各種目は muscles[{muscle, role(primary/secondary/stabilizer), contribution}] を含む(get_muscle_volume の重み付けと同じ値)。' +
+        'query / muscle を省略すると全種目を返す(limit 既定50・最大200=全カタログ監査可)。muscle で逆引きも可' +
+        '(chest/lats/traps/front_delts/side_delts/rear_delts/biceps/triceps/forearms/abs/obliques/quads/hamstrings/glutes/calves/lower_back)。',
       inputSchema: {
         query: z.string().optional(),
         muscle: z.string().optional(),
         equipment: z.string().optional(),
         favorite: z.boolean().optional(),
-        limit: z.number().int().min(1).max(50).optional(),
+        limit: z.number().int().min(1).max(200).optional(),
       },
       annotations: READ,
     },
     async ({ query, muscle, equipment, favorite, limit }) => {
       const ctx = makeContext(env);
       const rows = await searchExercises(ctx.db, { query, muscle, equipment, favorite, limit });
+      // 部位マッピング(role + contribution)を一括取得して各種目に付与(マッピング妥当性の検証用)。
+      const links = await getExerciseMusclesForExercises(
+        ctx.db,
+        rows.map((e) => e.id),
+      );
       return ok({
         provenance: 'd1_confirmed',
         exercises: rows.map((e) => ({
@@ -338,6 +347,11 @@ function buildServer(env: Env): McpServer {
           load_basis: e.load_basis,
           is_bodyweight: e.is_bodyweight,
           bw_factor: e.bw_factor,
+          muscles: (links.get(e.id) ?? []).map((m) => ({
+            muscle: m.muscle_group_id,
+            role: m.role,
+            contribution: m.contribution,
+          })),
         })),
       });
     },
