@@ -201,6 +201,19 @@ describe('mapDataPoint: 値は typed sub-object 配下', () => {
     expect(dp.value).toBe(5); // フィールド名取り違えだと黙って 0 になる
     expect(dp.timeSec).toBe(Math.floor(Date.parse('2026-05-30T12:00:00Z') / 1000));
   });
+
+  it('daily-sleep-temperature-derivations: nightlyTemperatureCelsius + date(皮膚温の正ID)', () => {
+    const dp = mapDataPoint('daily-sleep-temperature-derivations', {
+      dailySleepTemperatureDerivations: {
+        date: { year: 2026, month: 6, day: 2 },
+        nightlyTemperatureCelsius: 34.05,
+        baselineTemperatureCelsius: 34.02,
+        relativeNightlyStddev30dCelsius: 0.36,
+      },
+    });
+    expect(dp.value).toBe(34.05); // nightly を skin_temp_c に
+    expect(dp.timeSec).toBe(Math.floor(Date.UTC(2026, 5, 2) / 1000));
+  });
 });
 
 describe('parseReconcileResponse', () => {

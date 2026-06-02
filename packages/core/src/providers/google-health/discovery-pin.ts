@@ -98,15 +98,15 @@ export const READ_DATATYPES: ReadDataType[] = [
     // 日次合計対応は「時刻ゲートで日数回だけ interval を集計し overwrite」する後続実装で復帰予定(§5.4)。
     unverified: true,
   },
-  // 皮膚温: 実機プローブ(2026-06-01)で daily-skin-temperature/skin-temperature/wrist-temperature/
-  // body-temperature 等の候補8種すべて Invalid data type ID → GH はこのクライアントに皮膚温を提供していない。
-  // 正IDが判明するまで恒久除外(loop からスキップ)。
+  // 皮膚温: 正ID は daily-sleep-temperature-derivations(2026-06-03 discovery doc + 実機確認: 有効・データ有)。
+  // 当初 daily-skin-temperature 等の誤ID で probe して Invalid → 恒久除外と誤判定していたのを訂正。
+  // 返却 {date, nightlyTemperatureCelsius, baselineTemperatureCelsius, relativeNightlyStddev30dCelsius}。
+  // nightly(夜間皮膚温の絶対℃)を skin_temp_c として日次取込。daily 型なので runDailyPull で直接処理。
   {
-    ghDataType: 'daily-skin-temperature',
-    valueField: 'dailySkinTemperature',
+    ghDataType: 'daily-sleep-temperature-derivations',
+    valueField: 'dailySleepTemperatureDerivations',
     timeShape: 'date',
     store: { kind: 'daily_metric', metric: 'skin_temp_c', unit: 'celsius' },
-    unverified: true,
   },
   {
     // 消費カロリー(active)。実機プローブ(2026-06-02): active-energy-burned が有効・分単位 interval の kcal。

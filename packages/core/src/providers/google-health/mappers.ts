@@ -175,6 +175,9 @@ function extractValue(dataType: string, p: Record<string, unknown>): number | nu
       return asNum(field(p.dailyVo2Max, 'vo2MaxMlPerKgPerMinute'));
     case 'daily-respiratory-rate':
       return asNum(field(p.dailyRespiratoryRate, 'breathsPerMinute')); // ★breathsPerMinute(実機確認)
+    case 'daily-sleep-temperature-derivations':
+      // 夜間皮膚温の絶対℃(baseline/30日相対SDも返るが skin_temp_c は nightly を保存)。
+      return asNum(field(p.dailySleepTemperatureDerivations, 'nightlyTemperatureCelsius'));
     default:
       return null; // sleep は extra、未知は null
   }
@@ -216,6 +219,8 @@ function extractTimeSec(dataType: string, p: Record<string, unknown>): number {
       return dateObjToSec(field(p.dailyVo2Max, 'date'));
     case 'daily-respiratory-rate':
       return dateObjToSec(field(p.dailyRespiratoryRate, 'date'));
+    case 'daily-sleep-temperature-derivations':
+      return dateObjToSec(field(p.dailySleepTemperatureDerivations, 'date'));
     default:
       return 0;
   }

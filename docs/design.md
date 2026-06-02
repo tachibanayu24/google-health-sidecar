@@ -237,12 +237,12 @@ POST /v4/users/me/dataTypes/body-fat/dataPoints
 | `spo2` | `daily-oxygen-saturation` | health_metrics_and_measurements | `daily_metrics(metric='spo2_avg', unit='%')` | 【確定】 |
 | `vo2max` | `daily-vo2-max` | activity_and_fitness | `daily_metrics(metric='vo2max', unit='ml/kg/min')` | 【確定】 |
 | `resp-rate` | `daily-respiratory-rate` | health_metrics_and_measurements | `daily_metrics(metric='resp_rate', unit='/min')` | ✅【確定: 2026-06-01 実データ取得 `breathsPerMinute`, §17.5】 |
-| `skin-temp` | (なし) | health_metrics_and_measurements | `daily_metrics(metric='skin_temp_c', unit='celsius', 絶対℃)` | 【恒久除外: 候補8種すべて Invalid data type ID と実機確定(2026-06-01)→ GH 未提供, §17.5】 |
+| `skin-temp` | `daily-sleep-temperature-derivations` | health_metrics_and_measurements | `daily_metrics(metric='skin_temp_c', unit='celsius', 夜間皮膚温の絶対℃)` | ✅【確定: 2026-06-03 正ID判明・実機データ有(nightly℃+baseline+30日相対SD)。当初 daily-skin-temperature 等の誤IDで Invalid→恒久除外と誤判定していたのを訂正。§17.5 / docs/gh-datatypes.md】 |
 | `steps` | `steps` | activity_and_fitness | `daily_metrics(metric='steps', unit='count')` | 【確定・MVP任意。分単位 interval を日次合算→overwrite, §12.2】 |
 | `active-energy` | `active-energy-burned` | activity_and_fitness | `daily_metrics(metric='active_energy_kcal', unit='kcal')` | ✅【確定: 2026-06-02 実機 probe。分単位 interval kcal を日次合算→overwrite。エネルギー収支(摂取 vs 消費)用, migration 0014】 |
 
 - **体重/体脂肪の合流**: `weight` と `body-fat` は別 dataType・別 sync_runs 行として個別に pull し、**日付キーで `body_metrics` の同一行へ合流(upsert)**する。`vo2max` は `daily-vo2-max` を主とし、`run-vo2-max` が必要なら別内部キーで追加(MVPは `daily-vo2-max` のみ)。
-- **steps はMVP任意**(ボディメイク主目的では従。enum/loopには載せるが §13 で後回し可)。`resp-rate`/`skin-temp` は dataType ID をM0 discovery docで確定してから loop 有効化(未確定なら一時 skip、表・enum・loop・SoTの4箇所は本表に揃える)。
+- **steps はMVP任意**(ボディメイク主目的では従。enum/loopには載せるが §13 で後回し可)。`resp-rate`(daily-respiratory-rate)・`skin-temp`(daily-sleep-temperature-derivations)はいずれも正ID確定済で loop 有効(表・enum・loop・SoTの4箇所を本表に揃える)。
 - **エコーループ防止(監査 blocker)**: `weight`/`body-fat` は手入力 push(`recordingMethod=ACTIVELY_MEASURED`, source='app')が reconcile で戻ってくる。pull 時に **自分の書込み(gh_sync_state に記録した `gh_datapoint_id` 一致、または `gh_data_origin`(アプリ固有の application name)一致)を own-write と判定し(`isKnownOwnWrite`, recordingMethod 非依存)、既存 source='app' 行へ `gh_external_id` を紐付けるだけで source は上書きしない**(§12.2に実装、§2.1 dedupeが手入力をデバイス測定と誤認するのを防ぐ)。
 
 読む対象 dataType ID(参考・旧表記): 上のマスタ表が唯一の正。
@@ -591,9 +591,9 @@ CREATE INDEX idx_sleep_date ON sleep_logs(date);
 -- ============ その他センシング日次ミラー(SpO2/HRV/皮膚温/安静時心拍/VO2max等) ============
 CREATE TABLE daily_metrics (
   date          TEXT NOT NULL,
-  metric        TEXT NOT NULL,                    -- 'spo2_avg'|'resp_rate'|'hrv_rmssd'|'resting_hr'|'vo2max'|'steps'|'active_energy_kcal'(§5.4マスタ表と一致。skin_temp_c は GH 未提供で恒久除外)
+  metric        TEXT NOT NULL,                    -- 'spo2_avg'|'resp_rate'|'hrv_rmssd'|'skin_temp_c'|'resting_hr'|'vo2max'|'steps'|'active_energy_kcal'(§5.4マスタ表と一致)
   value         REAL NOT NULL,
-  unit          TEXT NOT NULL,                    -- '%'|'/min'|'ms'|'bpm'|'ml/kg/min'|'count'|'kcal'
+  unit          TEXT NOT NULL,                    -- '%'|'/min'|'ms'|'celsius'|'bpm'|'ml/kg/min'|'count'|'kcal'
   source        TEXT NOT NULL DEFAULT 'google_health',
   gh_external_id TEXT,
   updated_at    INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -991,7 +991,7 @@ async scheduled(_controller, env, ctx) {
   // 以降の pull 詳細(参考: runDailyPull の内部ループ):
   const provider = new GoogleHealthProvider(env);  // 系統BトークンをKV共通getAccessTokenで
   // ★ループ単位は §5.4 マスタ表の「GH dataType ID」粒度(内部キー=GH dataType ID)。
-  //   skin-temp は GH 未提供で恒久除外。steps/active-energy-burned は分単位 interval のため
+  //   skin-temp は正ID daily-sleep-temperature-derivations(daily型)で取込。steps/active-energy-burned は分単位 interval のため
   //   この reconcile ループでは扱わず pullStepsDaily/pullActiveEnergyDaily が日次合算→overwrite(§5.4)。
   const DATATYPES = ["weight","body-fat","sleep","daily-resting-heart-rate",
                      "daily-heart-rate-variability","daily-oxygen-saturation","daily-vo2-max",
@@ -1276,7 +1276,7 @@ GH v4 の**公開 discovery doc**(`https://health.googleapis.com/$discovery/rest
 
 **確定した接続**: read = weight / body-fat / sleep / daily-resting-heart-rate / daily-heart-rate-variability / daily-oxygen-saturation / daily-respiratory-rate / steps(実データで値・時刻一致を確認)。write = exercise / **nutrition(200 OK, create→batchDelete 検証済)** / weight / body-fat。これにより §14#1 の「nutrition write が成立しない可能性」リスクは**実機 200 で完全解消**、`FEATURE_GH_NUTRITION_PUSH=true` 化。
 
-**残 openItem**(D1 正本に影響せず): ① **VO2max** — 実データが空(reconcile 0 件)。dataType ID・フィールドは pin 済、データ発生後に値確認 ② **skin-temp** — `tools/probe-datatypes` で候補8種(daily-skin-temperature / skin-temperature / wrist-temperature / body-temperature 等)すべて `Invalid data type ID` と確定 → **GH はこのクライアントに皮膚温を提供していない**。恒久除外。 ③ **steps** — daily-steps/daily-step-count/step-count も全て Invalid。歩数は `steps`(分単位 interval)のみ。日次合計は時刻ゲートで日数回 interval 集計→overwrite する後続実装で復帰(§5.4)。
+**残 openItem**(D1 正本に影響せず): ① **VO2max** — 実データが空(reconcile 0 件)。dataType ID・フィールドは pin 済、データ発生後に値確認 ② **skin-temp** —【2026-06-03 訂正】当初 daily-skin-temperature 等の誤IDで Invalid → 恒久除外と誤判定していたが、discovery doc で正ID `daily-sleep-temperature-derivations` 判明・実機データ有(nightly℃ + baseline + 30日相対SD)。READ_DATATYPES に追加し取込実装済(docs/gh-datatypes.md)。 ③ **steps** — daily-steps/daily-step-count/step-count も全て Invalid。歩数は `steps`(分単位 interval)のみ。日次合計は時刻ゲートで日数回 interval 集計→overwrite する後続実装で復帰(§5.4)。
 
 **own-write echo と recordingMethod の整理(2026-06-01)**: pull 対象(weight/body-fat/sleep/daily-*)と push 対象(exercise/nutrition-log/weight/body-fat)のうち **重複するのは weight/body-fat のみ**。手入力体組成 push は現状 UI 導線が無い(体重は GH 取込が主)が、`logWeight`→`pushBodyMetric` 経路は存在する。echo 防止は **`gh_datapoint_id` 一致による own-write 判定**(`isKnownOwnWrite`)で行い、`recordingMethod` には依存しない。よって §2.1 の「手入力=MANUAL」記述は実装と不一致(MANUAL は GH enum に無く 400、実装は全 push で `ACTIVELY_MEASURED`)→ **own-write 判定は recordingMethod 非依存なので機能上の問題なし**。設計記述を実装に合わせて訂正(MANUAL → ACTIVELY_MEASURED, 判定は gh_datapoint_id)。
 

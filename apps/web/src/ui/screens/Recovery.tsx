@@ -1,5 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Flame, Footprints, HeartPulse, Moon, Scale, Wind } from 'lucide-react';
+import {
+  Activity,
+  Flame,
+  Footprints,
+  HeartPulse,
+  Moon,
+  Scale,
+  Thermometer,
+  Wind,
+} from 'lucide-react';
 import { useState } from 'react';
 import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts';
 import { Card, Stat } from '../components/Card';
@@ -334,6 +343,7 @@ const SENSING_META: Record<string, { label: string; Icon: typeof HeartPulse; uni
   active_energy_kcal: { label: '消費', Icon: Flame, unit: 'kcal' }, // 摂取kcal(食事)との収支に
   spo2_avg: { label: 'SpO₂', Icon: Activity, unit: '%' },
   resp_rate: { label: '呼吸数', Icon: Wind, unit: '/min' },
+  skin_temp_c: { label: '皮膚温', Icon: Thermometer, unit: '℃' }, // 夜間皮膚温(readiness 材料)
   vo2max: { label: 'VO₂max', Icon: Activity },
 };
 function DailySensing({
