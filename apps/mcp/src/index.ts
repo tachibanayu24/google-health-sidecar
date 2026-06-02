@@ -17,6 +17,7 @@ import {
   getActiveNutritionTarget,
   getBodyForDate,
   getBodyMetricById,
+  getDailyMetricsByDate,
   getExerciseHistory,
   getMealById,
   getMealItems,
@@ -100,6 +101,10 @@ function ipv4InCidr(ip: string, cidr: string): boolean {
 
 const ok = (data: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data) }],
+});
+const fail = (message: string) => ({
+  content: [{ type: 'text' as const, text: JSON.stringify({ error: message }) }],
+  isError: true,
 });
 const READ = { readOnlyHint: true, openWorldHint: false } as const;
 // 追記 write(非破壊・冪等)。GH push を伴うものは openWorldHint:true。
@@ -397,12 +402,15 @@ function buildServer(env: Env): McpServer {
         );
       const body = await getBodyForDate(ctx.db, d);
       const workouts = (await getRecentSessions(ctx.db, 50)).filter((s) => s.date === d);
+      // センシング(D1ミラー): RHR/HRV/SpO2/VO2max/歩数/active_energy_kcal 等。摂取(nutrition)vs 消費の収支に。
+      const sensing = await getDailyMetricsByDate(ctx.db, d);
       return ok({
         provenance: 'd1_confirmed',
         date: d,
         nutrition: { totals, meals: mealsOut },
         workouts,
         body,
+        sensing,
       });
     },
   );
@@ -439,6 +447,29 @@ function buildServer(env: Env): McpServer {
     async (args) => {
       const ctx = makeContext(env);
       const input = SaveWorkoutInputSchema.parse(args);
+      // §5.5-B: 重量種目のセットに entryValue が無いと総量が静かに0になる。MCP 層で弾く(web/core 非干渉)。
+      const bwById = new Map<string, boolean>();
+      for (const id of new Set(input.exercises.map((e) => e.exerciseId))) {
+        try {
+          bwById.set(id, (await resolveExercise(ctx.db, id)).is_bodyweight);
+        } catch {
+          /* 未解決種目は saveWorkout 側で扱う */
+        }
+      }
+      const missing: string[] = [];
+      for (const ex of input.exercises) {
+        const isBw = bwById.get(ex.exerciseId) ?? false;
+        ex.sets.forEach((s, i) => {
+          const mode = s.loadMode ?? (isBw ? 'bodyweight' : 'weighted');
+          if (mode === 'weighted' && s.entryValue == null)
+            missing.push(`${ex.exerciseId} set${i + 1}`);
+        });
+      }
+      if (missing.length) {
+        return fail(
+          `重量種目のセットに重量(entryValue)がありません: ${missing.join(', ')}。重量種目は entryValue 必須(自重なら loadMode:'bodyweight')。`,
+        );
+      }
       const clientRequestId = ensureCrid(input.clientRequestId);
       const res = await saveWorkout(ctx, { ...input, clientRequestId });
       return ok({ ...res, clientRequestId });
