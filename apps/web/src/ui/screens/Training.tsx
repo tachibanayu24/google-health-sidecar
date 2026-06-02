@@ -317,7 +317,7 @@ function DayCell({
   if (isFuture) {
     return (
       <div className="flex aspect-square items-center justify-center rounded-md">
-        <span className={`stat text-base italic leading-none ${dowColor} opacity-30`}>{day}</span>
+        <span className={`stat text-lg italic leading-none ${dowColor} opacity-30`}>{day}</span>
       </div>
     );
   }
@@ -336,7 +336,7 @@ function DayCell({
     >
       {/* 日付は薄地で背面に置き、トレ日は部位ラベルを上に重ねる。 */}
       <span
-        className={`stat text-base italic leading-none ${dowColor} ${trained ? 'opacity-25' : 'opacity-40'}`}
+        className={`stat text-lg italic leading-none ${dowColor} ${trained ? 'opacity-25' : 'opacity-40'}`}
       >
         {day}
       </span>

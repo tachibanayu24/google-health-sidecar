@@ -1,6 +1,6 @@
 /**
  * ブランドのボックスロゴ。SUPREME 風のステッカー = バーミリオン単色の角箱(角丸なし)に
- * Futura(無ければ Jost)の大文字・斜体ワードマーク。ダンベルアイコンは廃止。
+ * Futura(無ければ Jost)の斜体ワードマーク "Logbook"。ダンベルアイコンは廃止。
  */
 export function BrandLogo({
   size = 'sm',
@@ -13,7 +13,7 @@ export function BrandLogo({
   const type = size === 'lg' ? 'text-[22px]' : 'text-[15px]';
   return (
     <span className={`inline-flex items-center bg-accent ring-1 ring-black/5 ${box} ${className}`}>
-      <span className={`logo-wordmark text-card ${type}`}>LOGBOOK</span>
+      <span className={`logo-wordmark text-card ${type}`}>Logbook</span>
     </span>
   );
 }
