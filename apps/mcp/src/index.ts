@@ -10,10 +10,12 @@
 import {
   autocompleteFoods,
   type Db,
+  deleteBodyMetric,
   deleteMeal,
   deleteWorkout,
   getActiveNutritionTarget,
   getBodyForDate,
+  getBodyMetricById,
   getExerciseHistory,
   getMealById,
   getMealItems,
@@ -24,13 +26,19 @@ import {
   getRecentPrs,
   getRecentSessions,
   getSettings,
+  getTrainingFrequency,
   jstDaysAgo,
   LogMealInputSchema,
+  listMealPresets,
   logMeal,
+  logMealFromPreset,
   logWeight,
+  MealItemInputSchema,
+  MealType,
   makeContext,
   resolveExercise,
   SaveWorkoutInputSchema,
+  saveMealPreset,
   saveWorkout,
   searchExercises,
   setNutritionTarget,
@@ -132,7 +140,7 @@ async function resolveExerciseId(
 
 /** リクエスト毎に McpServer を新規生成(ステートレス)。M2-a: get_settings / M2-b: read / M2-c: write。 */
 function buildServer(env: Env): McpServer {
-  const server = new McpServer({ name: 'logbook-mcp', version: '0.4.0' });
+  const server = new McpServer({ name: 'logbook-mcp', version: '0.5.0' });
 
   server.registerTool(
     'get_settings',
@@ -229,6 +237,24 @@ function buildServer(env: Env): McpServer {
     async ({ days }) => {
       const ctx = makeContext(env);
       return ok({ provenance: 'd1_confirmed', ...(await getMuscleCalendar(ctx, { days })) });
+    },
+  );
+
+  server.registerTool(
+    'get_training_frequency',
+    {
+      title: '部位別トレーニング頻度',
+      description:
+        '部位(胸/背/肩/腕/脚/体幹)別の最終実施日・経過日数・直近 weeks 週(既定4)の週次実施日数を返す。「この部位N日空き」「ベンチ週2」の即答に。get_muscle_calendar を毎回集計するより軽い。',
+      inputSchema: { weeks: z.number().int().min(1).max(12).optional() },
+      annotations: READ,
+    },
+    async ({ weeks }) => {
+      const ctx = makeContext(env);
+      return ok({
+        provenance: 'd1_confirmed',
+        regions: await getTrainingFrequency(ctx, { weeks }),
+      });
     },
   );
 
@@ -492,6 +518,75 @@ function buildServer(env: Env): McpServer {
   );
 
   server.registerTool(
+    'get_meal_presets',
+    {
+      title: '食事プリセット一覧',
+      description:
+        '保存済みの食事プリセット(id / name / default_meal_type / use_count / items[])を返す。log_preset で id 指定 + servings 倍率で按分記録する。',
+      inputSchema: {},
+      annotations: READ,
+    },
+    async () => {
+      const ctx = makeContext(env);
+      const presets = (await listMealPresets(ctx.db)).map((p) => ({
+        id: p.id,
+        name: p.name,
+        default_meal_type: p.default_meal_type,
+        use_count: p.use_count,
+        items: JSON.parse(p.items_json),
+      }));
+      return ok({ provenance: 'd1_confirmed', presets });
+    },
+  );
+
+  server.registerTool(
+    'save_meal_preset',
+    {
+      title: '食事プリセットを保存',
+      description:
+        'よく食べる構成をプリセット保存。栄養値は「1 serving 分」で登録する(例: WPI 30g を 1 serving として登録 → 後で log_preset の servings=1.3333 で 40g 記録できる)。',
+      inputSchema: {
+        name: z.string().min(1).max(80),
+        defaultMealType: MealType,
+        items: MealItemInputSchema.array().min(1).max(50),
+      },
+      annotations: WRITE_LOCAL,
+    },
+    async ({ name, defaultMealType, items }) => {
+      const ctx = makeContext(env);
+      return ok(await saveMealPreset(ctx, { name, defaultMealType, items }));
+    },
+  );
+
+  server.registerTool(
+    'log_preset',
+    {
+      title: 'プリセットから記録',
+      description:
+        'プリセット(presetId)から食事を記録し GH へ push。servings 倍率で全栄養素を按分する(例: 30g 登録のプリセットを 40g 記録 → servings=1.3333)。省略時は 1。mealType 省略時はプリセット既定。clientRequestId は再送で再利用。',
+      inputSchema: {
+        presetId: z.string().min(1),
+        servings: z.number().positive().max(50).optional().describe('倍率。例 30g→40g は 1.3333'),
+        mealType: MealType.optional(),
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        loggedAtSec: z.number().int().nonnegative().optional(),
+        note: z.string().max(500).optional(),
+        clientRequestId: z.string().min(1).max(64).optional(),
+      },
+      annotations: WRITE_GH,
+    },
+    async (args) => {
+      const ctx = makeContext(env);
+      const clientRequestId = ensureCrid(args.clientRequestId);
+      const res = await logMealFromPreset(ctx, { ...args, clientRequestId });
+      return ok({ ...res, clientRequestId });
+    },
+  );
+
+  server.registerTool(
     'log_meal_photo',
     {
       title: '写真から食事を記録',
@@ -515,9 +610,9 @@ function buildServer(env: Env): McpServer {
     {
       title: '直近の記録を取消',
       description:
-        '直近の食事 or ワークアウトを取消(D1 削除 + GH datapoint も削除)。confirm 省略時は削除せず対象内容を echo するので、確認して confirm:true で実行する。**訂正は「取消→再記録」が公式フロー**(編集ツールは無い)。対象は当日(JST)作成、ワークアウトは加えて最新3件まで。範囲外はエラー。',
+        '直近の食事 / ワークアウト / 体重を取消(D1 削除 + GH datapoint も削除)。confirm 省略時は削除せず対象内容を echo するので、確認して confirm:true で実行する。**訂正は「取消→再記録」が公式フロー**(編集ツールは無い)。対象は当日(JST)作成(食事/体重は前日まで、ワークアウトは加えて最新3件まで)。範囲外はエラー。',
       inputSchema: {
-        type: z.enum(['meal', 'workout']),
+        type: z.enum(['meal', 'workout', 'weight']),
         id: z.string().min(1),
         confirm: z.boolean().optional(),
       },
@@ -558,6 +653,23 @@ function buildServer(env: Env): McpServer {
           });
         }
         return ok(await deleteWorkout(ctx, id));
+      }
+      if (type === 'weight') {
+        const bm = await getBodyMetricById(ctx.db, id);
+        if (!bm || bm.date < jstDaysAgo(1)) {
+          return ok({
+            error: 'not_recent',
+            message: '直近(当日/前日)の体重のみ取消可能。get_day で対象 id を確認してください。',
+          });
+        }
+        if (!confirm) {
+          return ok({
+            requireConfirm: true,
+            target: { id, date: bm.date, weight_kg: bm.weight_kg, body_fat_pct: bm.body_fat_pct },
+            message: `${bm.date} の体重 ${bm.weight_kg}kg を削除します。confirm:true で実行。`,
+          });
+        }
+        return ok(await deleteBodyMetric(ctx, id));
       }
       // meal: 当日/前日のみ取消可
       const meal = await getMealById(ctx.db, id);
