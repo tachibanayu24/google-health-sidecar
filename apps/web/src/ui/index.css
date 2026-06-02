@@ -81,7 +81,7 @@ body::before {
 /* ブランドのボックスロゴ(SUPREME 風): Futura → Jost フォールバック・大文字・斜体 */
 .logo-wordmark {
   font-family: 'Futura', 'Jost', 'Century Gothic', var(--font-display);
-  font-weight: 700;
+  font-weight: 600;
   font-style: italic;
   text-transform: uppercase;
   letter-spacing: -0.01em;
