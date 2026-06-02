@@ -15,7 +15,7 @@ import { Card } from '../components/Card';
 import { NutrientBars } from '../components/NutrientBars';
 import { ErrorBox, Loading } from '../components/state';
 import { api, type BodyReading, type NutritionTarget, type Today } from '../lib/api';
-import { formatDateForDisplay, jstDayOfWeek, shiftDate, todayJst } from '../lib/datetime';
+import { DOW_JA, formatDateForDisplay, jstDayOfWeek, shiftDate, todayJst } from '../lib/datetime';
 import { invalidateAfterFlush } from '../lib/invalidate';
 import { flushOutbox, pendingCount, subscribeOutbox } from '../lib/outbox';
 import { round } from '../lib/units';
@@ -116,7 +116,7 @@ function DateNav({
   onNext: () => void;
   onToday: () => void;
 }) {
-  const wd = ['日', '月', '火', '水', '木', '金', '土'][jstDayOfWeek(date)];
+  const wd = DOW_JA[jstDayOfWeek(date)];
   return (
     <div className="flex items-center justify-between">
       <button

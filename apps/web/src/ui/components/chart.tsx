@@ -13,8 +13,6 @@ export const CHART = {
 
 export const axisTick = { fill: CHART.faint, fontSize: 10 };
 
-export const mmdd = (d: string) => d.slice(5).replace('-', '/');
-
 export function ChartFrame({ children, h = 'h-44' }: { children: ReactElement; h?: string }) {
   return (
     <div className={`${h} w-full`}>

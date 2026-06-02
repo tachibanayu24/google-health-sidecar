@@ -7,9 +7,11 @@ import { createPortal } from 'react-dom';
 import { api, type RecentSession } from '../lib/api';
 import { formatDateLong } from '../lib/datetime';
 import { MUSCLE_JA, MUSCLE_TO_SLUG } from '../lib/muscles';
+import { HEATMAP_RAMP } from '../lib/theme';
+import { BrandLogo } from './BrandLogo';
 
-// シェアレポート専用のカラートークン(人体図のグラデーション)。Training の Heatmap と統一。
-const RAMP = ['#f6e7b0', '#f3c97a', '#ef9f53', '#e96f38', '#df4a26'];
+// 人体図グラデーションは theme の単一ソース(Training の Heatmap と共有)。
+const RAMP = HEATMAP_RAMP;
 const BASE_BODY = '#e6e1d5';
 
 function bucket(i: number): number {
@@ -149,17 +151,7 @@ export function WorkoutReport({
               {/* ヘッダ: ロゴ + 日付 */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span
-                    className="flex h-7 w-7 items-center justify-center rounded-[9px] shadow-sm shadow-accent/30 ring-1 ring-black/5"
-                    style={{
-                      background: 'linear-gradient(135deg, #ef6a44 0%, #df4a26 55%, #b53914 100%)',
-                    }}
-                  >
-                    <Dumbbell />
-                  </span>
-                  <span className="font-display text-[15px] font-extrabold tracking-tight">
-                    Logbook
-                  </span>
+                  <BrandLogo size="sm" />
                 </div>
                 <span className="tnum text-[12px] font-semibold text-muted">
                   {formatDateLong(session.date)}
@@ -323,28 +315,5 @@ function Stat({ label, value, unit }: { label: string; value: string; unit: stri
         {unit && <span className="text-[11px] font-semibold text-muted">{unit}</span>}
       </div>
     </div>
-  );
-}
-
-/** ロゴ用ダンベル(lucide と同形。html-to-image での確実な描画のためインライン SVG)。 */
-function Dumbbell() {
-  return (
-    <svg
-      width="17"
-      height="17"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="#fffefb"
-      strokeWidth="2.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M14.4 14.4 9.6 9.6" />
-      <path d="M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z" />
-      <path d="m21.5 21.5-1.4-1.4" />
-      <path d="M3.9 3.9 2.5 2.5" />
-      <path d="M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z" />
-    </svg>
   );
 }

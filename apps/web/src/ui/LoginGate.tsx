@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { Dumbbell } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { BrandLogo } from './components/BrandLogo';
 
 /** /api/me で認証確認。未ログインならログイン画面(→ /auth/login)。dev は DEV_AUTH_BYPASS で素通り。 */
 export function LoginGate({ children }: { children: ReactNode }) {
@@ -26,13 +26,7 @@ function Login() {
   return (
     <div className="flex h-full flex-col items-center justify-center px-8 text-center">
       <div className="mb-8 flex flex-col items-center gap-3">
-        <span
-          className="flex h-14 w-14 items-center justify-center rounded-2xl shadow-md shadow-accent/25 ring-1 ring-black/5"
-          style={{ background: 'linear-gradient(135deg, #ef6a44 0%, #df4a26 55%, #b53914 100%)' }}
-        >
-          <Dumbbell className="h-7 w-7 text-card" strokeWidth={2.6} />
-        </span>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight">Logbook</h1>
+        <BrandLogo size="lg" />
         <p className="text-sm text-muted">ボディメイクの記録 — あなた専用</p>
       </div>
       <a

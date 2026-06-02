@@ -4,51 +4,24 @@ import { useState } from 'react';
 import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts';
 import { Card } from '../components/Card';
-import { axisTick, CHART, ChartFrame, mmdd, TT } from '../components/chart';
+import { axisTick, CHART, ChartFrame, TT } from '../components/chart';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { Empty, ErrorBox, Loading } from '../components/state';
 import { WorkoutReport } from '../components/WorkoutReport';
 import { api, type Exercise, type MuscleVolume, type RecentSession } from '../lib/api';
-import { epochToJstMonthDay, formatDateForDisplay, shiftDate, todayJst } from '../lib/datetime';
+import {
+  DOW_JA,
+  epochToJstMonthDay,
+  formatDateForDisplay,
+  shiftDate,
+  todayJst,
+} from '../lib/datetime';
 import { invalidateWorkouts } from '../lib/invalidate';
+import { MUSCLE_JA, MUSCLE_TO_SLUG } from '../lib/muscles';
+import { HEATMAP_RAMP } from '../lib/theme';
 
-const NAME_JA: Record<string, string> = {
-  chest: '胸',
-  lats: '広背筋',
-  traps: '僧帽筋',
-  front_delts: '前部三角筋',
-  side_delts: '中部三角筋',
-  rear_delts: '後部三角筋',
-  biceps: '上腕二頭筋',
-  triceps: '上腕三頭筋',
-  forearms: '前腕',
-  abs: '腹直筋',
-  obliques: '腹斜筋',
-  quads: '大腿四頭筋',
-  hamstrings: 'ハムストリング',
-  glutes: '臀筋',
-  calves: 'ふくらはぎ',
-  lower_back: '脊柱起立筋',
-};
-const TO_SLUG: Record<string, Muscle> = {
-  chest: 'chest',
-  lats: 'upper-back',
-  traps: 'trapezius',
-  front_delts: 'front-deltoids',
-  side_delts: 'front-deltoids',
-  rear_delts: 'back-deltoids',
-  biceps: 'biceps',
-  triceps: 'triceps',
-  forearms: 'forearm',
-  abs: 'abs',
-  obliques: 'obliques',
-  quads: 'quadriceps',
-  hamstrings: 'hamstring',
-  glutes: 'gluteal',
-  calves: 'calves',
-  lower_back: 'lower-back',
-};
-const RAMP = ['#f6e7b0', '#f3c97a', '#ef9f53', '#e96f38', '#df4a26'];
+// 部位ラベル(MUSCLE_JA)・slug(MUSCLE_TO_SLUG)・ヒートマップランプ(HEATMAP_RAMP)は単一ソースを import。
+const RAMP = HEATMAP_RAMP;
 const BASE_BODY = '#e6e1d5';
 
 /** カレンダー表示用の部位グルーピング(16筋群 → 6行)。トレーニング分割の粒度で「何の日か」を示す。 */
@@ -181,7 +154,7 @@ function Performance({
 function Heatmap({ muscles, worked }: { muscles: MuscleVolume[]; worked: number }) {
   const slugBucket = new Map<Muscle, number>();
   for (const m of muscles) {
-    const slug = TO_SLUG[m.muscle];
+    const slug = MUSCLE_TO_SLUG[m.muscle] as Muscle | undefined;
     if (!slug) continue;
     const b = bucket(m.stimulus);
     if (b > (slugBucket.get(slug) ?? 0)) slugBucket.set(slug, b);
@@ -193,7 +166,7 @@ function Heatmap({ muscles, worked }: { muscles: MuscleVolume[]; worked: number 
   }));
   // 直近7日の刺激(get_muscle_volume の window=7 と一致)。
   const today = todayJst();
-  const range = `${mmdd(shiftDate(today, -6))}–${mmdd(today)}`;
+  const range = `${formatDateForDisplay(shiftDate(today, -6))}–${formatDateForDisplay(today)}`;
   return (
     <Card>
       <div className="mb-1 flex items-center justify-between text-[11px] text-faint">
@@ -220,7 +193,6 @@ function Heatmap({ muscles, worked }: { muscles: MuscleVolume[]; worked: number 
 
 // ============ トレーニング・カレンダー(週グリッド: 日付×部位文字で「いつ・何の日」を読む) ============
 const WEEK_LABELS = ['今週', '先週', '2週前', '3週前'];
-const DOW_JA = ['日', '月', '火', '水', '木', '金', '土'];
 
 /** ISO日付の曜日。日=0 … 土=6(週は日曜始まり)。 */
 function isoDow(iso: string): number {
@@ -408,7 +380,7 @@ function VolumeTab({
               <CartesianGrid stroke={CHART.line} vertical={false} />
               <XAxis
                 dataKey="date"
-                tickFormatter={mmdd}
+                tickFormatter={formatDateForDisplay}
                 tick={axisTick}
                 stroke={CHART.line}
                 minTickGap={28}
@@ -435,7 +407,7 @@ function VolumeTab({
           ))}
         </ul>
       </Card>
-      {sel && <MuscleExercises muscle={sel} name={NAME_JA[sel] ?? sel} />}
+      {sel && <MuscleExercises muscle={sel} name={MUSCLE_JA[sel] ?? sel} />}
     </>
   );
 }
@@ -462,7 +434,7 @@ function MuscleRow({
           <ChevronRight
             className={`h-3 w-3 text-faint transition-transform ${selected ? 'rotate-90' : ''}`}
           />
-          {NAME_JA[m.muscle] ?? m.muscle}
+          {MUSCLE_JA[m.muscle] ?? m.muscle}
         </span>
         <div className="h-2 flex-1 overflow-hidden rounded-full bg-line">
           <div
@@ -582,7 +554,7 @@ function ExerciseTrend() {
               <CartesianGrid stroke={CHART.line} vertical={false} />
               <XAxis
                 dataKey="date"
-                tickFormatter={mmdd}
+                tickFormatter={formatDateForDisplay}
                 tick={axisTick}
                 stroke={CHART.line}
                 minTickGap={28}
@@ -678,7 +650,7 @@ function RecentWorkouts({ onEdit }: { onEdit: (id: string) => void }) {
             onAskDelete={(sess) =>
               setConfirm({
                 id: sess.id,
-                label: `${mmdd(sess.date)} ${sess.title || 'ワークアウト'}(${sess.exercises}種目 ${sess.sets}set)`,
+                label: `${formatDateForDisplay(sess.date)} ${sess.title || 'ワークアウト'}(${sess.exercises}種目 ${sess.sets}set)`,
               })
             }
           />
@@ -748,7 +720,7 @@ function WorkoutSessionRow({
         <span className="min-w-0">
           <span className="font-display font-bold tracking-tight">{s.title || 'ワークアウト'}</span>
           <span className="mt-0.5 block text-[11px] text-faint">
-            {mmdd(s.date)} · {s.exercises}種目 {s.sets}set ·{' '}
+            {formatDateForDisplay(s.date)} · {s.exercises}種目 {s.sets}set ·{' '}
             {Math.round(s.total_volume_kg).toLocaleString()}kg
           </span>
         </span>

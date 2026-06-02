@@ -37,11 +37,12 @@ export const shiftDate = (date: string, delta: number): string =>
 /** 'YYYY-MM-DD' → 'MM/DD'(リスト等の短い表示)。 */
 export const formatDateForDisplay = (date: string): string => date.slice(5).replace('-', '/');
 
-const DOW_JA_LONG = ['日', '月', '火', '水', '木', '金', '土'];
+/** 曜日ラベル(0=日..6=土, JST)。UI 全体で共有(各画面のローカル定義を置換)。 */
+export const DOW_JA = ['日', '月', '火', '水', '木', '金', '土'];
 /** 'YYYY-MM-DD' → 'YYYY.M.D (曜)'(シェアレポート見出し用)。 */
 export const formatDateLong = (date: string): string => {
   const d = dayjs.tz(date, JST);
-  return `${d.format('YYYY.M.D')} (${DOW_JA_LONG[d.day()]})`;
+  return `${d.format('YYYY.M.D')} (${DOW_JA[d.day()]})`;
 };
 
 // ---- datetime-local <input> 用(ローカル壁時計 = JST として解釈) ----

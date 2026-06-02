@@ -5,7 +5,7 @@ import { Card } from '../components/Card';
 import { NutrientBars } from '../components/NutrientBars';
 import { Loading } from '../components/state';
 import { api, type TodayMeal } from '../lib/api';
-import { formatDateForDisplay, jstDayOfWeek, shiftDate, todayJst } from '../lib/datetime';
+import { DOW_JA, formatDateForDisplay, jstDayOfWeek, shiftDate, todayJst } from '../lib/datetime';
 
 // meal_type の表示順(朝→夜)+ 日本語ラベル。
 export const MEAL_ORDER = [
@@ -56,7 +56,7 @@ export function NutritionScreen({
   const kcal = Math.round(pfc.kcal);
   const remain = target ? Math.round(target.target_kcal - kcal) : null;
   const pct = target ? Math.min(100, (kcal / target.target_kcal) * 100) : 0;
-  const wd = ['日', '月', '火', '水', '木', '金', '土'][jstDayOfWeek(date)];
+  const wd = DOW_JA[jstDayOfWeek(date)];
 
   return (
     <div className="mx-auto max-w-md space-y-4">

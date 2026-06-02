@@ -78,6 +78,17 @@ body::before {
   font-variant-numeric: tabular-nums;
 }
 
+/* ブランドのボックスロゴ(SUPREME 風): Futura → Jost フォールバック・大文字・太字斜体 */
+.logo-wordmark {
+  font-family: 'Futura', 'Jost', 'Century Gothic', var(--font-display);
+  font-weight: 800;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 @keyframes rise {
   from {
     opacity: 0;

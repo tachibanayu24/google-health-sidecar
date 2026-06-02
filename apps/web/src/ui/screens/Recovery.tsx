@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Footprints, HeartPulse, Moon, Scale, Wind } from 'lucide-react';
+import { Activity, Flame, Footprints, HeartPulse, Moon, Scale, Wind } from 'lucide-react';
 import { useState } from 'react';
 import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts';
 import { Card, Stat } from '../components/Card';
-import { axisTick, CHART, ChartFrame, mmdd, TT } from '../components/chart';
+import { axisTick, CHART, ChartFrame, TT } from '../components/chart';
 import { Sheet } from '../components/Overlay';
 import { Empty, ErrorBox, Loading } from '../components/state';
 import { api, type SleepSummary } from '../lib/api';
-import { epochToJstHhmm, shiftDate } from '../lib/datetime';
+import { epochToJstHhmm, formatDateForDisplay, shiftDate } from '../lib/datetime';
 import { invalidateBody } from '../lib/invalidate';
 import { round } from '../lib/units';
 
@@ -129,7 +129,7 @@ function BodyComposition({
             <CartesianGrid stroke={CHART.line} vertical={false} />
             <XAxis
               dataKey="date"
-              tickFormatter={mmdd}
+              tickFormatter={formatDateForDisplay}
               tick={axisTick}
               stroke={CHART.line}
               minTickGap={28}
@@ -331,6 +331,7 @@ function RecoveryCard({
 // ============ 日次センシング(歩数/SpO2/呼吸/VO2max) ============
 const SENSING_META: Record<string, { label: string; Icon: typeof HeartPulse; unit?: string }> = {
   steps: { label: '歩数', Icon: Footprints, unit: '歩' },
+  active_energy_kcal: { label: '消費', Icon: Flame, unit: 'kcal' }, // 摂取kcal(食事)との収支に
   spo2_avg: { label: 'SpO₂', Icon: Activity, unit: '%' },
   resp_rate: { label: '呼吸数', Icon: Wind, unit: '/min' },
   vo2max: { label: 'VO₂max', Icon: Activity },
@@ -352,7 +353,9 @@ function DailySensing({
           const meta = SENSING_META[d.metric]!;
           const Icon = meta.Icon;
           const val =
-            d.metric === 'steps' ? Math.round(d.value).toLocaleString() : round(d.value, 1);
+            d.metric === 'steps' || d.metric === 'active_energy_kcal'
+              ? Math.round(d.value).toLocaleString()
+              : round(d.value, 1);
           return (
             <div key={d.metric} className="flex items-center gap-2">
               <Icon className="h-4 w-4 shrink-0 text-faint" strokeWidth={2.2} />
