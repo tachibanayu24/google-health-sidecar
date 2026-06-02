@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bookmark, Check, Plus, Trash2, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Card } from '../components/Card';
 import { Sheet } from '../components/Overlay';
 import { api, type FoodSuggestion, type MealPreset } from '../lib/api';
@@ -43,10 +43,12 @@ export function MealScreen({
   onSaved,
   editMealId,
   onDirty,
+  initialPresetId,
 }: {
   onSaved: () => void;
   editMealId?: string | null;
   onDirty?: (dirty: boolean) => void;
+  initialPresetId?: string | null;
 }) {
   const qc = useQueryClient();
   const [mealType, setMealType] = useState<string>(defaultMealType());
@@ -85,7 +87,7 @@ export function MealScreen({
     setItems((prev) => prev.map((it) => (it.key === k ? { ...it, ...patch } : it)));
   const remove = (k: string) => setItems((prev) => prev.filter((it) => it.key !== k));
 
-  function applyPreset(p: MealPreset) {
+  const applyPreset = useCallback((p: MealPreset) => {
     setMealType(p.defaultMealType);
     setPresetId(p.id);
     setItems(
@@ -101,7 +103,18 @@ export function MealScreen({
         }),
       ),
     );
-  }
+  }, []);
+
+  // 食事タブのプリセット一覧から起動した場合、presets ロード後に一度だけ適用。
+  const presetInit = useRef(false);
+  useEffect(() => {
+    if (presetInit.current || !initialPresetId || editMealId) return;
+    const p = presets.data?.presets.find((x) => x.id === initialPresetId);
+    if (p) {
+      applyPreset(p);
+      presetInit.current = true;
+    }
+  }, [presets.data, initialPresetId, editMealId, applyPreset]);
 
   const total = items.reduce(
     (a, it) => ({
@@ -191,7 +204,7 @@ export function MealScreen({
       </div>
 
       {presets.data && presets.data.presets.length > 0 && (
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
+        <div className="flex flex-wrap gap-1.5">
           {presets.data.presets.map((p) => (
             <span
               key={p.id}
@@ -279,10 +292,6 @@ export function MealScreen({
           プリセットとして保存
         </button>
       )}
-
-      <p className="text-center text-[11px] text-faint">
-        写真からの自動栄養計算は Claude(MCP)経由。ここは手入力 + 過去食の補完。
-      </p>
 
       {presetOpen && (
         <PresetSaveSheet

@@ -76,6 +76,7 @@ function NutritionRoute() {
       date={date}
       onDateChange={(d) => setSp({ d }, { replace: true })}
       onRecordMeal={() => navigate('/meal')}
+      onStartFromPreset={(id) => navigate(`/meal?preset=${id}`)}
       onOpenSettings={() => navigate('/settings')}
       onOpenCategory={(mealType, d) => navigate(`/nutrition/${mealType}?d=${d}`)}
     />
@@ -129,6 +130,7 @@ function RecordRoute() {
 
 function MealRoute() {
   const { id } = useParams();
+  const [sp] = useSearchParams();
   const navigate = useNavigate();
   const [dirty, setDirty] = useState(false);
   const saved = useRef(false);
@@ -137,6 +139,7 @@ function MealRoute() {
     <>
       <MealScreen
         editMealId={id ?? null}
+        initialPresetId={sp.get('preset')}
         onDirty={setDirty}
         onSaved={() => {
           saved.current = true;

@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Bookmark, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { Card } from '../components/Card';
 import { NutrientBars } from '../components/NutrientBars';
@@ -34,12 +34,14 @@ export function NutritionScreen({
   date,
   onDateChange,
   onRecordMeal,
+  onStartFromPreset,
   onOpenSettings,
   onOpenCategory,
 }: {
   date: string;
   onDateChange: (date: string) => void;
   onRecordMeal: () => void;
+  onStartFromPreset: (presetId: string) => void;
   onOpenSettings: () => void;
   onOpenCategory: (mealType: string, date: string) => void;
 }) {
@@ -138,6 +140,8 @@ export function NutritionScreen({
 
       <MealsCard meals={t?.meals ?? []} onOpenCategory={(mt) => onOpenCategory(mt, date)} />
 
+      <PresetsCard onStart={onStartFromPreset} />
+
       <div className="flex gap-2">
         <button
           type="button"
@@ -221,6 +225,73 @@ function MealsCard({
               <ChevronRight className="h-4 w-4 shrink-0 text-faint" strokeWidth={2.4} />
             </button>
           ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ============ プリセット一覧(独立セクション。タップで適用して記録開始) ============
+/** 登録済み食事プリセットの一覧。タップでその内容を適用した記録画面へ。各行で削除も可能。 */
+function PresetsCard({ onStart }: { onStart: (presetId: string) => void }) {
+  const qc = useQueryClient();
+  const presets = useQuery({ queryKey: ['meal-presets'], queryFn: api.mealPresets });
+  const del = useMutation({
+    mutationFn: api.deleteMealPreset,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['meal-presets'] }),
+  });
+  const list = presets.data?.presets ?? [];
+  return (
+    <Card title="プリセット">
+      {list.length === 0 ? (
+        <p className="py-2 text-sm text-faint">
+          まだありません。食事の記録画面で「プリセットとして保存」すると、ここに並びます。
+        </p>
+      ) : (
+        <div className="divide-y divide-line/60">
+          {list.map((p) => {
+            const tot = p.items.reduce(
+              (a, it) => ({
+                kcal: a.kcal + it.caloriesKcal,
+                p: a.p + (it.proteinG ?? 0),
+                f: a.f + (it.fatG ?? 0),
+                c: a.c + (it.carbsG ?? 0),
+              }),
+              { kcal: 0, p: 0, f: 0, c: 0 },
+            );
+            return (
+              <div key={p.id} className="flex items-center gap-2 py-2.5 first:pt-1 last:pb-1">
+                <button
+                  type="button"
+                  onClick={() => onStart(p.id)}
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Bookmark className="h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2.4} />
+                    <span className="truncate text-sm font-semibold text-ink">{p.name}</span>
+                    <span className="shrink-0 text-[11px] text-faint">{p.items.length}品</span>
+                  </span>
+                  <span className="mt-0.5 flex gap-2 pl-5 text-[10px] tnum">
+                    <span style={{ color: 'var(--color-protein)' }}>P{Math.round(tot.p)}</span>
+                    <span style={{ color: 'var(--color-fat)' }}>F{Math.round(tot.f)}</span>
+                    <span style={{ color: 'var(--color-carb)' }}>C{Math.round(tot.c)}</span>
+                  </span>
+                </button>
+                <span className="tnum shrink-0 text-sm font-semibold text-ink">
+                  {Math.round(tot.kcal)}
+                  <span className="text-[10px] text-faint"> kcal</span>
+                </span>
+                <button
+                  type="button"
+                  aria-label="プリセット削除"
+                  onClick={() => del.mutate(p.id)}
+                  className="shrink-0 p-1 text-faint active:text-accent"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </Card>
