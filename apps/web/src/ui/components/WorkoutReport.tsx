@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { toPng } from 'html-to-image';
-import { Download, Loader2, Share2, X } from 'lucide-react';
+import { Download, Loader2, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter';
 import { createPortal } from 'react-dom';
@@ -12,7 +12,8 @@ import { BrandLogo } from './BrandLogo';
 
 // 人体図グラデーションは theme の単一ソース(Training の Heatmap と共有)。
 const RAMP = HEATMAP_RAMP;
-const BASE_BODY = '#e6e1d5';
+// シェア画像の人体ベース色。カード背景(ウォームクリーム)に埋もれないよう本体より濃いめ。
+const BASE_BODY = '#c2b8a6';
 
 function bucket(i: number): number {
   if (i <= 0.02) return 0;
@@ -73,37 +74,25 @@ export function WorkoutReport({
   // 「効かせた主働部位」: primary セットがある部位を多い順に。
   const primary = muscles.filter((m) => m.sets > 0).slice(0, 6);
 
-  async function shareImage() {
+  async function downloadImage() {
     const node = cardRef.current;
     if (!node) return;
     setBusy(true);
     setErr(false);
     try {
-      // 埋め込みフォントが確実に乗るまで待つ(SNS 品質のため)。
+      // 埋め込みフォントが確実に乗るまで待つ(画質のため)。
       if (document.fonts?.ready) await document.fonts.ready;
       const dataUrl = await toPng(node, {
         pixelRatio: 3,
         cacheBust: true,
         backgroundColor: '#f4f1ea',
       });
-      const blob = await (await fetch(dataUrl)).blob();
-      const file = new File([blob], `logbook-${session.date}.png`, { type: 'image/png' });
-      const title = session.title || 'ワークアウト';
-      if (navigator.canShare?.({ files: [file] }) && navigator.share) {
-        await navigator.share({
-          files: [file],
-          title: 'Logbook',
-          text: `${title} · ${session.date}`,
-        });
-      } else {
-        const a = document.createElement('a');
-        a.href = dataUrl;
-        a.download = file.name;
-        a.click();
-      }
-    } catch (e) {
-      // ユーザーがシェアをキャンセルした場合(AbortError)はエラー扱いしない。
-      if ((e as Error)?.name !== 'AbortError') setErr(true);
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `logbook-${session.date}.png`;
+      a.click();
+    } catch {
+      setErr(true);
     } finally {
       setBusy(false);
     }
@@ -153,7 +142,7 @@ export function WorkoutReport({
                 <div className="flex items-center gap-2">
                   <BrandLogo size="sm" />
                 </div>
-                <span className="tnum text-[12px] font-semibold text-muted">
+                <span className="tnum whitespace-nowrap text-[12px] font-semibold text-muted">
                   {formatDateLong(session.date)}
                 </span>
               </div>
@@ -162,9 +151,6 @@ export function WorkoutReport({
               <div className="mt-4">
                 <div className="font-display text-[26px] font-extrabold leading-tight tracking-tight">
                   {session.title || 'ワークアウト'}
-                </div>
-                <div className="mt-1 text-[12px] font-semibold text-faint">
-                  {session.exercises}種目 · {session.sets}セット
                 </div>
               </div>
 
@@ -255,12 +241,6 @@ export function WorkoutReport({
                   })}
                 </div>
               )}
-
-              {/* フッタ */}
-              <div className="mt-6 flex items-center justify-between border-t border-line/70 pt-3 text-[10px] font-semibold text-faint">
-                <span>Logbook · ボディメイク記録</span>
-                <span className="tnum">{session.date}</span>
-              </div>
             </div>
           </div>
           {/* ===== キャプチャ対象ここまで ===== */}
@@ -275,35 +255,22 @@ export function WorkoutReport({
           )}
           <button
             type="button"
-            onClick={shareImage}
+            onClick={downloadImage}
             disabled={busy || detail.isLoading}
             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-accent py-3.5 font-bold text-card shadow-lg shadow-accent/40 transition active:scale-[0.99] disabled:opacity-60"
           >
             {busy ? (
               <Loader2 className="h-5 w-5 animate-spin" strokeWidth={2.4} />
-            ) : canShareFiles() ? (
-              <Share2 className="h-5 w-5" strokeWidth={2.4} />
             ) : (
               <Download className="h-5 w-5" strokeWidth={2.4} />
             )}
-            {busy ? '生成中…' : canShareFiles() ? '画像をシェア' : '画像を保存'}
+            {busy ? '生成中…' : '画像を保存'}
           </button>
         </div>
       </div>
     </div>,
     document.body,
   );
-}
-
-/** Web Share API でファイル共有できる端末か(UI 文言の出し分け用)。 */
-function canShareFiles(): boolean {
-  try {
-    return typeof navigator !== 'undefined' && typeof navigator.canShare === 'function'
-      ? navigator.canShare({ files: [new File([], 'x.png', { type: 'image/png' })] })
-      : false;
-  } catch {
-    return false;
-  }
 }
 
 function Stat({ label, value, unit }: { label: string; value: string; unit: string }) {
