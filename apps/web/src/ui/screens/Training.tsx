@@ -192,14 +192,20 @@ function Heatmap({ muscles, worked }: { muscles: MuscleVolume[]; worked: number 
     muscles: [...slugBucket.entries()].filter(([, bb]) => bb === b).map(([slug]) => slug),
     frequency: b,
   }));
+  // 直近7日の刺激(get_muscle_volume の window=7 と一致)。
+  const today = todayJst();
+  const range = `${mmdd(shiftDate(today, -6))}–${mmdd(today)}`;
   return (
-    <Card
-      title="筋ヒートマップ"
-      right={<span className="text-[11px] text-faint">7日 · {worked}/16</span>}
-    >
+    <Card>
+      <div className="mb-1 flex items-center justify-between text-[11px] text-faint">
+        <span className="tnum">{range} の刺激</span>
+        <span>
+          <span className="font-semibold text-muted">{worked}</span>/16 部位
+        </span>
+      </div>
       <div className="grid grid-cols-2 gap-2 [&_svg]:h-auto [&_svg]:max-h-[36vh] [&_svg]:w-full">
-        <Figure label="前面" type="anterior" data={data} />
-        <Figure label="背面" type="posterior" data={data} />
+        <Model type="anterior" data={data} highlightedColors={RAMP} bodyColor={BASE_BODY} />
+        <Model type="posterior" data={data} highlightedColors={RAMP} bodyColor={BASE_BODY} />
       </div>
       <div className="mt-3 flex items-center gap-2 text-xs text-muted">
         <span>刺激 少</span>
@@ -209,38 +215,18 @@ function Heatmap({ muscles, worked }: { muscles: MuscleVolume[]; worked: number 
         />
         <span>多</span>
       </div>
-      <p className="mt-2 text-[10px] leading-snug text-faint">
-        ※
-        図は概略表示。中部三角筋は前部と同じ位置に、脊柱起立筋は背面下部に近似して塗っています。正確な部位別数値は「ボリューム」タブを参照。
-      </p>
     </Card>
-  );
-}
-function Figure({
-  label,
-  type,
-  data,
-}: {
-  label: string;
-  type: 'anterior' | 'posterior';
-  data: IExerciseData[];
-}) {
-  return (
-    <div className="flex flex-col items-center">
-      <Model type={type} data={data} highlightedColors={RAMP} bodyColor={BASE_BODY} />
-      <span className="mt-1 text-[11px] font-semibold text-faint">{label}</span>
-    </div>
   );
 }
 
 // ============ トレーニング・カレンダー(週グリッド: 日付×部位文字で「いつ・何の日」を読む) ============
 const WEEK_LABELS = ['今週', '先週', '2週前', '3週前'];
-const DOW_JA = ['月', '火', '水', '木', '金', '土', '日'];
+const DOW_JA = ['日', '月', '火', '水', '木', '金', '土'];
 
-/** ISO日付の曜日。月=0 … 日=6(週は月曜始まり)。 */
+/** ISO日付の曜日。日=0 … 土=6(週は日曜始まり)。 */
 function isoDow(iso: string): number {
   const [y, m, d] = iso.split('-').map(Number);
-  return (new Date(y!, m! - 1, d!).getDay() + 6) % 7;
+  return new Date(y!, m! - 1, d!).getDay();
 }
 
 function TrainingCalendar() {
@@ -268,10 +254,10 @@ function TrainingCalendar() {
   }
   const sessionDates = new Set(cal.data?.sessionDates ?? []);
 
-  // 今週の月曜から過去 WEEKS 週(各週 月→日, weeks[0]=今週)。
-  const thisMonday = shiftDate(today, -isoDow(today));
+  // 今週の日曜から過去 WEEKS 週(各週 日→土, weeks[0]=今週)。
+  const weekStart = shiftDate(today, -isoDow(today));
   const weeks = Array.from({ length: WEEKS }, (_, w) =>
-    Array.from({ length: 7 }, (_, i) => shiftDate(shiftDate(thisMonday, -7 * w), i)),
+    Array.from({ length: 7 }, (_, i) => shiftDate(shiftDate(weekStart, -7 * w), i)),
   );
 
   const oldest = weeks[WEEKS - 1]![0]!;
@@ -297,7 +283,10 @@ function TrainingCalendar() {
             <span className="w-9 shrink-0" />
             <div className="grid flex-1 grid-cols-7 gap-1 text-center text-[10px] font-semibold text-faint">
               {DOW_JA.map((d, i) => (
-                <span key={d} className={i >= 5 ? 'text-muted/60' : undefined}>
+                <span
+                  key={d}
+                  className={i === 0 ? 'text-accent' : i === 6 ? 'text-fiber' : undefined}
+                >
                   {d}
                 </span>
               ))}
@@ -327,10 +316,6 @@ function TrainingCalendar() {
               </div>
             ))}
           </div>
-
-          <p className="mt-2 text-[10px] leading-snug text-faint">
-            ※ 数字=日付 · 文字=その日の主働筋の部位(胸/背/肩/腕/脚/幹) · 上が今週 · 空白はレスト日。
-          </p>
         </>
       )}
     </Card>
@@ -353,12 +338,15 @@ function DayCell({
   rested: boolean;
 }) {
   const day = Number(date.slice(8, 10));
+  // 日付色は曜日基準(日=朱 / 土=青 / 平日=ink)。トレ無し日・未来は透明度で弱める。
+  const dow = isoDow(date);
+  const dowColor = dow === 0 ? 'text-accent' : dow === 6 ? 'text-fiber' : 'text-ink';
   const trained = regions.length > 0;
   // 未来日: カレンダーとして日付だけ薄く置く(部位なし)。
   if (isFuture) {
     return (
       <div className="flex aspect-square items-center justify-center rounded-md">
-        <span className="stat text-base italic leading-none text-faint/40">{day}</span>
+        <span className={`stat text-base italic leading-none ${dowColor} opacity-30`}>{day}</span>
       </div>
     );
   }
@@ -375,7 +363,9 @@ function DayCell({
         isToday ? 'ring-2 ring-ink/30' : ''
       } ${trained ? 'border-line/50 bg-card' : 'border-line/40 bg-line/15'}`}
     >
-      <span className={`stat text-base italic leading-none ${trained ? 'text-ink' : 'text-faint'}`}>
+      <span
+        className={`stat text-base italic leading-none ${dowColor} ${trained ? '' : 'opacity-40'}`}
+      >
         {day}
       </span>
       {trained && (
@@ -668,26 +658,29 @@ function RecentWorkouts({ onEdit }: { onEdit: (id: string) => void }) {
   });
   const sessions = q.data?.sessions ?? [];
   return (
-    <Card title="最近のワークアウト">
+    <div className="space-y-3">
+      <h2 className="px-1 font-display text-[11px] font-bold uppercase tracking-[0.14em] text-faint">
+        最近のワークアウト
+      </h2>
       {sessions.length === 0 ? (
-        <Empty note="ワークアウトを記録するとここに一覧が出ます。" />
+        <Card>
+          <Empty note="ワークアウトを記録するとここに一覧が出ます。" />
+        </Card>
       ) : (
-        <ul className="text-sm">
-          {sessions.map((s, i) => (
-            <WorkoutSessionRow
-              key={s.id}
-              session={s}
-              initiallyOpen={i === 0}
-              onEdit={onEdit}
-              onAskDelete={(sess) =>
-                setConfirm({
-                  id: sess.id,
-                  label: `${mmdd(sess.date)} ${sess.title || 'ワークアウト'}(${sess.exercises}種目 ${sess.sets}set)`,
-                })
-              }
-            />
-          ))}
-        </ul>
+        sessions.map((s, i) => (
+          <WorkoutSessionRow
+            key={s.id}
+            session={s}
+            initiallyOpen={i === 0}
+            onEdit={onEdit}
+            onAskDelete={(sess) =>
+              setConfirm({
+                id: sess.id,
+                label: `${mmdd(sess.date)} ${sess.title || 'ワークアウト'}(${sess.exercises}種目 ${sess.sets}set)`,
+              })
+            }
+          />
+        ))
       )}
       {confirm && (
         <DeleteConfirmModal
@@ -698,7 +691,7 @@ function RecentWorkouts({ onEdit }: { onEdit: (id: string) => void }) {
           onCancel={() => setConfirm(null)}
         />
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -743,14 +736,14 @@ function WorkoutSessionRow({
     staleTime: 5 * 60_000,
   });
   return (
-    <li className="border-b border-line py-2 last:border-0">
+    <Card>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center justify-between gap-2 text-left"
       >
         <span className="min-w-0">
-          <span className="font-semibold">{s.title || 'ワークアウト'}</span>
+          <span className="font-display font-bold tracking-tight">{s.title || 'ワークアウト'}</span>
           <span className="mt-0.5 block text-[11px] text-faint">
             {mmdd(s.date)} · {s.exercises}種目 {s.sets}set ·{' '}
             {Math.round(s.total_volume_kg).toLocaleString()}kg
@@ -832,6 +825,6 @@ function WorkoutSessionRow({
           </div>
         </div>
       )}
-    </li>
+    </Card>
   );
 }
