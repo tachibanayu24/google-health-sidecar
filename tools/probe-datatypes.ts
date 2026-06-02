@@ -11,27 +11,19 @@ const token = await loadAccessToken();
 const client = new GhClient(async () => token);
 
 const CANDIDATES = [
-  // 皮膚温
-  'daily-skin-temperature',
-  'skin-temperature',
-  'daily-skin-temperature-deviation',
-  'daily-skin-temperature-variation',
-  'wrist-temperature',
-  'daily-wrist-temperature',
-  'body-temperature',
-  'daily-body-temperature',
-  // 歩数(日次集計型があるか)
-  'daily-steps',
-  'daily-step-count',
-  'step-count',
+  // 2026-06-02 確定: active-energy-burned / basal-energy-burned / distance が有効。形状確認。
+  'active-energy-burned',
+  'basal-energy-burned',
+  'distance',
 ];
 
 console.log('\n=== dataType ID probe ===\n');
 for (const id of CANDIDATES) {
   try {
-    const raw = (await client.reconcile(id, { pageSize: '1' })) as { dataPoints?: unknown[] };
+    const raw = (await client.reconcile(id, { pageSize: '3' })) as { dataPoints?: unknown[] };
     const n = raw.dataPoints?.length ?? 0;
-    console.log(`✅ ${id} — 有効(${n} pts in 1page)`);
+    console.log(`✅ ${id} — 有効(${n} pts)`);
+    if (n > 0) console.log(`   raw: ${JSON.stringify(raw.dataPoints?.[0]).slice(0, 600)}`);
   } catch (e) {
     if (e instanceof ProviderApiError) {
       const invalid = /Invalid data type/i.test(e.bodyText);

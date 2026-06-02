@@ -12,6 +12,7 @@ import {
   type Db,
   deleteBodyMetric,
   deleteMeal,
+  deleteMealPresetRow,
   deleteWorkout,
   getActiveNutritionTarget,
   getBodyForDate,
@@ -140,7 +141,7 @@ async function resolveExerciseId(
 
 /** リクエスト毎に McpServer を新規生成(ステートレス)。M2-a: get_settings / M2-b: read / M2-c: write。 */
 function buildServer(env: Env): McpServer {
-  const server = new McpServer({ name: 'logbook-mcp', version: '0.5.0' });
+  const server = new McpServer({ name: 'logbook-mcp', version: '0.6.0' });
 
   server.registerTool(
     'get_settings',
@@ -583,6 +584,36 @@ function buildServer(env: Env): McpServer {
       const clientRequestId = ensureCrid(args.clientRequestId);
       const res = await logMealFromPreset(ctx, { ...args, clientRequestId });
       return ok({ ...res, clientRequestId });
+    },
+  );
+
+  server.registerTool(
+    'delete_meal_preset',
+    {
+      title: '食事プリセットを削除',
+      description:
+        'プリセットを削除する(D1 のみ・GH 無関係)。confirm 省略時は対象名を echo するので確認して confirm:true で実行。既に記録済みの食事には影響しない。',
+      inputSchema: { presetId: z.string().min(1), confirm: z.boolean().optional() },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ presetId, confirm }) => {
+      const ctx = makeContext(env);
+      const preset = (await listMealPresets(ctx.db)).find((p) => p.id === presetId);
+      if (!preset) return ok({ error: 'not_found', message: 'プリセットが見つかりません' });
+      if (!confirm) {
+        return ok({
+          requireConfirm: true,
+          target: { id: preset.id, name: preset.name },
+          message: `プリセット「${preset.name}」を削除します。confirm:true で実行。`,
+        });
+      }
+      await deleteMealPresetRow(ctx.db, presetId);
+      return ok({ deleted: true });
     },
   );
 
