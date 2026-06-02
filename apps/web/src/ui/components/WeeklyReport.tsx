@@ -4,11 +4,11 @@ import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter';
 import { api } from '../lib/api';
 import { formatDateForDisplay } from '../lib/datetime';
 import { MUSCLE_TO_SLUGS } from '../lib/muscles';
+import { HEATMAP_RAMP } from '../lib/theme';
 import { ShareImageModal } from './ShareImageModal';
 
-// 濃色キャンバス用: 人体はダークなバーミリオンの影、効かせた部位はクリーム〜白で発光。
-const RAMP_BOLD = ['#f0a585', '#f6bfa3', '#fbd8c4', '#fff0e8', '#fffefb'];
-const BODY_BOLD = '#9b3617';
+// 人体図は暗パネル上に「おなじみの暖色ヒートマップ(淡黄→朱=強い刺激)」で直感的に。
+const FIG_BODY = '#7c6b5e'; // 未刺激の部位(ミュートグレー)
 
 function bucket(i: number): number {
   if (i <= 0.02) return 0;
@@ -115,20 +115,30 @@ export function WeeklyReport({ onClose }: { onClose: () => void }) {
         <Moment value={`${worked}/16`} label="攻めた部位" />
       </div>
 
-      {/* 人体図(クリーム発光) */}
-      <div className="mt-6 grid grid-cols-2 gap-1 [&_svg]:h-auto [&_svg]:max-h-[26vh] [&_svg]:w-full">
-        <Model
-          type="anterior"
-          data={bodyData}
-          highlightedColors={RAMP_BOLD}
-          bodyColor={BODY_BOLD}
-        />
-        <Model
-          type="posterior"
-          data={bodyData}
-          highlightedColors={RAMP_BOLD}
-          bodyColor={BODY_BOLD}
-        />
+      {/* 人体図: 暗パネル + 暖色ヒートマップ(淡黄→朱=強い刺激)。凡例つきで直感的に。 */}
+      <div className="mt-6 rounded-2xl px-3 py-3" style={{ background: 'rgba(22,13,8,0.55)' }}>
+        <div className="grid grid-cols-2 gap-1 [&_svg]:h-auto [&_svg]:max-h-[24vh] [&_svg]:w-full">
+          <Model
+            type="anterior"
+            data={bodyData}
+            highlightedColors={HEATMAP_RAMP}
+            bodyColor={FIG_BODY}
+          />
+          <Model
+            type="posterior"
+            data={bodyData}
+            highlightedColors={HEATMAP_RAMP}
+            bodyColor={FIG_BODY}
+          />
+        </div>
+        <div className="mt-2 flex items-center justify-center gap-2 text-[10px] font-medium text-card/75">
+          <span className="whitespace-nowrap">刺激 少</span>
+          <span
+            className="h-1.5 w-24 rounded-full"
+            style={{ background: `linear-gradient(90deg, ${FIG_BODY}, ${HEATMAP_RAMP.join(',')})` }}
+          />
+          <span className="whitespace-nowrap">多</span>
+        </div>
       </div>
 
       {/* 栄養(1日平均) */}
@@ -145,9 +155,9 @@ export function WeeklyReport({ onClose }: { onClose: () => void }) {
               <span className="mb-1.5 text-sm font-bold text-card/80">kcal</span>
             </div>
             <div className="mt-1.5 flex gap-4 text-[14px] font-bold tnum text-card/85">
-              <span>P {d.nutrition.avgP}</span>
-              <span>F {d.nutrition.avgF}</span>
-              <span>C {d.nutrition.avgC}</span>
+              <span className="whitespace-nowrap">P {d.nutrition.avgP}</span>
+              <span className="whitespace-nowrap">F {d.nutrition.avgF}</span>
+              <span className="whitespace-nowrap">C {d.nutrition.avgC}</span>
             </div>
           </>
         ) : (
@@ -173,11 +183,17 @@ export function WeeklyReport({ onClose }: { onClose: () => void }) {
       {/* フッタ(コンディション) */}
       {d && (d.sensing.avgSteps != null || d.sensing.avgActiveKcal != null) && (
         <div className="mt-5 flex flex-wrap gap-x-4 gap-y-1 text-[12px] font-semibold text-card/55">
-          {d.sensing.avgSteps != null && <span>歩数 {d.sensing.avgSteps.toLocaleString()}/日</span>}
-          {d.sensing.avgActiveKcal != null && (
-            <span>消費 {d.sensing.avgActiveKcal.toLocaleString()}kcal/日</span>
+          {d.sensing.avgSteps != null && (
+            <span className="whitespace-nowrap">歩数 {d.sensing.avgSteps.toLocaleString()}/日</span>
           )}
-          {d.sensing.avgHrv != null && <span>HRV {d.sensing.avgHrv}ms</span>}
+          {d.sensing.avgActiveKcal != null && (
+            <span className="whitespace-nowrap">
+              消費 {d.sensing.avgActiveKcal.toLocaleString()}kcal/日
+            </span>
+          )}
+          {d.sensing.avgHrv != null && (
+            <span className="whitespace-nowrap">HRV {d.sensing.avgHrv}ms</span>
+          )}
         </div>
       )}
     </ShareImageModal>
