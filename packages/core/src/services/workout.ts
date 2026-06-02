@@ -494,12 +494,15 @@ export interface TrainingFrequencyRow {
   region: string;
   last_trained_date: string | null;
   days_since: number | null;
-  weekly_counts: number[]; // [0]=直近7日, [1]=8-14日前 …
+  weekly_counts: number[]; // [0]=直近7日, [1]=8-14日前 …(その部位を「触れた」日数)
+  total_sets: number; // 窓内の主働セット数。last_trained が近くても少なければ過小と判る
 }
 
 /**
  * 部位別トレーニング頻度(§5.5-G): 表示区分(胸/背/肩/腕/脚/体幹)ごとの最終実施日・経過日数・
- * 直近 weeks 週の週次実施日数。get_muscle_calendar を集計するより軽く「この部位N日空き」を即答できる。
+ * 週次「触れた」日数 + 窓内の主働セット数。get_muscle_calendar を集計するより軽く即答できる。
+ * 注意: last_trained は「その区分の筋が主働で記録された日」(例: デッドリフトのハムで脚が点灯)。
+ *       「足りているか」は total_sets で判断する(少なければ副次的巻き込みのみ)。
  */
 export async function getTrainingFrequency(
   ctx: AppContext,
@@ -509,10 +512,14 @@ export async function getTrainingFrequency(
   const cal = await getMuscleCalendar(ctx, { days: weeks * 7 });
   const today = todayJst();
   const labels = [...new Set(Object.values(MUSCLE_REGION_JA))]; // 胸/背/肩/腕/脚/体幹
-  const acc = new Map<string, { dates: Set<string>; weeks: Set<string>[] }>(
+  const acc = new Map<string, { dates: Set<string>; weeks: Set<string>[]; sets: number }>(
     labels.map((l) => [
       l,
-      { dates: new Set<string>(), weeks: Array.from({ length: weeks }, () => new Set<string>()) },
+      {
+        dates: new Set<string>(),
+        weeks: Array.from({ length: weeks }, () => new Set<string>()),
+        sets: 0,
+      },
     ]),
   );
   for (const cell of cal.cells) {
@@ -520,6 +527,7 @@ export async function getTrainingFrequency(
     const r = region ? acc.get(region) : undefined;
     if (!r) continue;
     r.dates.add(cell.date);
+    r.sets += cell.sets;
     const w = Math.floor(daysBetween(cell.date, today) / 7);
     if (w >= 0 && w < weeks) r.weeks[w]?.add(cell.date);
   }
@@ -532,6 +540,7 @@ export async function getTrainingFrequency(
       last_trained_date: last,
       days_since: last ? daysBetween(last, today) : null,
       weekly_counts: r.weeks.map((s) => s.size),
+      total_sets: r.sets,
     };
   });
 }

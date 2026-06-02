@@ -245,7 +245,7 @@ function buildServer(env: Env): McpServer {
     {
       title: '部位別トレーニング頻度',
       description:
-        '部位(胸/背/肩/腕/脚/体幹)別の最終実施日・経過日数・直近 weeks 週(既定4)の週次実施日数を返す。「この部位N日空き」「ベンチ週2」の即答に。get_muscle_calendar を毎回集計するより軽い。',
+        '部位(胸/背/肩/腕/脚/体幹)別の最終実施日・経過日数・週次「触れた」日数 + 窓内の主働セット数(total_sets)を返す。weeks 既定4。注意: last_trained は主働筋で記録された日(例: デッドリフトのハムで脚が点灯)。足りているかは total_sets で判断(少なければ副次的巻き込みのみ)。',
       inputSchema: { weeks: z.number().int().min(1).max(12).optional() },
       annotations: READ,
     },

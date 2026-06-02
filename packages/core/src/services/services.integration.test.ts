@@ -533,9 +533,11 @@ describe('分析(volume / calendar / history)', () => {
     expect(chest?.last_trained_date).toBe(todayJst());
     expect(chest?.days_since).toBe(0);
     expect(chest?.weekly_counts[0]).toBe(1);
+    expect(chest?.total_sets).toBe(3); // main 3本(warmup 除外)
     const legs = freq.find((r) => r.region === '脚');
     expect(legs?.last_trained_date).toBeNull();
     expect(legs?.weekly_counts).toEqual([0, 0, 0, 0]);
+    expect(legs?.total_sets).toBe(0);
   });
 });
 
