@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ghsidecar-mcp",
+  "account_id": "2ed52fafd3387679d9b97beadf46abee",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // remote MCP サーバ(Claude.ai Custom Connector が接続)。web とは別 Worker・同一 D1/KV 共有(§3, §7)。
+  // cron は web 側に集約するためここには持たない。migrations_dir も付けない(web が正本)。assets も無し。
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ghsidecar",
+      "database_id": "47f59419-a8cb-4537-8047-64b68174e7ca"
+    }
+  ],
+  "kv_namespaces": [
+    { "binding": "TOKENS", "id": "badca286ba87486491a39ca5702d0a1a" },
+    { "binding": "CACHE", "id": "cba6bf607b654ff29c874fbaf96cbf88" },
+    { "binding": "LOCK", "id": "fa5e1021b35a4c6b9c485280394a013f" }
+  ],
+  "vars": {
+    // 食事 nutrition write は web で実機 200 OK 確認済(§5.2)→ MCP からの push も有効。
+    "FEATURE_GH_NUTRITION_PUSH": "true",
+    // 二次防御: Anthropic outbound IP allowlist(公式追従・変動前提で vars 外出し, §6.3/§9.1)。
+    // 既定は fail-open(レンジ変動での全断回避)。厳格化するなら ENFORCE_IP_ALLOWLIST=true。
+    "ANTHROPIC_OUTBOUND_CIDR": "160.79.104.0/21"
+  }
+  // secret は wrangler secret put で投入(コミットしない):
+  //   MCP_SHARED_SECRET    … 一次防御(URL 埋め込み・fail-closed)
+  //   GOOGLE_CLIENT_ID/SECRET … write+GH push フェーズ(M2-c)で token refresh に使用
+}
