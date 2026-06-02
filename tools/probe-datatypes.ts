@@ -10,17 +10,21 @@ import { loadAccessToken } from './_token';
 const token = await loadAccessToken();
 const client = new GhClient(async () => token);
 
-const CANDIDATES = [
-  // 2026-06-02 確定: active-energy-burned / basal-energy-burned / distance が有効。形状確認。
-  'active-energy-burned',
-  'basal-energy-burned',
-  'distance',
-  // 2026-06-03 確定【全て Invalid data type ID】: GH は合成スコア(readiness/recovery/stress/
-  // sleep-score)を dataType として出さない。出るのは生指標のみ。Fitbit の Daily Readiness Score
-  // は Fitbit アプリ内の合成値で GH API には来ない → readiness は当アプリで生指標から自前計算する。
-  // 'daily-readiness','readiness','recovery','daily-recovery','daily-stress','stress',
-  // 'daily-stress-management','sleep-score','daily-sleep-score'
-];
+// 全 dataType の権威的カタログは docs/gh-datatypes.md(discovery doc 由来)を参照。
+// ここは個別の「正ID + データ有無」確認用(推測IDで叩くと取りこぼすので doc のIDを使うこと)。
+const CANDIDATES = ['active-energy-burned', 'basal-energy-burned', 'distance'];
+
+// ── クラウド GH API(health.googleapis.com)dataType 在庫(2026-06-03 実機 probe)──
+//  Health Connect は端末側 API でサーバから直接は読めない。Worker はクラウド GH を pull するので、
+//  「クラウドが dataType を公開し、かつ自分のデータが届いている」ものだけ取得可能。
+//  ✅ 有効(データ有): blood-glucose(CGM, mg/dL, INTERSTITIAL_FLUID)/ heart-rate(intraday bpm)/
+//     oxygen-saturation(sample)/ heart-rate-variability(sample rmssd)/ height。
+//  ✗ Invalid data type ID(=API非対応, 取得不可): blood-pressure / daily-blood-pressure /
+//     body-temperature / basal-body-temperature / lean-body-mass / bone-mass / body-water-mass /
+//     basal-metabolic-rate / total-calories-burned / floors-climbed / hydration / nutrition /
+//     respiratory-rate(sample・ただし daily-respiratory-rate は有効)/ power /
+//     readiness / recovery / stress / sleep-score(=合成スコアは出さない)。
+//  → 血圧は本APIに存在しない(Health Connect連携でも不可)。血糖は取得可能で実データあり。
 
 console.log('\n=== dataType ID probe ===\n');
 for (const id of CANDIDATES) {
