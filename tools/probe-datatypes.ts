@@ -15,6 +15,11 @@ const CANDIDATES = [
   'active-energy-burned',
   'basal-energy-burned',
   'distance',
+  // 2026-06-03 確定【全て Invalid data type ID】: GH は合成スコア(readiness/recovery/stress/
+  // sleep-score)を dataType として出さない。出るのは生指標のみ。Fitbit の Daily Readiness Score
+  // は Fitbit アプリ内の合成値で GH API には来ない → readiness は当アプリで生指標から自前計算する。
+  // 'daily-readiness','readiness','recovery','daily-recovery','daily-stress','stress',
+  // 'daily-stress-management','sleep-score','daily-sleep-score'
 ];
 
 console.log('\n=== dataType ID probe ===\n');

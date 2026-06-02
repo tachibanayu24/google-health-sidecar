@@ -165,12 +165,24 @@ export function RecordScreen({
     let prefill: SetRow[] = [newSet()];
     let last: string | undefined;
     try {
-      const h = await api.exerciseHistory(ex.id, { limit: 50 });
-      const lastMain = h.sets.find((s) => s.set_type === 'main');
-      if (lastMain) {
-        const v = unit === lastMain.entry_unit ? lastMain.entry_value : null;
-        prefill = [newSet({ entryValue: v, reps: lastMain.reps })];
-        last = `前回 ${lastMain.entry_value}${lastMain.entry_unit} × ${lastMain.reps} (${lastMain.session_date.slice(5)})`;
+      // 前回の同じ種目セッションを参照し、その「セット構成」をまるごとプレフィル(編集の起点)。
+      // exerciseHistory は date 降順・set_index 昇順 → 先頭の session_id が直近セッション。
+      // 単位違いは重量だけ空に、種別は本番/ウォームアップへ集約。
+      const h = await api.exerciseHistory(ex.id, { limit: 100 });
+      const lastSessionId = h.sets[0]?.session_id;
+      const lastSets = lastSessionId
+        ? h.sets.filter((s) => s.session_id === lastSessionId)
+        : [];
+      if (lastSets.length > 0) {
+        prefill = lastSets.map((s) =>
+          newSet({
+            setType: s.set_type === 'warmup' ? 'warmup' : 'main',
+            entryValue: unit === s.entry_unit ? s.entry_value : null,
+            reps: s.reps,
+          }),
+        );
+        const top = lastSets.find((s) => s.set_type !== 'warmup') ?? lastSets[0]!;
+        last = `前回 ${top.entry_value}${top.entry_unit}×${top.reps} · ${lastSets.length}セット (${top.session_date.slice(5)})`;
       }
     } catch {
       /* 履歴なしは無視 */
