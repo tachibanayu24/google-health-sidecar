@@ -222,6 +222,11 @@ export function RecordScreen({
       }),
     );
   }
+  function removeSet(ei: number, si: number) {
+    setItems((prev) =>
+      prev.map((it, i) => (i !== ei ? it : { ...it, sets: it.sets.filter((_, j) => j !== si) })),
+    );
+  }
   const removeExercise = (ei: number) => setItems((prev) => prev.filter((_, i) => i !== ei));
 
   const totalVolume = items.reduce(
@@ -339,15 +344,19 @@ export function RecordScreen({
               </button>
             </div>
           </div>
-          <div className="mt-2 grid grid-cols-[1.6rem_1fr_1fr_1fr] gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-faint">
+          <div className="mt-2 grid grid-cols-[1.6rem_1fr_1fr_1fr_1.75rem] gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-faint">
             <span>本番</span>
             <span>{unit}</span>
             <span>Reps</span>
             <span>RPE</span>
+            <span />
           </div>
           <div className="mt-1 space-y-1.5">
             {it.sets.map((s, si) => (
-              <div key={s.key} className="grid grid-cols-[1.6rem_1fr_1fr_1fr] items-center gap-2">
+              <div
+                key={s.key}
+                className="grid grid-cols-[1.6rem_1fr_1fr_1fr_1.75rem] items-center gap-2"
+              >
                 {/* 本番セットのチェック。チェック=総量・PRに計上、外す=ウォームアップ。 */}
                 <label
                   className={`flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border transition-colors ${
@@ -373,6 +382,15 @@ export function RecordScreen({
                 />
                 <NumInput value={s.reps} onChange={(v) => updateSet(ei, si, { reps: v })} />
                 <NumInput value={s.rpe} onChange={(v) => updateSet(ei, si, { rpe: v })} />
+                <button
+                  type="button"
+                  aria-label="セットを削除"
+                  onClick={() => removeSet(ei, si)}
+                  disabled={it.sets.length === 1}
+                  className="flex items-center justify-center rounded-md p-1 text-faint transition-colors hover:text-accent disabled:opacity-25"
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={2.4} />
+                </button>
               </div>
             ))}
           </div>
