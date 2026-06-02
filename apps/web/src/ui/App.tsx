@@ -37,7 +37,7 @@ export const router = createBrowserRouter([
       { path: '/', element: <HomeRoute /> },
       { path: '/training', element: <TrainingRoute /> },
       { path: '/body', element: <RecoveryScreen /> },
-      { path: '/settings', element: <SettingsScreen /> },
+      { path: '/settings', element: <SettingsRoute /> },
       { path: '/nutrition', element: <NutritionRoute /> },
       { path: '/nutrition/:mealType', element: <MealCategoryRoute /> },
       { path: '/record', element: <RecordRoute /> },
@@ -74,13 +74,17 @@ function NutritionRoute() {
   return (
     <NutritionScreen
       date={date}
-      onBack={() => navigate('/')}
       onDateChange={(d) => setSp({ d }, { replace: true })}
       onRecordMeal={() => navigate('/meal')}
       onOpenSettings={() => navigate('/settings')}
       onOpenCategory={(mealType, d) => navigate(`/nutrition/${mealType}?d=${d}`)}
     />
   );
+}
+
+function SettingsRoute() {
+  const navigate = useNavigate();
+  return <SettingsScreen onBack={() => navigate(-1)} />;
 }
 
 function MealCategoryRoute() {
@@ -156,14 +160,14 @@ function Layout() {
       ? 'home'
       : pathname.startsWith('/training')
         ? 'training'
-        : pathname.startsWith('/body')
-          ? 'body'
-          : pathname.startsWith('/settings')
-            ? 'settings'
+        : pathname.startsWith('/nutrition')
+          ? 'nutrition'
+          : pathname.startsWith('/body')
+            ? 'body'
             : null;
   return (
     <div className="flex h-full flex-col">
-      <Header />
+      <Header onSettings={() => navigate('/settings')} />
       <main className="flex-1 overflow-y-auto px-5 pb-28 pt-3">
         <div key={pathname} className="rise">
           <Suspense fallback={<Loading />}>
@@ -189,7 +193,7 @@ function Layout() {
   );
 }
 
-type Tab = 'home' | 'training' | 'body' | 'settings';
+type Tab = 'home' | 'training' | 'nutrition' | 'body';
 
 /** 未保存の記録から離脱しようとしたときの破棄確認(データ消失防止)。共通 Modal を使う。 */
 function DiscardGuard({ onDiscard, onCancel }: { onDiscard: () => void; onCancel: () => void }) {
@@ -219,12 +223,20 @@ function DiscardGuard({ onDiscard, onCancel }: { onDiscard: () => void; onCancel
   );
 }
 
-function Header() {
+function Header({ onSettings }: { onSettings: () => void }) {
   return (
     <header className="safe-top sticky top-0 z-20 border-b border-line bg-paper/85 backdrop-blur-md">
-      <div className="mx-auto flex max-w-md items-center justify-center gap-2 px-5 pb-3 pt-4">
+      <div className="relative mx-auto flex max-w-md items-center justify-center gap-2 px-5 pb-3 pt-4">
         <Dumbbell className="h-[18px] w-[18px] text-accent" strokeWidth={2.5} />
         <span className="font-mono text-base font-bold tracking-tight">Logbook</span>
+        <button
+          type="button"
+          aria-label="設定"
+          onClick={onSettings}
+          className="absolute right-3 flex h-9 w-9 items-center justify-center rounded-full text-faint active:bg-line/60"
+        >
+          <Settings className="h-[18px] w-[18px]" strokeWidth={2.2} />
+        </button>
       </div>
     </header>
   );
@@ -260,16 +272,16 @@ function BottomNav({
           </button>
         </div>
         <NavTab
+          Icon={Utensils}
+          label="食事"
+          active={tab === 'nutrition'}
+          onClick={() => onTab('nutrition')}
+        />
+        <NavTab
           Icon={HeartPulse}
           label="からだ"
           active={tab === 'body'}
           onClick={() => onTab('body')}
-        />
-        <NavTab
-          Icon={Settings}
-          label="設定"
-          active={tab === 'settings'}
-          onClick={() => onTab('settings')}
         />
       </div>
     </nav>

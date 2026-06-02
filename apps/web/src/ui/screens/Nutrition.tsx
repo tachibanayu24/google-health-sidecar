@@ -32,14 +32,12 @@ export function mealTypeJa(t: string): string {
 /** 栄養画面(サブスクリーン)。kcal残ヒーロー + マクロ + 食事区分(タップで詳細レーダー)+ 記録導線。 */
 export function NutritionScreen({
   date,
-  onBack,
   onDateChange,
   onRecordMeal,
   onOpenSettings,
   onOpenCategory,
 }: {
   date: string;
-  onBack: () => void;
   onDateChange: (date: string) => void;
   onRecordMeal: () => void;
   onOpenSettings: () => void;
@@ -61,15 +59,7 @@ export function NutritionScreen({
   return (
     <div className="mx-auto max-w-md space-y-4">
       <div className="flex items-center gap-1">
-        <button
-          type="button"
-          aria-label="戻る"
-          onClick={onBack}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-muted active:bg-line/60"
-        >
-          <ChevronLeft className="h-5 w-5" strokeWidth={2.4} />
-        </button>
-        <h1 className="font-display text-lg font-bold tracking-tight">栄養</h1>
+        <h1 className="font-display text-lg font-bold tracking-tight">食事</h1>
         {/* 日付ステッパー(過去日の食事も確認可能) */}
         <div className="ml-auto flex items-center gap-1">
           <button

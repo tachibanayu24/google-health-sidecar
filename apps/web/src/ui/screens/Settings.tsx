@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Gauge, Ruler, Target } from 'lucide-react';
+import { Check, ChevronLeft, Gauge, Ruler, Target } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Card } from '../components/Card';
 import { ErrorBox, Loading } from '../components/state';
@@ -8,7 +8,7 @@ import { invalidateSettings } from '../lib/invalidate';
 
 type Phase = 'bulk' | 'cut' | 'maintain';
 
-export function SettingsScreen() {
+export function SettingsScreen({ onBack }: { onBack: () => void }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
 
@@ -18,6 +18,17 @@ export function SettingsScreen() {
 
   return (
     <div className="mx-auto max-w-md space-y-4">
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          aria-label="戻る"
+          onClick={onBack}
+          className="flex h-9 w-9 items-center justify-center rounded-full text-muted active:bg-line/60"
+        >
+          <ChevronLeft className="h-5 w-5" strokeWidth={2.4} />
+        </button>
+        <h1 className="font-display text-lg font-bold tracking-tight">設定</h1>
+      </div>
       <UnitsCard
         unit={settings.unit_preference}
         formula={settings.e1rm_formula}
