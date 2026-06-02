@@ -135,6 +135,7 @@ export interface SaveWorkoutResult {
   sessionId: string;
   totalVolumeKg: number;
   newPrs: string[];
+  ghPushed: boolean;
 }
 export interface FoodSuggestion {
   food_name: string;
@@ -229,7 +230,7 @@ export const api = {
       '/workouts',
       'workout',
       body,
-      (crid) => ({ sessionId: crid, totalVolumeKg: 0, newPrs: [], queued: true }),
+      (crid) => ({ sessionId: crid, totalVolumeKg: 0, newPrs: [], ghPushed: false, queued: true }),
     ),
   logMeal: (body: unknown) =>
     submitOrQueue<{ mealId: string; ghPushed: boolean; queued?: boolean }>(

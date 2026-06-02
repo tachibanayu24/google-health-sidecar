@@ -146,7 +146,7 @@ async function resolveExerciseId(
 
 /** リクエスト毎に McpServer を新規生成(ステートレス)。M2-a: get_settings / M2-b: read / M2-c: write。 */
 function buildServer(env: Env): McpServer {
-  const server = new McpServer({ name: 'logbook-mcp', version: '0.6.0' });
+  const server = new McpServer({ name: 'logbook-mcp', version: '0.7.0' });
 
   server.registerTool(
     'get_settings',

@@ -226,6 +226,21 @@ describe('saveWorkout', () => {
     expect(rows[0]?.n).toBe(1);
   });
 
+  it('inline GH push の成否を ghPushed で返す(food/weight と整合)', async () => {
+    const provider = new FakeProvider();
+    const ctx = makeCtx({ provider, pushInline: true });
+    const r = await saveWorkout(ctx, {
+      exercises: [
+        {
+          exerciseId: 'dumbbell-bench-press',
+          sets: [{ setType: 'main' as const, entryValue: 30, reps: 10, entryUnit: 'kg' as const }],
+        },
+      ],
+    });
+    expect(r.ghPushed).toBe(true);
+    expect(provider.exerciseCalls.length).toBe(1);
+  });
+
   it('セッション名を主働筋の部位から自動命名する(手入力なし)', async () => {
     const ctx = makeCtx();
     const r = await saveWorkout(ctx, {

@@ -64,7 +64,7 @@ export interface SaveWorkoutInput {
 export async function saveWorkout(
   ctx: AppContext,
   input: SaveWorkoutInput,
-): Promise<{ sessionId: string; totalVolumeKg: number; newPrs: string[] }> {
+): Promise<{ sessionId: string; totalVolumeKg: number; newPrs: string[]; ghPushed: boolean }> {
   const now = nowSec();
   // 冪等: 同じ client_request_id のセッションが既にあれば再登録しない(オフライン再送/MCPリトライ, §9.8)。
   if (input.clientRequestId) {
@@ -72,7 +72,7 @@ export async function saveWorkout(
       'SELECT id FROM workout_sessions WHERE client_request_id = ? LIMIT 1',
       input.clientRequestId,
     );
-    if (ex[0]) return { sessionId: ex[0].id, totalVolumeKg: 0, newPrs: [] };
+    if (ex[0]) return { sessionId: ex[0].id, totalVolumeKg: 0, newPrs: [], ghPushed: false };
   }
   const date = input.date ?? todayJst();
   const startedAt = input.startedAtSec ?? now;
@@ -203,9 +203,10 @@ export async function saveWorkout(
   // 派生: PR検知(保存後・非batch, §8.5)。
   const newPrs = await detectE1rmPrs(ctx, prCandidates, now);
 
-  // GH push(best-effort, completed のみ)。
+  // GH push(best-effort, completed のみ)。成否を ghPushed で返す(food/weight と整合・可視化)。
+  let ghPushed = false;
   if (status === 'completed' && ctx.pushInline !== false) {
-    await pushWorkoutSummary(ctx, {
+    ghPushed = await pushWorkoutSummary(ctx, {
       sessionId,
       startedAt,
       endedAt: input.endedAtSec ?? now,
@@ -216,7 +217,7 @@ export async function saveWorkout(
     });
   }
 
-  return { sessionId, totalVolumeKg: Math.round(totalVolumeKg * 100) / 100, newPrs };
+  return { sessionId, totalVolumeKg: Math.round(totalVolumeKg * 100) / 100, newPrs, ghPushed };
 }
 
 function buildSummaryNote(input: SaveWorkoutInput, meta: Map<string, Exercise>): string {
@@ -292,7 +293,7 @@ async function pushWorkoutSummary(
     title: string;
     summary: string;
   },
-): Promise<void> {
+): Promise<boolean> {
   try {
     const provider = getProvider(ctx);
     const res = await provider.pushExercise({
@@ -306,8 +307,10 @@ async function pushWorkoutSummary(
       clientTag: s.sessionId,
     });
     await markPushSynced(ctx.db, 'workout', s.sessionId, res.datapointId, res.dataOrigin, null);
+    return true;
   } catch (e) {
     await markPushFailed(ctx.db, 'workout', s.sessionId, errorMessage(e)); // 失敗は cron で再試行
+    return false;
   }
 }
 
