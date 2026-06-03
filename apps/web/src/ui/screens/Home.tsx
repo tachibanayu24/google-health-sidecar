@@ -250,7 +250,7 @@ function BodyStrip({
           </Suspense>
           <div className="mt-1 flex items-center justify-end gap-3 text-[10px] text-faint">
             <span className="flex items-center gap-1">
-              <span className="h-0.5 w-3 rounded-full bg-ink" />
+              <span className="h-0.5 w-3 rounded-full bg-ink opacity-60" />
               体重
             </span>
             <span className="flex items-center gap-1">

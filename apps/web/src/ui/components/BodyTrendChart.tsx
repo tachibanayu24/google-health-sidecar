@@ -33,6 +33,7 @@ export function BodyTrendChart({ data }: { data: BodyTrendPoint[] }) {
           type="monotone"
           dataKey="weight_kg"
           stroke={CHART.ink}
+          strokeOpacity={0.62}
           strokeWidth={2.4}
           dot={false}
           connectNulls
