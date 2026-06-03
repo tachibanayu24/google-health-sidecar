@@ -20,9 +20,11 @@ pnpm --filter @ghs/mcp dev          # MCP サーバ(wrangler dev)。dev は secr
 pnpm typecheck
 pnpm --filter @ghs/web typecheck    # tsc -p tsconfig.worker.json && tsc -p tsconfig.app.json
 
-# テスト(vitest を持つのは @ghs/core のみ)
-pnpm test
-pnpm --filter @ghs/core test
+# テスト(vitest。core / web / mcp の各 package が持つ。大半は core のドメイン/mapper)
+pnpm test                                               # 全 package(pnpm -r --if-present test)
+pnpm --filter @ghs/core test                            # core(ドメイン計算・GH mapper・services 統合)
+pnpm --filter @ghs/web  test                            # web(UI lib。vitest.config.ts 指定)
+pnpm --filter @ghs/mcp  test                            # mcp(auth ヘルパー timingSafeEqual/ipv4InCidr など)
 pnpm --filter @ghs/core test -- src/util/date.test.ts   # 単一ファイル
 pnpm --filter @ghs/core test -- -t "e1rm"               # 名前で絞る
 
@@ -103,8 +105,8 @@ push は失敗しても D1 には残る(best-effort)。`gh_sync_state` 台帳が
 - Hono + `@hono/mcp` の `StreamableHTTPTransport`。**ステートレス**(リクエスト毎に `McpServer` 生成)。`server.registerTool(...)` を **29本**(記録→分析→週次サマリ→コンディション→ルーティン→栄養/エネルギー→GH反映→取消)。catalog の説明は `docs/mcp-design.md`。
 - web と**同一の D1 / KV(TOKENS/LOCK/CACHE)を共有**。`migrations_dir` も cron も assets も持たない(スキーマの正本は web)。
 - 全 write ツールは `makeContext(env)` → core service を呼ぶ薄いラッパ。生 SQL は書かない。返り値は必ず `ghPushed` / `ghDeleted`(GH 反映の真偽)を含める — **嘘をつくと Claude がデータ可視性を失う**。
-- 認証は2層: 一次 = `MCP_SHARED_SECRET`(URL 埋め込み, fail-closed, 定数時間比較)、二次 = Anthropic 送信元 IP allowlist `ANTHROPIC_OUTBOUND_CIDR`(=`160.79.104.0/21`, fail-open)。
-- 種目は単一文字列を `resolveExerciseId()` で解決(完全 ID → 完全名 → 部分検索)。曖昧なら throw せず `{ candidates }` を返す。日本語俗称・略称・マシン名は `exercise_aliases`(migration 0012/0013/0015)で吸収。
+- 認証は2層: 一次 = `MCP_SHARED_SECRET`(URL 埋め込み, fail-closed, 定数時間比較)、二次 = Anthropic 送信元 IP allowlist `ANTHROPIC_OUTBOUND_CIDR`(=`160.79.104.0/21`, fail-open)。比較ヘルパー `timingSafeEqual`/`ipv4InCidr` は `apps/mcp/src/auth.ts`(`auth.test.ts` でテスト)。
+- 種目は単一文字列を `resolveExerciseId()` で解決(完全 ID → 完全名 → 部分検索)。曖昧なら throw せず `{ candidates }` を返す。日本語俗称・略称・マシン名は `exercise_aliases`(migration 0012/0013/0015)で吸収。`name_ja` は必須(全種目に日本語名があり、**UI は `name_ja` を主表示**)。
 
 ### ドメイン計算(`packages/core/src/domain/`)
 
