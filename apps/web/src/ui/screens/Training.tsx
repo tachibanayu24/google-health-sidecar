@@ -416,7 +416,6 @@ function VolumeTab({
           ))}
         </ul>
       </Card>
-      {sel && <MuscleExercises muscle={sel} name={MUSCLE_JA[sel] ?? sel} />}
     </>
   );
 }
@@ -445,7 +444,7 @@ function MuscleRow({
       <button
         type="button"
         onClick={onSelect}
-        className={`flex w-full items-center gap-3 rounded-lg py-1 text-left ${selected ? 'bg-accent-soft' : ''}`}
+        className="flex w-full items-center gap-3 py-1 text-left [-webkit-tap-highlight-color:transparent]"
       >
         <span className="flex w-24 shrink-0 items-center gap-1 text-sm">
           <ChevronRight
@@ -472,6 +471,14 @@ function MuscleRow({
           )}
         </span>
       </button>
+      {/* 行の直下にアコーディオンで「にゅっと」展開(grid-rows 0fr→1fr)。別カードにしない。 */}
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-out ${selected ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+      >
+        <div className="overflow-hidden">
+          <MuscleExercisesInline muscle={m.muscle} open={selected} />
+        </div>
+      </div>
     </li>
   );
 }
@@ -522,38 +529,37 @@ function LandmarkBar({
     </div>
   );
 }
-function MuscleExercises({ muscle, name }: { muscle: string; name: string }) {
+/** 選択部位の種目をインライン展開(別カードにせず行の下に従属表示)。open のときだけ取得。 */
+function MuscleExercisesInline({ muscle, open }: { muscle: string; open: boolean }) {
   const q = useQuery({
     queryKey: ['ex-by-muscle', muscle],
     queryFn: () => api.searchExercises('', muscle),
+    enabled: open,
   });
   return (
-    <Card title={`「${name}」の種目`}>
-      {q.isLoading && <p className="py-2 text-sm text-faint">読み込み中…</p>}
+    <div className="mb-1 ml-7 border-l border-line/70 pl-3">
+      {q.isLoading && <p className="py-1.5 text-xs text-faint">読み込み中…</p>}
       {q.error && (
         <button
           type="button"
           onClick={() => q.refetch()}
-          className="py-2 text-sm font-semibold text-accent-ink underline"
+          className="py-1.5 text-xs font-semibold text-accent-ink underline"
         >
           読み込みに失敗。タップで再試行
         </button>
       )}
-      {q.data?.exercises.length === 0 && <p className="py-2 text-sm text-faint">該当なし</p>}
-      <ul className="space-y-1">
+      {q.data?.exercises.length === 0 && <p className="py-1.5 text-xs text-faint">該当なし</p>}
+      <ul>
         {q.data?.exercises.map((ex) => (
-          <li
-            key={ex.id}
-            className="flex items-center justify-between rounded-lg px-1 py-2 text-sm"
-          >
+          <li key={ex.id} className="flex items-center justify-between py-1 text-xs">
             <span className="font-medium">{ex.name_en}</span>
-            <span className="rounded-full bg-paper px-2 py-0.5 text-[10px] font-semibold text-faint">
+            <span className="rounded-full bg-paper px-1.5 py-0.5 text-[10px] font-semibold text-faint">
               {ex.equipment}
             </span>
           </li>
         ))}
       </ul>
-    </Card>
+    </div>
   );
 }
 
