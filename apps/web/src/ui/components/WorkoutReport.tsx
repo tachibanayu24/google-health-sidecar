@@ -122,7 +122,7 @@ export function WorkoutReport({
           {exercises.map((ex) =>
             ex.sets.length === 0 ? null : (
               <div key={ex.exerciseId}>
-                <div className="text-[13px] font-bold text-ink">{ex.name_en}</div>
+                <div className="text-[13px] font-bold text-ink">{ex.name_ja ?? ex.name_en}</div>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {ex.sets.map((s, i) => (
                     <span

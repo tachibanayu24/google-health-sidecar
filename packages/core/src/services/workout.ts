@@ -608,11 +608,11 @@ export async function getPlateauIndicators(
   }
   const exerciseIds = [...byExercise.keys()];
   if (exerciseIds.length === 0) return [];
-  const nameRows = await ctx.db.raw<{ id: string; name_en: string }>(
-    `SELECT id, name_en FROM exercises WHERE id IN (${exerciseIds.map(() => '?').join(',')})`,
+  const nameRows = await ctx.db.raw<{ id: string; name_ja: string }>(
+    `SELECT id, name_ja FROM exercises WHERE id IN (${exerciseIds.map(() => '?').join(',')})`,
     ...exerciseIds,
   );
-  const nameById = new Map(nameRows.map((r) => [r.id, r.name_en]));
+  const nameById = new Map(nameRows.map((r) => [r.id, r.name_ja]));
 
   const out: PlateauIndicator[] = [];
   for (const [exId, perDate] of byExercise) {

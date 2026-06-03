@@ -182,7 +182,7 @@ function Performance({
           <div className="text-[10px] text-faint">直近7日</div>
           {latestPr && (
             <div className="mt-0.5 text-[11px] text-faint">
-              最新PR {latestPr.name_en} {Math.round(latestPr.value * 10) / 10}kg
+              最新PR {latestPr.name_ja ?? latestPr.name_en} {Math.round(latestPr.value * 10) / 10}kg
             </div>
           )}
         </div>
@@ -586,9 +586,12 @@ function MuscleExercisesInline({ muscle, open }: { muscle: string; open: boolean
       {q.data?.exercises.length === 0 && <p className="py-1.5 text-xs text-faint">該当なし</p>}
       <ul>
         {q.data?.exercises.map((ex) => (
-          <li key={ex.id} className="flex items-center justify-between py-1 text-xs">
-            <span className="font-medium">{ex.name_en}</span>
-            <span className="rounded-full bg-paper px-1.5 py-0.5 text-[10px] font-semibold text-faint">
+          <li key={ex.id} className="flex items-center justify-between gap-2 py-1 text-xs">
+            <span className="min-w-0 truncate">
+              <span className="font-medium">{ex.name_ja}</span>
+              <span className="ml-1.5 text-[10px] text-faint">{ex.name_en}</span>
+            </span>
+            <span className="shrink-0 rounded-full bg-paper px-1.5 py-0.5 text-[10px] font-semibold text-faint">
               {ex.equipment}
             </span>
           </li>
@@ -633,7 +636,7 @@ function ExerciseTrend() {
           }}
           className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-accent"
         >
-          {ex.name_en} <span className="text-xs text-faint">× 変更</span>
+          {ex.name_ja} <span className="text-xs text-faint">× 変更</span>
         </button>
       ) : (
         <div className="flex items-center gap-2 rounded-lg border border-line bg-paper px-3 py-2">
@@ -655,7 +658,7 @@ function ExerciseTrend() {
                 onClick={() => setEx(e)}
                 className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-paper"
               >
-                {e.name_en}
+                {e.name_ja} <span className="ml-1 text-[10px] text-faint">{e.name_en}</span>
               </button>
             </li>
           ))}
@@ -720,7 +723,7 @@ function PrList({
             key={`${p.exercise_id}-${p.achieved_at}`}
             className="flex items-center justify-between"
           >
-            <span className="truncate">{p.name_en}</span>
+            <span className="truncate">{p.name_ja ?? p.name_en}</span>
             <span className="flex items-center gap-2">
               <span className="tnum font-semibold">{Math.round(p.value * 10) / 10} kg</span>
               <span className="text-[11px] text-faint">{epochToJstMonthDay(p.achieved_at)}</span>
@@ -860,7 +863,7 @@ function WorkoutSessionRow({
             const { groups, warm, top } = summarizeSets(ex.sets);
             return (
               <div key={ex.exerciseId} className="mt-2.5 first:mt-0">
-                <div className="text-sm font-semibold text-ink">{ex.name_en}</div>
+                <div className="text-sm font-semibold text-ink">{ex.name_ja ?? ex.name_en}</div>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {groups.flatMap((g, gi) => {
                     const isTop = g.value != null && g.value === top;

@@ -145,7 +145,7 @@ export async function getRoutine(db: Db, id: string): Promise<RoutineDetail | nu
     note: string | null;
   }>(
     `SELECT re.id, re.day_id, re.position, re.exercise_id,
-            ex.name_en AS exercise_name, re.alt_exercise_id, alt.name_en AS alt_exercise_name,
+            ex.name_ja AS exercise_name, re.alt_exercise_id, alt.name_ja AS alt_exercise_name,
             re.sets_min, re.sets_max, re.reps_min, re.reps_max, re.target_load, re.note
        FROM routine_exercises re
        JOIN routine_days d ON d.id = re.day_id

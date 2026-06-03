@@ -63,7 +63,7 @@ export interface NutritionTarget {
 export interface Exercise {
   id: string;
   name_en: string;
-  name_ja: string | null;
+  name_ja: string; // 必須(全種目に日本語名)。UI は name_ja を主表示。
   category: string;
   equipment: string | null;
   load_basis: string;

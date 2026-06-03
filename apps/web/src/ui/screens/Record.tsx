@@ -96,7 +96,7 @@ export function RecordScreen({
         exercise: {
           id: ex.exerciseId,
           name_en: ex.name_en,
-          name_ja: ex.name_ja,
+          name_ja: ex.name_ja ?? ex.name_en, // 種目は必ず name_ja を持つが、編集ロードの型(join由来 nullable)を吸収
           category: '',
           equipment: null,
           load_basis: 'total',
@@ -314,7 +314,7 @@ export function RecordScreen({
           <div className="mb-1 flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="truncate font-display text-base font-bold tracking-tight">
-                {it.exercise.name_en}
+                {it.exercise.name_ja}
               </div>
               {it.last && <div className="mt-0.5 text-[11px] text-faint">{it.last}</div>}
             </div>
@@ -461,8 +461,11 @@ export function RecordScreen({
                   onClick={() => addExercise(ex)}
                   className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm hover:bg-paper"
                 >
-                  <span className="font-medium">{ex.name_en}</span>
-                  <span className="rounded-full bg-paper px-2 py-0.5 text-[10px] font-semibold text-faint">
+                  <span className="min-w-0">
+                    <span className="font-medium">{ex.name_ja}</span>
+                    <span className="ml-1.5 text-[10px] text-faint">{ex.name_en}</span>
+                  </span>
+                  <span className="shrink-0 rounded-full bg-paper px-2 py-0.5 text-[10px] font-semibold text-faint">
                     {ex.equipment}
                   </span>
                 </button>

@@ -83,7 +83,8 @@ export type MuscleGroup = z.infer<typeof MuscleGroup>;
 export const Exercise = z.object({
   id: Ulid,
   name_en: z.string(),
-  name_ja: z.string().nullable(),
+  name_ja: z.string(), // 必須(全種目に日本語名。UI は name_ja を主表示)。DB列は TEXT だがシードが必ず供給。
+
   category: ExerciseCategory,
   equipment: Equipment.nullable(),
   movement_pattern: z.string().nullable(),
