@@ -29,6 +29,8 @@
 
 ## 0.1 機能拡張の着手・完了(enhancements.md から移動)
 
+- **総チェック由来10項目(work-plan.md)** — ✅完了(2026-06-03)。Phase1 堅牢化(body_metrics upsert統一/save_routine N+1/own-write test)、Phase2 MCP高レバレッジ(適応型TDEE+BMR基盤/停滞検知/食事×回復相関, design.md §8.11)、Phase3 Web UX(日付ピッカー/消費kcal併記/セット削除見直し/ルーティンweb削除)、Phase4 品質(MCP auth + web datetime の contract テスト)。MCP 29ツール。**残**: 全MCPツール/全APIルートの網羅的 contract テストは段階的に(今回は認証境界+日付演算を固めた)。詳細は `docs/work-plan.md`。
+
 - **トレーニングルーティン(AI作成・参照専用)** — ✅実装・デプロイ済(2026-06-03)。design.md §8.10。migration 0017(routines/routine_days/routine_exercises、種目は exercises FK 必須)。MCP 4本(get_routines/get_routine/save_routine(upsert)/delete_routine)で AI が CRUD、Web `/routines` は参照専用(各日 人体図+種目リスト・運用ルール・画像エクスポート)。役割分担=MCP authoring / Web viewer。**残**: セット範囲は min/max 保持だが人体図集計は代表値(sets_max)を使用。種目がカタログに無い場合は AI が追加できない(カタログ拡張は別途)。MCPツール計26本。
 - **Readiness(④個人ベースライン基盤 + ⑤信号 + `get_readiness` MCP)** — ✅実装・デプロイ済(2026-06-03)。設計は design.md §8.8 に昇格。中核=夜間HRV(ln→7日ローリング平均)+補助/文脈指標、中央値±MAD の robust z、N-of-M 統合(偽スコア不使用)、学習ゲート14日。からだ画面に「コンディション」カード + MCP `get_readiness`。横断文献調査(11エージェント workflow・反証検証)に基づく。v1 簡略化=呼吸数/皮膚温の2晩連続ゲート未実装(N-of-M で単発は黄止まり)。
 - **ボリュームランドマーク(⑧)+ 急性/慢性比(⑨)** — ✅実装・デプロイ済(2026-06-03)。design.md §8.9。migration 0016 で MEV/MAV/MRV を RP/Israetel 由来でシード(ガイドライン明示・obliques/lower_back は帯なし)。`get_muscle_volume` に `landmark_zone`、`get_readiness` に `muscleLoad`(急性/慢性比=記述指標, ACWR怪我予測は否定済ゆえ看板を外した)。Training に帯バー。**残: セット数が間接関与も1計上 → 将来 contribution 加重の「実効セット」を別オプションで出す余地**(§5 既知残件と関連)。

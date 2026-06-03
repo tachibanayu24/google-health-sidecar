@@ -762,6 +762,15 @@ AIが組んだトレーニングメニュー(計画)を保存・参照する。*
 - **Web `/routines`**(参照専用・遅延ロード): 一覧 → 詳細(サイクル概観・各日カード〔人体図+種目リスト〕・運用ルール・画像エクスポート ShareImageModal)。編集はWebに置かない(AI/MCP担当)。
 - **設計判断**: セット/レップは範囲保持のため min/max 整数(人体図集計は代表値 sets_max?? sets_min)。荷重はメニュー構成段階で決められないため任意。種目をカタログ縛りにしたことで人体図・部位集計が自動で出せる。
 
+### 8.11 エネルギー収支・進捗の派生指標(MCP read 露出)【実装済: 2026-06-03】
+§0.5 バケツB(Claudeへの文脈プロバイダ)。すべて実測ベース・推定は明示。アプリ内生成はせず Claude が会話で扱う。
+
+- **BMR 基盤**: settings に height_cm/birth_year/sex(migration 0018・任意)。`bmrMifflin`(domain/energy.ts, Mifflin-St Jeor)。入力が欠ければ null(推測しない)。web 設定の「身体プロフィール」カードで入力(他設定を消さないマージ保存)。
+- **A-1 `get_nutrition_status`(適応型TDEE)**: 体重の直線トレンド(`linearWeightTrend`)× 摂取kcal から TDEE を逆算(`computeAdaptiveTdee`: TDEE ≈ 平均摂取 − 体重変化×7700/日数)。**遵守ゲート**: 体重トレンド<7日 or 記録<7日は insufficient、記録が窓の半分未満は low。BMR も同梱。services/insights.ts。
+- **A-3 `get_plateau_indicators`(停滞検知)**: 窓内の各種目のセッション最高 e1RM を前半 vs 後半で比較(`classifyE1rmTrend`, ±2%帯で progressing/plateau/declining)。3セッション以上のみ。判定材料を返すだけ(処方しない)。services/workout.ts。
+- **A-2 `get_meal_recovery_correlation`(食事×回復)**: 食事(塩分/糖質/炭水化物/最後の食事時刻)を中央値で高/低に分け、**翌朝**の回復(HRV/RHR/睡眠効率)の**中央値差と n のみ**返す(`correlate`)。因果・p値・相関係数は出さない。各群 n<5 は非表示。D1食事×GH回復の両方を持つ本アプリ固有。domain/nutrition-recovery.ts。
+- テスト: energy/training-progress/nutrition-recovery の純関数を計14件で検証。
+
 ---
 
 ## 9. UI/UX(PWA)

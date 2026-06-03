@@ -45,4 +45,7 @@
 ---
 
 ## 進捗ログ
-(各完了時にコミットhash/デプロイVersion IDを追記)
+
+**2026-06-03 全4フェーズ完了。** MCP 29ツール・core145/web6/mcp10 tests・全デプロイ済。
+canonical docs(design.md §8.11 / mcp-design.md 29本 / README / remaining-tasks §0.1)へ昇格済。
+本ファイルは記録として保持(次の作業バッチで再利用 or アーカイブ可)。
