@@ -27,14 +27,12 @@
 - ☑ **A-2 `get_meal_recovery_correlation`** domain/nutrition-recovery.ts(`correlate`・中央値分割)+ services/insights.ts + MCP。食事×翌朝回復、n と中央値差のみ・各群n<5は非表示。
 - テスト: energy 8 / training-progress 4 / nutrition-recovery 2 追加(計145)。
 
-## Phase 3 — Web UX
+## Phase 3 — Web UX ✅完了
 
-- ☐ **B-4 日付ピッカー(週送りは入れない)**
-  Home/各画面の日付ナビに、日付を直接選べるピッカー(`<input type="date">` ベース)を追加。長距離移動を高速化。週送りは不要との指示。
-- ☐ **B-6 消費kcal(active_energy)の可視化**
-  取り込み済みの active_energy_kcal を UI に。摂取×消費の収支が見える形(Home か栄養 or からだ)。
-- ☐ **B-7 セット削除の見直し + ルーティン空状態ガイド**
-  記録画面「最後の1セット削除不可」の制約を見直し(種目ごと削除へ誘導 or 制約緩和)。Routines 空状態に「Claude(MCP)への頼み方」ガイドを足す。
+- ☑ **B-4 日付ピッカー(週送りなし)** 共有 `DateField`(中央ラベルに透明 `input[type=date]` を重ね・max=今日)を Home/からだ/食事の3ナビに適用。±1日ボタンは維持。
+- ☑ **B-6 消費kcal可視化** 食事画面の kcal ヒーローに「活動消費 N kcal」(GHミラーの active_energy)を併記。摂取との収支の目安。(からだのセンシングにも既出)
+- ☑ **B-7 セット削除見直し + ルーティン空状態ガイド** 記録画面: 最後の1セット削除で種目ごと除去(disabled撤廃)。Routines 空状態を具体的な頼み方の例つきカードに。
+- ☑ **(追加)ルーティンの web 削除** オーナー指摘で、Routine 詳細に削除ボタン + `DeleteConfirmModal`(kind='routine')を追加(`DELETE /routines/:id`)。
 
 ## Phase 4 — 品質保証(新ツールも対象に)
 

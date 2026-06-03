@@ -224,7 +224,10 @@ export function RecordScreen({
   }
   function removeSet(ei: number, si: number) {
     setItems((prev) =>
-      prev.map((it, i) => (i !== ei ? it : { ...it, sets: it.sets.filter((_, j) => j !== si) })),
+      prev
+        // 最後の1セットを消したら種目ごと除去(0セットの空種目を残さない)。
+        .map((it, i) => (i !== ei ? it : { ...it, sets: it.sets.filter((_, j) => j !== si) }))
+        .filter((it) => it.sets.length > 0),
     );
   }
   const removeExercise = (ei: number) => setItems((prev) => prev.filter((_, i) => i !== ei));
@@ -386,8 +389,7 @@ export function RecordScreen({
                   type="button"
                   aria-label="セットを削除"
                   onClick={() => removeSet(ei, si)}
-                  disabled={it.sets.length === 1}
-                  className="flex items-center justify-center rounded-md p-1 text-faint transition-colors hover:text-accent disabled:opacity-25"
+                  className="flex items-center justify-center rounded-md p-1 text-faint transition-colors hover:text-accent"
                 >
                   <X className="h-3.5 w-3.5" strokeWidth={2.4} />
                 </button>

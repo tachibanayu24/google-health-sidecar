@@ -11,7 +11,7 @@ export function DeleteConfirmModal({
   onConfirm,
   onCancel,
 }: {
-  kind: 'meal' | 'workout' | 'body';
+  kind: 'meal' | 'workout' | 'body' | 'routine';
   targetLabel: string;
   isPending?: boolean;
   onConfirm: () => void;
@@ -22,7 +22,9 @@ export function DeleteConfirmModal({
       ? 'セットや自己ベストの記録も削除され、復元できません。'
       : kind === 'body'
         ? 'この測定値を削除します。手入力分は Google Health からも削除されます。元に戻せません。'
-        : 'この操作は取り消せません。';
+        : kind === 'routine'
+          ? 'このルーティン(計画)を削除します。実績ログには影響しません。元に戻せません。'
+          : 'この操作は取り消せません。';
   return (
     <Modal onClose={onCancel}>
       <div className="text-center">

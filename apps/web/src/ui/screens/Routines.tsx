@@ -1,8 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Moon, Share2, Sparkles } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronLeft, ChevronRight, Moon, Share2, Sparkles, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter';
 import { Card } from '../components/Card';
+import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { ReportStat, ShareImageModal } from '../components/ShareImageModal';
 import { Empty, ErrorBox, Loading } from '../components/state';
 import { api, type RoutineDay, type RoutineDetail } from '../lib/api';
@@ -185,7 +186,28 @@ export function RoutinesListScreen({
         <h1 className="font-display text-lg font-bold tracking-tight">ルーティン</h1>
       </div>
       {routines.length === 0 ? (
-        <Empty note="保存されたルーティンはまだありません。Claude(MCP)に「ルーティンを作って」と頼むと、ここに保存されて参照できます。" />
+        <Card>
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
+              <Sparkles className="h-5 w-5" strokeWidth={2.2} />
+            </span>
+            <div className="text-sm leading-relaxed text-muted">
+              <p className="font-bold text-ink">ルーティンはまだありません</p>
+              <p className="mt-1">
+                ルーティンは Claude(AIトレーナー)が作ってここに保存します。Claude
+                とのチャットで、例えばこう頼んでください:
+              </p>
+              <p className="mt-2 rounded-lg bg-paper px-2.5 py-2 text-[12px] text-ink">
+                「減量フェーズ向けに、胸・肩を強化する6日サイクルのルーティンを作って Logbook
+                に保存して」
+              </p>
+              <p className="mt-2 text-[11px] text-faint">
+                ※ Claude の連携(MCP
+                コネクタ)が必要です。種目は登録済みカタログから選ばれ、各日の人体図つきでここに表示されます。
+              </p>
+            </div>
+          </div>
+        </Card>
       ) : (
         <ul className="space-y-3">
           {routines.map((r) => (
@@ -228,8 +250,17 @@ export function RoutinesListScreen({
 
 // ============ 詳細 ============
 export function RoutineDetailScreen({ id, onBack }: { id: string; onBack: () => void }) {
+  const qc = useQueryClient();
   const q = useQuery({ queryKey: ['routine', id], queryFn: () => api.routine(id) });
   const [share, setShare] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const del = useMutation({
+    mutationFn: () => api.deleteRoutine(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['routines'] });
+      onBack();
+    },
+  });
   if (q.isLoading) return <Loading />;
   if (q.error) return <ErrorBox error={q.error} />;
   const r = q.data;
@@ -254,6 +285,14 @@ export function RoutineDetailScreen({ id, onBack }: { id: string; onBack: () => 
           className="ml-auto flex h-8 w-8 items-center justify-center rounded-full text-faint active:bg-line/60"
         >
           <Share2 className="h-[18px] w-[18px]" strokeWidth={2.2} />
+        </button>
+        <button
+          type="button"
+          aria-label="ルーティンを削除"
+          onClick={() => setConfirmDelete(true)}
+          className="flex h-8 w-8 items-center justify-center rounded-full text-faint active:bg-line/60 hover:text-accent"
+        >
+          <Trash2 className="h-[18px] w-[18px]" strokeWidth={2.2} />
         </button>
       </div>
 
@@ -291,6 +330,15 @@ export function RoutineDetailScreen({ id, onBack }: { id: string; onBack: () => 
       )}
 
       {share && <RoutineReport routine={r} onClose={() => setShare(false)} />}
+      {confirmDelete && (
+        <DeleteConfirmModal
+          kind="routine"
+          targetLabel={r.name}
+          isPending={del.isPending}
+          onConfirm={() => del.mutate()}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   );
 }

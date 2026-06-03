@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bookmark, ChevronLeft, ChevronRight, Plus, Share2, Trash2 } from 'lucide-react';
+import { Bookmark, ChevronLeft, ChevronRight, Flame, Plus, Share2, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Card } from '../components/Card';
+import { DateField } from '../components/DateField';
 import { MealReport } from '../components/MealReport';
 import { NutrientBars } from '../components/NutrientBars';
 import { Loading } from '../components/state';
@@ -38,6 +39,8 @@ export function NutritionScreen({
   const remain = target ? Math.round(target.target_kcal - kcal) : null;
   const pct = target ? Math.min(100, (kcal / target.target_kcal) * 100) : 0;
   const wd = DOW_JA[jstDayOfWeek(date)];
+  // その日の活動消費(GHミラー)。摂取との収支の目安に。
+  const activeKcal = t?.daily?.find((d) => d.metric === 'active_energy_kcal')?.value ?? null;
 
   return (
     <div className="mx-auto max-w-md space-y-4">
@@ -63,14 +66,17 @@ export function NutritionScreen({
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={2.4} />
           </button>
-          <button
-            type="button"
-            onClick={() => onDateChange(todayJst())}
-            className="min-w-14 text-center text-sm font-semibold"
+          <DateField
+            date={date}
+            onPick={onDateChange}
+            max={todayJst()}
+            className="min-w-14 justify-center text-sm font-semibold"
           >
-            {isToday ? '今日' : formatDateForDisplay(date)}
-            <span className="ml-1 text-xs text-muted">({wd})</span>
-          </button>
+            <span>
+              {isToday ? '今日' : formatDateForDisplay(date)}
+              <span className="ml-1 text-xs text-muted">({wd})</span>
+            </span>
+          </DateField>
           <button
             type="button"
             aria-label="翌日"
@@ -95,8 +101,16 @@ export function NutritionScreen({
               </span>
               <span className="text-sm font-semibold text-muted">kcal</span>
             </div>
-            <div className="mt-1 text-[11px] text-faint">
-              {kcal.toLocaleString()} / {target.target_kcal.toLocaleString()} kcal
+            <div className="mt-1 flex items-center justify-between text-[11px] text-faint">
+              <span>
+                {kcal.toLocaleString()} / {target.target_kcal.toLocaleString()} kcal
+              </span>
+              {activeKcal != null && (
+                <span className="flex items-center gap-1">
+                  <Flame className="h-3 w-3" strokeWidth={2.2} />
+                  活動消費 {Math.round(activeKcal).toLocaleString()} kcal
+                </span>
+              )}
             </div>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-line">
               <div

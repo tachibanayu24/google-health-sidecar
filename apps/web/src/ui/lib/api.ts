@@ -358,6 +358,8 @@ export const api = {
     }),
   routines: () => req<{ routines: RoutineSummary[] }>('/routines'),
   routine: (id: string) => req<RoutineDetail>(`/routines/${id}`),
+  deleteRoutine: (id: string) =>
+    req<{ deleted: boolean }>(`/routines/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   weeklySummary: () => req<WeeklySummary>('/weekly-summary'),
   today: (date?: string) => req<Today>(`/today${date ? `?date=${date}` : ''}`),
   foodAutocomplete: (q: string) =>

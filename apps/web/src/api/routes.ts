@@ -4,6 +4,7 @@ import {
   deleteBodyMetric,
   deleteMeal,
   deleteMealPresetRow,
+  deleteRoutine,
   deleteWorkout,
   getActiveNutritionTarget,
   getAllSyncRuns,
@@ -199,6 +200,10 @@ api.get('/routines/:id', async (c) => {
   const r = await getRoutine(ctx.db, c.req.param('id'));
   if (!r) return c.json({ error: 'not_found' }, 404);
   return c.json({ provenance: 'd1_confirmed', ...r });
+});
+api.delete('/routines/:id', async (c) => {
+  const ctx = makeContext(c.env);
+  return c.json(await deleteRoutine(ctx.db, c.req.param('id')));
 });
 
 // 体組成の測定ログ(その日・全行)= からだ画面の一覧+削除用。

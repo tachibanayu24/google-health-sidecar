@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { Card, Stat } from '../components/Card';
+import { DateField } from '../components/DateField';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { Empty, ErrorBox, Loading } from '../components/state';
 import {
@@ -69,14 +70,17 @@ export function RecoveryScreen({
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={2.4} />
           </button>
-          <button
-            type="button"
-            onClick={() => onDateChange(todayJst())}
-            className="min-w-14 text-center text-sm font-semibold"
+          <DateField
+            date={date}
+            onPick={onDateChange}
+            max={todayJst()}
+            className="min-w-14 justify-center text-sm font-semibold"
           >
-            {isToday ? '今日' : formatDateForDisplay(date)}
-            <span className="ml-1 text-xs text-muted">({wd})</span>
-          </button>
+            <span>
+              {isToday ? '今日' : formatDateForDisplay(date)}
+              <span className="ml-1 text-xs text-muted">({wd})</span>
+            </span>
+          </DateField>
           <button
             type="button"
             aria-label="翌日"

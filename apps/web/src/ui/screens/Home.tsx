@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Card } from '../components/Card';
+import { DateField } from '../components/DateField';
 import { NutrientBars } from '../components/NutrientBars';
 import { ErrorBox, Loading } from '../components/state';
 import { WeeklyReport } from '../components/WeeklyReport';
@@ -79,7 +80,7 @@ export function HomeScreen({
         isToday={isToday}
         onPrev={() => setDate((d) => shiftDate(d, -1))}
         onNext={() => setDate((d) => shiftDate(d, 1))}
-        onToday={() => setDate(todayJst())}
+        onPick={(d) => setDate(d)}
       />
 
       <BodyStrip body={t.body} series={trends.data?.body ?? []} />
@@ -132,13 +133,13 @@ function DateNav({
   isToday,
   onPrev,
   onNext,
-  onToday,
+  onPick,
 }: {
   date: string;
   isToday: boolean;
   onPrev: () => void;
   onNext: () => void;
-  onToday: () => void;
+  onPick: (date: string) => void;
 }) {
   const wd = DOW_JA[jstDayOfWeek(date)];
   return (
@@ -151,10 +152,10 @@ function DateNav({
       >
         <ChevronLeft className="h-5 w-5" strokeWidth={2.4} />
       </button>
-      <button type="button" onClick={onToday} className="flex items-baseline gap-2">
+      <DateField date={date} onPick={onPick} max={todayJst()} className="items-baseline gap-2">
         <span className="stat text-2xl">{isToday ? '今日' : formatDateForDisplay(date)}</span>
         <span className="text-sm font-semibold text-muted">({wd})</span>
-      </button>
+      </DateField>
       <button
         type="button"
         aria-label="翌日"
