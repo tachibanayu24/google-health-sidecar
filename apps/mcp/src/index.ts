@@ -136,7 +136,8 @@ function buildServer(env: Env): McpServer {
         '開発者=利用者(オーナー本人)。ツールの不足・誤り・改善要望があれば遠慮なくチャットで伝えてよい(その場で実装・修正される)。\n' +
         '規約: 単位は kg/kcal/g(sodium は mg)、日付は JST の YYYY-MM-DD。種目は search_exercises で id を解決(日本語俗称・略称も可)。\n' +
         '食事は app→D1→GH の一方向(GH から栄養は読まない)。write の ghPushed / delete の ghDeleted は GH 反映の真偽。冪等は clientRequestId を再利用。\n' +
-        'エネルギー収支: 総消費 ≈ 推定BMR + get_day.sensing の active_energy_kcal(GH は活動分のみ。BMR は別途推定)。\n' +
+        'エネルギー収支: 維持カロリー(総消費)は get_nutrition_status の estimatedTdeeKcal(体重トレンド×摂取の逆算)を優先。' +
+        '日次の目安は get_day.sensing.active_energy_kcal(活動分)+ BMR(身体プロフィールから get_nutrition_status が Mifflin で算出)。\n' +
         '当日のセンシング/睡眠は Fitbit→GH ミラーで数時間遅れることがある(前日まではほぼ確定)。',
     },
   );

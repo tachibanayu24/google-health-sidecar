@@ -8,6 +8,7 @@ import { NutrientBars } from '../components/NutrientBars';
 import { Loading } from '../components/state';
 import { api, type TodayMeal } from '../lib/api';
 import { DOW_JA, formatDateForDisplay, jstDayOfWeek, shiftDate, todayJst } from '../lib/datetime';
+import { bmrMifflin } from '../lib/energy';
 import { MEAL_ORDER, mealTypeJa } from '../lib/meals';
 
 /** 栄養画面(サブスクリーン)。kcal残ヒーロー + マクロ + 食事区分(タップで詳細レーダー)+ 記録導線。 */
@@ -41,6 +42,12 @@ export function NutritionScreen({
   const wd = DOW_JA[jstDayOfWeek(date)];
   // その日の活動消費(GHミラー)。摂取との収支の目安に。
   const activeKcal = t?.daily?.find((d) => d.metric === 'active_energy_kcal')?.value ?? null;
+  // 推定総消費 = BMR(身体プロフィール)+ 活動消費。収支 = 摂取 − 総消費。BMR 未設定なら出さない。
+  const s = settings.data?.settings;
+  const age = s?.birth_year ? Number(todayJst().slice(0, 4)) - s.birth_year : null;
+  const bmr = bmrMifflin(t?.body?.weightKg ?? null, s?.height_cm ?? null, age, s?.sex ?? null);
+  const expenditure = bmr != null ? bmr + Math.round(activeKcal ?? 0) : null;
+  const balance = expenditure != null ? kcal - expenditure : null;
 
   return (
     <div className="mx-auto max-w-md space-y-4">
@@ -134,6 +141,36 @@ export function NutritionScreen({
           </button>
         )}
       </Card>
+
+      {/* エネルギー収支(推定): 摂取 − (基礎代謝 + 活動消費) */}
+      {expenditure != null && balance != null ? (
+        <Card>
+          <div className="flex items-baseline justify-between">
+            <span className="text-[11px] font-semibold text-faint">エネルギー収支(推定)</span>
+            <span
+              className={`tnum text-lg font-bold ${balance <= 0 ? 'text-carb' : 'text-accent-ink'}`}
+            >
+              {balance <= 0 ? `${balance} kcal` : `+${balance} kcal`}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-faint">
+            <span className="tnum">摂取 {kcal.toLocaleString()}</span>
+            <span>−</span>
+            <span className="tnum">消費 {expenditure.toLocaleString()}</span>
+            <span className="text-[10px]">
+              (基礎 {bmr?.toLocaleString()} + 活動 {Math.round(activeKcal ?? 0).toLocaleString()})
+            </span>
+          </div>
+        </Card>
+      ) : (
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="w-full rounded-2xl border border-dashed border-line px-4 py-2.5 text-left text-[11px] text-faint"
+        >
+          身体プロフィール(身長/生年/性別)を設定すると、推定消費・収支が出ます ›
+        </button>
+      )}
 
       {/* 栄養素(対目標バー・全画面共通) */}
       <Card title="栄養素(対目標)">
