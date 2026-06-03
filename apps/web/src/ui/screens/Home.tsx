@@ -260,7 +260,6 @@ function BodyStrip({
               />
               体脂肪
             </span>
-            <span>直近90日</span>
           </div>
         </div>
       )}
