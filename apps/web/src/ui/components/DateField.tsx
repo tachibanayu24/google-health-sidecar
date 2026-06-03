@@ -1,11 +1,14 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 /**
  * 日付ラベルをタップ → 専用ポップオーバー・カレンダーで日付選択(ネイティブ input は使わない)。
  * children=現在日付の表示(トリガ)。±1日は呼び出し側の前日/翌日ボタンが担当(週送りは持たない)。
- * max(=今日)より未来は選べない。外側クリック / Esc で閉じる。
+ * 配置: トリガ直下に中央寄せ + 画面端でクランプ(fixed・計測)。max(=今日)より未来は選べない。
  */
+const PANEL_W = 256; // w-64
+const MARGIN = 8;
+
 export function DateField({
   date,
   onPick,
@@ -21,18 +24,44 @@ export function DateField({
 }) {
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(() => ym(date));
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // 開くたびに選択日の月を表示。
   useEffect(() => {
     if (open) setMonth(ym(date));
   }, [open, date]);
 
-  // 外側クリック / Esc で閉じる。
+  // トリガ直下に中央寄せ、画面幅でクランプ(開いている間 resize/scroll で再計算)。
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const center = r.left + r.width / 2;
+      const left = Math.max(
+        MARGIN,
+        Math.min(center - PANEL_W / 2, window.innerWidth - PANEL_W - MARGIN),
+      );
+      setPos({ top: r.bottom + 8, left });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open]);
+
+  // 外側クリック / Esc で閉じる(トリガ・パネルどちらも内側扱い)。
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const tgt = e.target as Node;
+      if (triggerRef.current?.contains(tgt) || panelRef.current?.contains(tgt)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
@@ -51,8 +80,9 @@ export function DateField({
   };
 
   return (
-    <div ref={ref} className="relative inline-flex">
+    <>
       <button
+        ref={triggerRef}
         type="button"
         aria-label="日付を選択"
         onClick={() => setOpen((o) => !o)}
@@ -60,10 +90,22 @@ export function DateField({
       >
         {children}
       </button>
-      {open && (
-        <CalendarPanel month={month} setMonth={setMonth} selected={date} max={max} onPick={pick} />
+      {open && pos && (
+        <div
+          ref={panelRef}
+          className="fixed z-30 w-64 rounded-2xl border border-line bg-card p-3 shadow-xl"
+          style={{ top: pos.top, left: pos.left }}
+        >
+          <CalendarPanel
+            month={month}
+            setMonth={setMonth}
+            selected={date}
+            max={max}
+            onPick={pick}
+          />
+        </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -103,7 +145,7 @@ function CalendarPanel({
     });
 
   return (
-    <div className="absolute right-0 top-full z-30 mt-2 w-64 rounded-2xl border border-line bg-card p-3 shadow-xl">
+    <>
       <div className="mb-2 flex items-center justify-between">
         <button
           type="button"
@@ -171,6 +213,6 @@ function CalendarPanel({
           今日へ
         </button>
       )}
-    </div>
+    </>
   );
 }
