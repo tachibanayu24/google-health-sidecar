@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   ChevronLeft,
@@ -8,12 +8,20 @@ import {
   Gauge,
   HeartPulse,
   Moon,
+  Scale,
   Thermometer,
+  Trash2,
   Wind,
 } from 'lucide-react';
 import { Card, Stat } from '../components/Card';
 import { Empty, ErrorBox, Loading } from '../components/state';
-import { api, type Readiness, type ReadinessContributor, type SleepSummary } from '../lib/api';
+import {
+  api,
+  type BodyLogEntry,
+  type Readiness,
+  type ReadinessContributor,
+  type SleepSummary,
+} from '../lib/api';
 import {
   DOW_JA,
   epochToJstHhmm,
@@ -22,6 +30,7 @@ import {
   shiftDate,
   todayJst,
 } from '../lib/datetime';
+import { invalidateBody } from '../lib/invalidate';
 import { round } from '../lib/units';
 
 /**
@@ -79,9 +88,80 @@ export function RecoveryScreen({
       </div>
 
       {readiness.data && <ReadinessCard data={readiness.data} />}
+      <BodyLogCard date={date} />
       <RecoveryCard sleep={t.sleep} hrv={metric('hrv_rmssd')} rhr={metric('resting_hr')} />
       <DailySensing daily={t.daily} />
     </div>
+  );
+}
+
+// ============ 体組成(その日の測定ログ + 削除。グラフ=期間の関心は Home) ============
+function BodyLogCard({ date }: { date: string }) {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['body-log', date], queryFn: () => api.bodyLog(date) });
+  const del = useMutation({
+    mutationFn: (id: string) => api.deleteBodyMetric(id),
+    onSuccess: () => invalidateBody(qc),
+  });
+  const logs = q.data?.logs ?? [];
+  if (logs.length === 0) return null; // その日の測定が無ければ非表示
+  return (
+    <Card title="体組成" right={<Scale className="h-4 w-4 text-faint" strokeWidth={2.2} />}>
+      <ul className="divide-y divide-line/50">
+        {logs.map((l) => (
+          <BodyLogRow
+            key={l.id}
+            log={l}
+            onDelete={() => del.mutate(l.id)}
+            deleting={del.isPending && del.variables === l.id}
+          />
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+function BodyLogRow({
+  log,
+  onDelete,
+  deleting,
+}: {
+  log: BodyLogEntry;
+  onDelete: () => void;
+  deleting: boolean;
+}) {
+  return (
+    <li className="flex items-center gap-3 py-2">
+      <span className="tnum w-12 shrink-0 text-[11px] font-semibold text-faint">
+        {epochToJstHhmm(log.measured_at)}
+      </span>
+      <div className="flex items-baseline gap-3">
+        {log.weight_kg != null && (
+          <span className="tnum text-sm font-semibold">
+            {round(log.weight_kg, 1)}
+            <span className="ml-0.5 text-[11px] font-normal text-muted">kg</span>
+          </span>
+        )}
+        {log.body_fat_pct != null && (
+          <span className="tnum text-sm font-semibold" style={{ color: 'var(--color-fat)' }}>
+            {round(log.body_fat_pct, 1)}
+            <span className="ml-0.5 text-[11px] font-normal text-muted">%</span>
+          </span>
+        )}
+      </div>
+      <span className="ml-auto rounded-full bg-paper px-1.5 py-0.5 text-[9px] font-semibold text-faint">
+        {log.source === 'google_health' ? 'GH' : '手入力'}
+      </span>
+      <button
+        type="button"
+        aria-label="この測定を削除"
+        onClick={onDelete}
+        disabled={deleting}
+        className="flex h-7 w-7 items-center justify-center rounded-full text-faint transition-colors hover:text-accent disabled:opacity-40 [-webkit-tap-highlight-color:transparent]"
+      >
+        <Trash2 className="h-4 w-4" strokeWidth={2.2} />
+      </button>
+    </li>
   );
 }
 

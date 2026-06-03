@@ -1,12 +1,14 @@
 import {
   aggregateSessionMuscles,
   autocompleteFoods,
+  deleteBodyMetric,
   deleteMeal,
   deleteMealPresetRow,
   deleteWorkout,
   getActiveNutritionTarget,
   getAllSyncRuns,
   getBodyForDate,
+  getBodyLogByDate,
   getDailyMetricsByDate,
   getExerciseHistory,
   getExerciseMusclesForExercises,
@@ -187,6 +189,20 @@ api.get('/routines/:id', async (c) => {
   const r = await getRoutine(ctx.db, c.req.param('id'));
   if (!r) return c.json({ error: 'not_found' }, 404);
   return c.json({ provenance: 'd1_confirmed', ...r });
+});
+
+// 体組成の測定ログ(その日・全行)= からだ画面の一覧+削除用。
+api.get('/body-log', async (c) => {
+  const ctx = makeContext(c.env);
+  const date =
+    c.req.query('date') ?? new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  return c.json({ provenance: 'd1_confirmed', date, logs: await getBodyLogByDate(ctx.db, date) });
+});
+
+// 体組成ログの削除(D1 削除 + app-push 分は GH も best-effort 削除, §8.5 services 経由)。
+api.delete('/body-metrics/:id', async (c) => {
+  const ctx = makeContext(c.env);
+  return c.json(await deleteBodyMetric(ctx, c.req.param('id')));
 });
 
 api.get('/muscle-volume', async (c) => {

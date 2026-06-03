@@ -25,6 +25,7 @@ export function invalidateWorkouts(qc: QueryClient): void {
 export function invalidateBody(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ['today'] });
   qc.invalidateQueries({ queryKey: ['trends'] });
+  qc.invalidateQueries({ queryKey: ['body-log'] });
 }
 
 /** 栄養目標/設定の変更後。 */

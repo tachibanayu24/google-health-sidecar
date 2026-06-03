@@ -129,6 +129,13 @@ export interface BodyReading {
   source: string | null;
   prevWeightKg: number | null;
 }
+export interface BodyLogEntry {
+  id: string;
+  weight_kg: number | null;
+  body_fat_pct: number | null;
+  source: string | null;
+  measured_at: number;
+}
 export interface Today {
   date: string;
   pfc: { kcal: number; p: number; f: number; c: number; salt_g: number; fiber_g: number };
@@ -338,6 +345,11 @@ export const api = {
     }>(`/training-calendar?days=${days}`),
   trends: (days = 90) => req<Trends>(`/trends?days=${days}`),
   readiness: (date?: string) => req<Readiness>(`/readiness${date ? `?date=${date}` : ''}`),
+  bodyLog: (date: string) => req<{ date: string; logs: BodyLogEntry[] }>(`/body-log?date=${date}`),
+  deleteBodyMetric: (id: string) =>
+    req<{ deleted: boolean; ghDeleted: boolean }>(`/body-metrics/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
   routines: () => req<{ routines: RoutineSummary[] }>('/routines'),
   routine: (id: string) => req<RoutineDetail>(`/routines/${id}`),
   weeklySummary: () => req<WeeklySummary>('/weekly-summary'),

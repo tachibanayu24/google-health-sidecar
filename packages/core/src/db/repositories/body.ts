@@ -38,6 +38,23 @@ export async function getBodyForDate(db: Db, date: string): Promise<BodyReading>
   };
 }
 
+export interface BodyLogRow {
+  id: string;
+  weight_kg: number | null;
+  body_fat_pct: number | null;
+  source: string | null;
+  measured_at: number;
+}
+
+/** その日付の体組成測定ログ(全行・マージしない)。からだ画面の一覧+削除用。 */
+export async function getBodyLogByDate(db: Db, date: string): Promise<BodyLogRow[]> {
+  return db.raw<BodyLogRow>(
+    `SELECT id, weight_kg, body_fat_pct, source, measured_at
+       FROM body_metrics WHERE date = ? ORDER BY measured_at DESC`,
+    date,
+  );
+}
+
 export async function getLatestWeight(db: Db): Promise<BodyMetric | null> {
   return db.one(
     BodyMetric,
