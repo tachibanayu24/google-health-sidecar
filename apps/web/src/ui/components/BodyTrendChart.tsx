@@ -15,7 +15,7 @@ export interface BodyTrendPoint {
 export function BodyTrendChart({ data }: { data: BodyTrendPoint[] }) {
   return (
     <ChartFrame h="h-36">
-      <LineChart data={data} margin={{ top: 6, right: 2, bottom: 0, left: -10 }}>
+      <LineChart data={data} margin={{ top: 6, right: 4, bottom: 0, left: 4 }}>
         <CartesianGrid stroke={CHART.line} vertical={false} />
         <XAxis
           dataKey="date"
@@ -24,23 +24,9 @@ export function BodyTrendChart({ data }: { data: BodyTrendPoint[] }) {
           stroke={CHART.line}
           minTickGap={32}
         />
-        <YAxis
-          yAxisId="w"
-          tick={axisTick}
-          stroke={CHART.line}
-          width={32}
-          domain={['dataMin - 0.5', 'dataMax + 0.5']}
-          allowDecimals={false}
-        />
-        <YAxis
-          yAxisId="f"
-          orientation="right"
-          tick={axisTick}
-          stroke={CHART.line}
-          width={28}
-          domain={['dataMin - 0.5', 'dataMax + 0.5']}
-          allowDecimals={false}
-        />
+        {/* 軸ラベルは出さず(トレンドが分かれば十分)、スケール分離のためだけに hide で軸を保持。 */}
+        <YAxis yAxisId="w" hide domain={['dataMin - 0.5', 'dataMax + 0.5']} />
+        <YAxis yAxisId="f" orientation="right" hide domain={['dataMin - 0.5', 'dataMax + 0.5']} />
         <Tooltip content={<BodyTT />} />
         <Line
           yAxisId="w"
