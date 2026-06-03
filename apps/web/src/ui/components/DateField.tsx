@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * 日付ラベルをタップ → 専用ポップオーバー・カレンダーで日付選択(ネイティブ input は使わない)。
@@ -26,7 +27,6 @@ export function DateField({
   const [month, setMonth] = useState(() => ym(date));
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
 
   // 開くたびに選択日の月を表示。
   useEffect(() => {
@@ -55,23 +55,14 @@ export function DateField({
     };
   }, [open]);
 
-  // 外側クリック / Esc で閉じる(トリガ・パネルどちらも内側扱い)。
+  // Esc で閉じる(外側タップは全面バックドロップが受け止める)。
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      const tgt = e.target as Node;
-      if (triggerRef.current?.contains(tgt) || panelRef.current?.contains(tgt)) return;
-      setOpen(false);
-    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
     };
-    document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
+    return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
   const pick = (d: string) => {
@@ -90,21 +81,32 @@ export function DateField({
       >
         {children}
       </button>
-      {open && pos && (
-        <div
-          ref={panelRef}
-          className="fixed z-30 w-64 rounded-2xl border border-line bg-card p-3 shadow-xl"
-          style={{ top: pos.top, left: pos.left }}
-        >
-          <CalendarPanel
-            month={month}
-            setMonth={setMonth}
-            selected={date}
-            max={max}
-            onPick={pick}
-          />
-        </div>
-      )}
+      {open &&
+        pos &&
+        createPortal(
+          <>
+            {/* 全面バックドロップ: 外側タップを受け止めて閉じる(背後への貫通=誤遷移を防ぐ) */}
+            <button
+              type="button"
+              aria-label="閉じる"
+              onClick={() => setOpen(false)}
+              className="fixed inset-0 z-40 cursor-default [-webkit-tap-highlight-color:transparent]"
+            />
+            <div
+              className="fixed z-50 w-64 rounded-2xl border border-line bg-card p-3 shadow-xl"
+              style={{ top: pos.top, left: pos.left }}
+            >
+              <CalendarPanel
+                month={month}
+                setMonth={setMonth}
+                selected={date}
+                max={max}
+                onPick={pick}
+              />
+            </div>
+          </>,
+          document.body,
+        )}
     </>
   );
 }
