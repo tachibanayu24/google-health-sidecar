@@ -75,6 +75,8 @@
 - **手入力値**(器具なしで体重を記録したい時)= D1 が正本(`source='app'`, `gh_external_id` なし)。GH へは `health_metrics_and_measurements.writeonly` で best-effort push し、`recordingMethod="ACTIVELY_MEASURED"` を付ける(MANUAL は GH enum に無く 400。echo 除外は recordingMethod でなく `gh_datapoint_id`/`gh_data_origin` 照合=`isKnownOwnWrite`、§17.5)。
 - **dedupe**: 同日に GH ミラーと手入力が並ぶ場合、**デバイス測定(GHミラー)を優先表示**し手入力は補助。`measured_at` の近接(同日)を重複判定キーにする。
 - §9.2 Today はデバイス測定があればそれを read-only 表示、無ければ手入力を編集可能表示。§9.7 の体重編集UIは「手入力値のみ編集可、デバイス測定は GH 側が真実」と明示。
+- **削除の方向性(2026-06-03 確定)**: GH→D1 pull は **upsert専用(tombstone非対応)**=GH側で消したデータポイントは D1 ミラーから自動削除されない(**既知の制約・エッジケースとして自動同期は実装しない**)。逆に **app→GH 方向の削除は伝播**する: `deleteBodyMetric`(web `/body-metrics/:id` DELETE / MCP `delete_recent_log`)が D1 を削除し、app-push 分(`gh_sync_state` に datapoint id あり)は GH も best-effort 削除。device由来の異常値は web/MCP で D1 から消せる(GH再pull は GH側にまだ残り3日ルックバック内のときのみ復活しうる)。
+- **からだ画面の体組成表示は「その日の測定ログ」**(時刻・値・出所・削除ボタン、グラフ無し)。**期間トレンド(体重+体脂肪の2ライン)は Home のミニグラフ**。からだ=その日の関心 / Home=期間の関心、という関心の分離(§9 再編)。
 
 **なぜワークアウト/食事の真実を D1 に置くか**【判断】:
 - GH v4 `exercise` には set/rep/weight の器が物理的に無い(§5.3, §8で詳述)。筋トレの真実を置く場所が GH には存在しない。
