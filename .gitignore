@@ -10,3 +10,6 @@ coverage/
 # wrangler.jsonc に database_id 等の実IDを入れるが、単一ユーザー個人運用のため追跡対象。
 # secret は wrangler secret / .dev.vars(gitignore)で管理。
 .design-workflow.js
+
+# 一時ファイル(設計参照用PDF等)
+tmp/

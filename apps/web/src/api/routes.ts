@@ -22,6 +22,8 @@ import {
   getReadiness,
   getRecentPrs,
   getRecentSessions,
+  getRoutine,
+  getRoutines,
   getSessionDetail,
   getSettings,
   getSleepByDate,
@@ -173,6 +175,18 @@ api.get('/readiness', async (c) => {
   const ctx = makeContext(c.env);
   const date = c.req.query('date') ?? undefined;
   return c.json({ provenance: 'd1_confirmed', ...(await getReadiness(ctx.db, date)) });
+});
+
+// トレーニングルーティン(AI作成・参照専用)。CRUD は MCP、Web は読み取りのみ。
+api.get('/routines', async (c) => {
+  const ctx = makeContext(c.env);
+  return c.json({ provenance: 'd1_confirmed', routines: await getRoutines(ctx.db) });
+});
+api.get('/routines/:id', async (c) => {
+  const ctx = makeContext(c.env);
+  const r = await getRoutine(ctx.db, c.req.param('id'));
+  if (!r) return c.json({ error: 'not_found' }, 404);
+  return c.json({ provenance: 'd1_confirmed', ...r });
 });
 
 api.get('/muscle-volume', async (c) => {

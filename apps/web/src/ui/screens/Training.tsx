@@ -1,5 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, Pencil, Search, Share2, Trash2, Trophy } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Pencil,
+  Search,
+  Share2,
+  Sparkles,
+  Trash2,
+  Trophy,
+} from 'lucide-react';
 import { useState } from 'react';
 import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts';
@@ -57,7 +66,13 @@ function bucket(s: number): number {
 type Tab = 'workouts' | 'volume' | 'exercises';
 
 /** トレーニング(分析ハブ・読み取り専用)。旧 推移 + 部位 を統合。記録は中央＋から。 */
-export function TrainingScreen({ onEditWorkout }: { onEditWorkout: (id: string) => void }) {
+export function TrainingScreen({
+  onEditWorkout,
+  onOpenRoutines,
+}: {
+  onEditWorkout: (id: string) => void;
+  onOpenRoutines: () => void;
+}) {
   const [tab, setTab] = useState<Tab>('workouts');
   const mv = useQuery({ queryKey: ['muscle-volume', 7], queryFn: () => api.muscleVolume(7) });
   // 全期間カバー(getTrends は記録ある日のみ返すので大period でも軽量)。
@@ -79,6 +94,26 @@ export function TrainingScreen({ onEditWorkout }: { onEditWorkout: (id: string) 
       />
       <TrainingCalendar />
       <Heatmap muscles={muscles} worked={worked} />
+
+      {/* AI作成ルーティン(計画)への導線。実体は /routines。 */}
+      <button
+        type="button"
+        onClick={onOpenRoutines}
+        className="block w-full text-left [-webkit-tap-highlight-color:transparent]"
+      >
+        <Card>
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
+              <Sparkles className="h-5 w-5" strokeWidth={2.2} />
+            </span>
+            <div className="min-w-0">
+              <div className="text-sm font-bold text-ink">ルーティン</div>
+              <div className="text-[11px] text-muted">AIが組んだトレーニングメニューを見る</div>
+            </div>
+            <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-faint" strokeWidth={2.4} />
+          </div>
+        </Card>
+      </button>
 
       <div className="flex rounded-xl border border-line bg-paper p-0.5 text-sm font-semibold">
         {(

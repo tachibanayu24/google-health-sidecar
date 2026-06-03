@@ -222,6 +222,51 @@ export interface Readiness {
   disclaimer: string;
 }
 
+export interface RoutineSummary {
+  id: string;
+  name: string;
+  goal: string | null;
+  is_active: boolean;
+  day_count: number;
+  updated_at: number;
+}
+export interface RoutineExerciseDetail {
+  id: string;
+  position: number;
+  exercise_id: string;
+  exercise_name: string | null;
+  alt_exercise_id: string | null;
+  alt_exercise_name: string | null;
+  sets_min: number | null;
+  sets_max: number | null;
+  reps_min: number | null;
+  reps_max: number | null;
+  target_load: string | null;
+  note: string | null;
+}
+export interface RoutineDay {
+  id: string;
+  position: number;
+  label: string | null;
+  title: string;
+  aim: string | null;
+  main_lift: string | null;
+  is_rest: boolean;
+  note: string | null;
+  exercises: RoutineExerciseDetail[];
+  muscles: Array<{ muscle: string; sets: number; intensity: number }>;
+}
+export interface RoutineDetail {
+  id: string;
+  name: string;
+  goal: string | null;
+  notes: string | null;
+  is_active: boolean;
+  created_at: number;
+  updated_at: number;
+  days: RoutineDay[];
+}
+
 export interface RecentSession {
   id: string;
   date: string;
@@ -293,6 +338,8 @@ export const api = {
     }>(`/training-calendar?days=${days}`),
   trends: (days = 90) => req<Trends>(`/trends?days=${days}`),
   readiness: (date?: string) => req<Readiness>(`/readiness${date ? `?date=${date}` : ''}`),
+  routines: () => req<{ routines: RoutineSummary[] }>('/routines'),
+  routine: (id: string) => req<RoutineDetail>(`/routines/${id}`),
   weeklySummary: () => req<WeeklySummary>('/weekly-summary'),
   today: (date?: string) => req<Today>(`/today${date ? `?date=${date}` : ''}`),
   foodAutocomplete: (q: string) =>

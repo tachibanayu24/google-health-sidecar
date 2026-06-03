@@ -13,6 +13,7 @@ import {
   deleteBodyMetric,
   deleteMeal,
   deleteMealPresetRow,
+  deleteRoutine,
   deleteWorkout,
   getActiveNutritionTarget,
   getBodyForDate,
@@ -30,6 +31,8 @@ import {
   getReadiness,
   getRecentPrs,
   getRecentSessions,
+  getRoutine,
+  getRoutines,
   getSessionsByDate,
   getSettings,
   getSleepByDate,
@@ -45,8 +48,10 @@ import {
   MealType,
   makeContext,
   resolveExercise,
+  type SaveRoutineInput,
   SaveWorkoutInputSchema,
   saveMealPreset,
+  saveRoutine,
   saveWorkout,
   searchExercises,
   setNutritionTarget,
@@ -805,6 +810,163 @@ function buildServer(env: Env): McpServer {
         });
       }
       return ok(await deleteMeal(ctx, id));
+    },
+  );
+
+  // ===== トレーニングルーティン(AI作成・参照専用ライブラリ。CRUD, §8.10)=====
+  server.registerTool(
+    'get_routines',
+    {
+      title: 'ルーティン一覧',
+      description:
+        '保存済みのトレーニングルーティン(計画メニュー)一覧を返す。各行は id / name / goal(目標副題) / is_active(現在運用中か) / day_count(日数) / updated_at。詳細は get_routine。これは「計画の参照」であり実績ログ(get_recent_sessions 等)とは別物。',
+      inputSchema: {},
+      annotations: READ,
+    },
+    async () => {
+      const ctx = makeContext(env);
+      return ok({ provenance: 'd1_confirmed', routines: await getRoutines(ctx.db) });
+    },
+  );
+
+  server.registerTool(
+    'get_routine',
+    {
+      title: 'ルーティン詳細',
+      description:
+        '1件のルーティンの全詳細を返す。days[]={ position, label, title(例「胸(強化)+三頭」), aim(狙い), main_lift, is_rest, note, exercises[]={ exercise_id, exercise_name, alt_exercise_name(「X or Y」の代替), sets_min/sets_max, reps_min/reps_max, target_load(任意), note }, muscles[]=その日の部位別 intensity(人体図用・間接含む) }。編集前に読んで save_routine で全置換するのが基本フロー。',
+      inputSchema: { id: z.string().min(1) },
+      annotations: READ,
+    },
+    async ({ id }) => {
+      const ctx = makeContext(env);
+      const r = await getRoutine(ctx.db, id);
+      if (!r) return ok({ error: 'not_found', message: 'ルーティンが見つかりません' });
+      return ok({ provenance: 'd1_confirmed', ...r });
+    },
+  );
+
+  server.registerTool(
+    'save_routine',
+    {
+      title: 'ルーティンを保存',
+      description:
+        'トレーニングルーティン(計画)を保存する。**id 省略=新規追加 / id 指定=その id を全置換(編集)**。日(カテゴリ単位)と種目をネストで一括で渡す。種目は必ずカタログの exerciseId(search_exercises で解決した id。名前でも内部解決するが曖昧/未存在なら unresolved_exercises を返すので id で再送)。荷重(targetLoad)は任意。セット/レップは setsMin/setsMax・repsMin/repsMax の範囲(例 4-5セット → setsMin:4,setsMax:5)。レスト日は isRest:true で exercises 不要。isActive:true で現在運用中にする(他は自動で解除)。notes に方針・漸進性過負荷・デロード等の運用ルールをプレーンテキストで。返り値 { id }。',
+      inputSchema: {
+        id: z.string().optional(),
+        name: z.string().min(1).max(120),
+        goal: z.string().max(300).optional(),
+        notes: z.string().max(8000).optional(),
+        isActive: z.boolean().optional(),
+        days: z
+          .array(
+            z.object({
+              label: z.string().max(40).optional(),
+              title: z.string().min(1).max(120),
+              aim: z.string().max(300).optional(),
+              mainLift: z.string().max(120).optional(),
+              isRest: z.boolean().optional(),
+              note: z.string().max(2000).optional(),
+              exercises: z
+                .array(
+                  z.object({
+                    exerciseId: z.string().min(1),
+                    altExerciseId: z.string().optional(),
+                    setsMin: z.number().int().min(1).max(30).optional(),
+                    setsMax: z.number().int().min(1).max(30).optional(),
+                    repsMin: z.number().int().min(1).max(100).optional(),
+                    repsMax: z.number().int().min(1).max(100).optional(),
+                    targetLoad: z.string().max(40).optional(),
+                    note: z.string().max(500).optional(),
+                  }),
+                )
+                .max(30)
+                .optional(),
+            }),
+          )
+          .min(1)
+          .max(14),
+      },
+      annotations: WRITE_LOCAL,
+    },
+    async (input) => {
+      const ctx = makeContext(env);
+      // 全 exerciseId / altExerciseId をカタログ id に解決(自由入力を弾く)。
+      const raws = new Set<string>();
+      for (const d of input.days)
+        for (const e of d.exercises ?? []) {
+          raws.add(e.exerciseId);
+          if (e.altExerciseId) raws.add(e.altExerciseId);
+        }
+      const resolved = new Map<string, string>();
+      const unresolved: Array<{ input: string; candidates: unknown }> = [];
+      for (const raw of raws) {
+        const r = await resolveExerciseId(ctx.db, raw);
+        if ('id' in r) resolved.set(raw, r.id);
+        else unresolved.push({ input: raw, candidates: r.candidates });
+      }
+      if (unresolved.length) {
+        return ok({
+          error: 'unresolved_exercises',
+          unresolved,
+          hint: 'search_exercises で id を解決し、exerciseId にその id を渡して再送してください(自由入力は不可)。',
+        });
+      }
+      const payload: SaveRoutineInput = {
+        id: input.id,
+        name: input.name,
+        goal: input.goal,
+        notes: input.notes,
+        isActive: input.isActive,
+        days: input.days.map((d) => ({
+          label: d.label,
+          title: d.title,
+          aim: d.aim,
+          mainLift: d.mainLift,
+          isRest: d.isRest,
+          note: d.note,
+          exercises: (d.exercises ?? []).map((e) => ({
+            exerciseId: resolved.get(e.exerciseId) ?? e.exerciseId,
+            altExerciseId: e.altExerciseId ? resolved.get(e.altExerciseId) : undefined,
+            setsMin: e.setsMin,
+            setsMax: e.setsMax,
+            repsMin: e.repsMin,
+            repsMax: e.repsMax,
+            targetLoad: e.targetLoad,
+            note: e.note,
+          })),
+        })),
+      };
+      return ok(await saveRoutine(ctx.db, payload));
+    },
+  );
+
+  server.registerTool(
+    'delete_routine',
+    {
+      title: 'ルーティンを削除',
+      description:
+        'ルーティンを削除する(D1のみ・GH無関係・実績ログには影響しない)。echo+confirm 二段: confirm 省略時は対象 { id, name } を echo するので確認して confirm:true で実行。',
+      inputSchema: { id: z.string().min(1), confirm: z.boolean().optional() },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async ({ id, confirm }) => {
+      const ctx = makeContext(env);
+      const r = await getRoutine(ctx.db, id);
+      if (!r) return ok({ error: 'not_found', message: 'ルーティンが見つかりません' });
+      if (!confirm) {
+        return ok({
+          requireConfirm: true,
+          target: { id: r.id, name: r.name, days: r.days.length },
+          message: `ルーティン「${r.name}」(${r.days.length}日)を削除します。confirm:true で実行。`,
+        });
+      }
+      return ok(await deleteRoutine(ctx.db, id));
     },
   );
 

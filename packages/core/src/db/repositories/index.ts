@@ -2,6 +2,7 @@ export * from './body';
 export * from './exercises';
 export * from './meals';
 export * from './readiness';
+export * from './routines';
 export * from './settings';
 export * from './storage';
 export * from './sync';
