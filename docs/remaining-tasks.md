@@ -29,6 +29,7 @@
 
 ## 0.1 機能拡張の着手・完了(enhancements.md から移動)
 
+- **エネルギー収支の可視化 + Home 状態ファースト再構成** — ✅(2026-06-03)。食事画面とHomeに「収支(推定)= 摂取 −(BMR+活動消費)」を表示(BMRは身体プロフィール×Mifflin、`lib/energy.ts` 共通)。Home は 体組成→**コンディション(Readiness信号を昇格)**→栄養(収支統合)→トレーニング の順に再構成。MCP server instructions も維持カロリー=get_nutrition_status 優先に更新。design.md §8.11。
 - **総チェック由来10項目(work-plan.md)** — ✅完了(2026-06-03)。Phase1 堅牢化(body_metrics upsert統一/save_routine N+1/own-write test)、Phase2 MCP高レバレッジ(適応型TDEE+BMR基盤/停滞検知/食事×回復相関, design.md §8.11)、Phase3 Web UX(日付ピッカー/消費kcal併記/セット削除見直し/ルーティンweb削除)、Phase4 品質(MCP auth + web datetime の contract テスト)。MCP 29ツール。**残**: 全MCPツール/全APIルートの網羅的 contract テストは段階的に(今回は認証境界+日付演算を固めた)。詳細は `docs/work-plan.md`。
 
 - **トレーニングルーティン(AI作成・参照専用)** — ✅実装・デプロイ済(2026-06-03)。design.md §8.10。migration 0017(routines/routine_days/routine_exercises、種目は exercises FK 必須)。MCP 4本(get_routines/get_routine/save_routine(upsert)/delete_routine)で AI が CRUD、Web `/routines` は参照専用(各日 人体図+種目リスト・運用ルール・画像エクスポート)。役割分担=MCP authoring / Web viewer。**残**: セット範囲は min/max 保持だが人体図集計は代表値(sets_max)を使用。種目がカタログに無い場合は AI が追加できない(カタログ拡張は別途)。MCPツール計26本。
