@@ -256,6 +256,8 @@ IP 値(`160.79.104.0/21`)はハードコードせず `vars` に外出しし、An
 - **正規化値は kg/ml 固定**。フィールド名に `_kg` / `_kcal` / `_ml` サフィックスを付け、`entry_unit` は `kg|lb` を明示(単位誤変換の最重要対策)。
 - **種目名解決は部分一致**。複数候補・0件は **曖昧エラーで候補配列を返す**(`docs/design.md:925`)。確実な解決は `search_exercises` で id を得てから。
 - **GH push 成否を正直に返す**: write は `ghPushed`、delete は `ghDeleted` を必ず結果に含める(best-effort 握り潰しで「GH に入った」と誤認させない)。
+- **説明文(description)= Claude の唯一の手がかりとして全体最適**(2026-06-03 全22本を実装照合のうえ改訂)。各ツールに「何を返すか(主要フィールド)/ いつ使うか / 注意・罠」を簡潔に含め、用語(主働のみ vs 間接含む・単位・JST・冪等・取消→再記録)を統一。俯瞰系(get_day/get_weekly_summary/get_readiness/get_exercise_history)は相互の使い分けを明記。
+- **部位集計の2系統を説明文で峻別(§8.3, 実害のあった罠)**: `get_muscle_calendar`/`get_training_frequency`=**主働のみ**(何の日をやったか)、`get_muscle_volume`/`get_readiness.muscleLoad`=**間接含む総量**(十分鍛えられているか)。frequency の `total_sets` だけで「手薄」と判断しないよう各説明に相互参照を入れた(MCPトレーナーが主働0を見て「腕が手薄」と誤結論した事例の再発防止)。
 
 ### 5.2 ツール一覧(表)
 

@@ -168,9 +168,8 @@ function buildServer(env: Env): McpServer {
   server.registerTool(
     'get_settings',
     {
-      title: '設定の取得',
-      description:
-        '単位(kg/lb)・e1RM 式・栄養目標(phase/PFC/kcal)を返す。分析時に単位や e1RM 式を揃え、目標基準で評価するため最初に呼ぶ。引数なし。',
+      title: '設定・栄養目標の取得',
+      description: `オーナーの設定と現在有効な栄養目標を返す(引数なし)。返り値: settings={unit_preference(kg/lb), e1rm_formula, locale, updated_at}、nutritionTarget={phase(bulk/cut/maintain), target_kcal, target_protein_g/target_fat_g/target_carbs_g(g), target_salt_g(食塩相当量gの上限), target_fiber_g(g下限), date_from(適用開始日)}。いつ使うか: 食事/トレ分析の前提を揃えるため最初に呼ぶ(表示単位・e1RM式を合わせ、目標基準で過不足を評価する)。注意: nutritionTarget は目標未設定だと null。栄養素は g・kcal は kcal・salt は g(食事ログ側の sodium は mg なので混同しない)。目標の変更は set_nutrition_target。`,
       inputSchema: {},
       annotations: READ,
     },
@@ -187,9 +186,8 @@ function buildServer(env: Env): McpServer {
   server.registerTool(
     'get_exercise_history',
     {
-      title: '種目の履歴',
-      description:
-        '指定種目の全セット時系列(生値 + 計算済み load_kg/set_volume_kg/e1rm_kg)を返す。分析の中核。exercise は id 推奨。名前(日本語可)も可だが曖昧時は候補配列を返すので id で再呼び出しする。',
+      title: '種目の履歴(全セット時系列)',
+      description: `指定1種目の全セットを時系列(日付降順)で返す。1種目の進捗・強度推移の深掘り分析の中核。各セットは生値(entry_value/entry_unit/reps/rpe)と計算済みの load_kg(実効荷重)/set_volume_kg(=load×reps)/e1rm_kg(推定1RM, kg)を持つ。e1rm_kg は reps>12 もしくは reps/重量が欠損だと null。warmup セットも含まれる。exercise は search_exercises で解決した id を渡すのが確実。日本語名でも可だが曖昧なら candidates 配列(+hint)を返すので id で再呼び出しすること。since(JST YYYY-MM-DD, 省略=全期間)以降に絞れる。limit 省略時は500件・最大2000。status=stale の中断セッションは除外。複数種目の俯瞰は get_recent_sessions / get_day を使う。`,
       inputSchema: {
         exercise: z.string().min(1).describe('種目 id(推奨)または名前。曖昧なら候補が返る'),
         since: z
@@ -233,9 +231,8 @@ function buildServer(env: Env): McpServer {
   server.registerTool(
     'get_muscle_volume',
     {
-      title: '部位別ボリューム',
-      description:
-        '直近 windowDays 日(既定7)の部位別の実施セット数・ボリューム(kg)・週間目標比較・刺激スコアを返す。弱点部位の特定に。各部位は `landmark_zone`(under=MEV未満/building/optimal=MAV帯=最も伸びやすい/high/over=MRV超)と `landmarks`{mev,mav_low,mav_high,mrv}(RP/Israetel の週間セット数ガイドライン・個人差ありの出発点であって検証済み個人閾値ではない)も返す。set 数は間接関与(secondary)も含むため複合種目の多い部位は高めに出る。',
+      title: '部位別ボリューム(間接含む総刺激)',
+      description: `直近 windowDays 日(既定7・当日含む)の16筋群別(chest/triceps/front_delts 等の粒度)の刺激量を返す。『その部位が十分に鍛えられているか(間接刺激まで含めた総刺激)』を見るための唯一の正規ツール。各筋群は actual_sets(実施セット数)/volume_kg(挙上ボリューム kg)/target_sets・vs_target(週間目標との比)/stimulus(0..1 の相対ヒートマップ強度)/landmark_zone(under=MEV未満/building/optimal=MAV帯=最も伸びやすい/high/over=MRV超)/landmarks{mev,mav_low,mav_high,mrv}(RP/Israetel の週間セット数ガイドライン。個人差ありの出発点であって検証済み個人閾値ではない)を持つ。【重要】actual_sets と landmark_zone は主働だけでなく間接関与(secondary/stabilizer)も各1セットとして計上した総量基準。よって複合種目の多い筋群(三頭/前三角等)は高めに出る一方、これこそが『間接含めて足りているか』の正しい指標。warmup は除外。『どの日に何の分割(主働)をやったか』は get_muscle_calendar / get_training_frequency を見ること(あちらは主働のみ集計で基準が違う)。`,
       inputSchema: { windowDays: z.number().int().min(1).max(365).optional() },
       annotations: READ,
     },
@@ -251,9 +248,8 @@ function buildServer(env: Env): McpServer {
   server.registerTool(
     'get_muscle_calendar',
     {
-      title: '部位カレンダー',
-      description:
-        '直近 days 日(既定30)の「いつ・どの部位を鍛えたか」を返す。sessionDates(実施日)と cells[{date,muscle,sets}](主働筋ベース)。頻度・分割の俯瞰に。',
+      title: '部位カレンダー(主働の分割)',
+      description: `直近 days 日(既定30・当日含む)の『いつ・どの筋群を鍛えたか』を返す。返り値は sessionDates(実施日。warmupのみの日も rest 日判定のため含む)と cells[{date, muscle(16筋群ID), sets}]。頻度・分割(週何分割か、連続でどこを叩いたか)の俯瞰用。【基準】cells の sets は各種目の主働筋(primary mover)にのみ帰属させた working セット数で、間接関与(secondary/stabilizer)は含めない(ベンチ=胸であって腕ではない)。warmup は sets 集計から除外。したがって『何の日をやったか(分割)』はここで分かるが、『その筋群が間接刺激まで含めて十分鍛えられているか』は get_muscle_volume の actual_sets / landmark_zone を見ること(あちらは間接も計上する総量基準)。区分(胸/背/肩/腕/脚/体幹)単位の頻度サマリは get_training_frequency。`,
       inputSchema: { days: z.number().int().min(1).max(120).optional() },
       annotations: READ,
     },
@@ -266,9 +262,8 @@ function buildServer(env: Env): McpServer {
   server.registerTool(
     'get_training_frequency',
     {
-      title: '部位別トレーニング頻度',
-      description:
-        '部位(胸/背/肩/腕/脚/体幹)別の最終実施日・経過日数・週次「触れた」日数 + 窓内の主働セット数(total_sets)を返す。weeks 既定4。注意: last_trained は主働筋で記録された日(例: デッドリフトのハムで脚が点灯)。足りているかは total_sets で判断(少なければ副次的巻き込みのみ)。',
+      title: '部位別トレーニング頻度(主働の分割)',
+      description: `表示区分(胸/背/肩/腕/脚/体幹の6区分)ごとに last_trained_date(最終実施日)/days_since(経過日数)/weekly_counts(週次で『その区分を触れた』日数。weekly_counts[0]=直近7日, [1]=8〜14日前…)/ total_sets(窓内の主働セット数)を返す。weeks 既定4・当日含む。分割の偏り・各部位を最後にいつ叩いたかの即答用(get_muscle_calendar の区分ロールアップ版で軽い)。【重要な罠】last_trained・total_sets は主働筋(primary mover)で記録された日/セットのみを数える(例: デッドリフトのハムで脚が点灯)。total_sets が少ない=主働で直接叩いていないだけで、プレス由来の三頭・前三角のように間接刺激は十分なことが多い。total_sets だけを見て『その部位が手薄/足りない』と結論しないこと。間接刺激まで含めた十分性(足りているか)は必ず get_muscle_volume の actual_sets / landmark_zone で確認する。warmup は除外。`,
       inputSchema: { weeks: z.number().int().min(1).max(12).optional() },
       annotations: READ,
     },
@@ -284,9 +279,8 @@ function buildServer(env: Env): McpServer {
   server.registerTool(
     'get_recent_sessions',
     {
-      title: '最近のワークアウト',
-      description:
-        '直近のワークアウトセッション一覧(日付・名前・総ボリューム・種目数/セット数・推定消費kcal)。削除対象の id 特定にも使う。',
+      title: '最近のワークアウト一覧',
+      description: `直近の完了(completed)ワークアウトセッション一覧を新しい順(started_at 降順)で返す。各行は id / date(JST) / title(主働筋から自動命名, 例『胸・腕』) / total_volume_kg(総挙上ボリューム kg) / exercises(種目数) / sets(総セット数) / est_calories(推定消費 kcal=METs ベースの保守的推定で実測ではない)。limit 既定30。in_progress / stale は含まない。直近に何をやったかの俯瞰や、記録の取消対象(delete_recent_log で使う session id)の特定に使う。記録の修正に編集ツールは無く、取消(delete_recent_log)→再記録が公式フロー。1日の全データは get_day、1種目の全セットは get_exercise_history。`,
       inputSchema: { limit: z.number().int().min(1).max(100).optional() },
       annotations: READ,
     },
@@ -302,9 +296,8 @@ function buildServer(env: Env): McpServer {
   server.registerTool(
     'get_recent_prs',
     {
-      title: '自己ベスト(PR)',
-      description:
-        '最近の e1RM PR 台帳(種目・推定1RM値・pr_basis・達成日)。is_provisional=true は RPE 補完(<実測)で算出した暫定 PR。',
+      title: '自己ベスト(e1RM PR)台帳',
+      description: `最近の e1RM(推定1RM, kg)PR 台帳を達成日の新しい順(achieved_at 降順)で返す。各行は exercise_id / name(種目名) / value(推定1RM kg) / pr_basis / is_provisional / achieved_at。あくまで実測1RMではなく各セットから算出した推定1RM の更新履歴。pr_basis は確度根拠: amrap・failure・rpe_backed(RPE入力あり)は確定扱い、rpe_less は RPE 未入力で推定確度が低い。is_provisional=true は pr_basis が rpe_less と同義で、実測より低めに出やすい暫定値 —『暫定』と断った上で扱い、確定PRと同格に誇張・祝福しないこと。limit 既定20。1種目の全セット推移は get_exercise_history。`,
       inputSchema: { limit: z.number().int().min(1).max(100).optional() },
       annotations: READ,
     },
@@ -318,8 +311,7 @@ function buildServer(env: Env): McpServer {
     'get_weekly_summary',
     {
       title: '週間サマリー(直近7日)',
-      description:
-        '直近7日(当日含む)の総合サマリー。トレ(sessions/総挙上volumeKg/PR数)・栄養1日平均(avgKcal/P/F/C/sodium/fiber + daysLogged)・睡眠(主睡眠の平均分/効率)・センシング(歩数/消費kcal/HRV/安静時心拍の平均)・体重(開始/終了/差)+ 栄養目標。週の振り返り・講評・調子の把握に。値は実測集計(欠損は null)。',
+      description: `直近7日(当日JST含む)の総合サマリーを返す。range(start/end)と、training{sessions, volumeKg(総挙上), prs}・nutrition{daysLogged, avgKcal/avgP/avgF/avgC/avgSodiumMg/avgFiberG}・sleep{nights, avgTotalMin, avgEfficiency}・sensing{avgSteps/avgActiveKcal/avgRestingHr/avgHrv}・body{startKg/endKg/deltaKg}+ target(有効な栄養目標)。いつ使うか: 週の振り返り・講評・調子の俯瞰に。注意: 栄養平均は記録のあった日(daysLogged)を分母にした平均(未記録日は含まない)。睡眠はその日の最長を主睡眠とみなした平均。prs は窓内の e1RM PR 件数で暫定PR(RPE推定)も含むため、内訳・確度は get_recent_prs を見る。欠損は null。使い分け: 指定1日の詳細は get_day、コンディション信号+部位別負荷は get_readiness。`,
       inputSchema: {},
       annotations: READ,
     },
@@ -337,8 +329,7 @@ function buildServer(env: Env): McpServer {
     'get_readiness',
     {
       title: 'コンディション信号(Readiness)',
-      description:
-        'その日のコンディションを「個人ベースライン比の相対逸脱」で返す。中核=夜間HRV(rMSSD, ln→7日ローリング平均; Plews/Buchheit)、補助=安静時心拍/呼吸数、文脈=皮膚温/睡眠時間・効率。各 contributor は {current(実測値), baselineMedian, normalLow/High(あなたの平常範囲), deviation(low/normal/high), signal(green/yellow/red)} を持ち、overall は N-of-M(2指標以上同時逸脱で赤)で統合。**偽の0-100合成スコアは出さない。** 学習期間中(<14日)・データ不足は status=learning で判定を出さず learningRemainingDays を返す。併せて `muscleLoad`(部位別の急性=直近7日/慢性=直近28日週平均 ボリューム比と trend=detraining/steady/ramping/spiking)を同梱。**これは漸進性過負荷の記述指標であって ACWR の怪我予測ではない**(学術的に否定済)。**重要: 全体として医学的診断でもパフォーマンス予測でもなく、本人の過去データに対する相対逸脱の事実のみ。** 「休め/病気だ/成績が上がる」と断定せず、HRVが平常下/呼吸が上がっている/特定部位を急増させた等の事実を踏まえて会話で助言すること。date 省略で当日(JST)。',
+      description: `指定日のコンディションを『あなた自身の過去データに対する相対逸脱の事実』として返す(date 省略で当日JST)。中核=夜間HRV(rMSSD, ln→7日ローリング平均; Plews/Buchheit)、補助=安静時心拍/呼吸数、文脈=皮膚温/睡眠時間・効率。各 contributor は {metric,label,unit,isCore,status(ready/learning/no-data),daysOfData,current(実測値・no-dataは null),baselineMedian,normalLow/High(あなたの平常範囲),deviation(low/normal/high),signal(green/yellow/red)}。overall は N-of-M(2指標以上同時に悪方向逸脱 or 中核HRVの赤で全体赤)で統合し、偽の0-100合成スコアは出さない。ベースライン未確立(<14日)・データ不足は overall.status=learning で判定を出さず learningRemainingDays を返す。併せて muscleLoad[]={muscle, acute7_sets(直近7日の総セット数=間接関与も1と計上), chronic_weekly_sets(直近28日の週平均), ratio(acute7/chronic_weekly・慢性が薄い部位は null), trend(detraining<0.8 / steady<=1.3 / ramping<=1.5 / spiking)}。重要: muscleLoad の set 数は get_muscle_volume と同じ総量基準(間接含む)であり、frequency/calendar の主働のみ集計とは別系統 —『どの部位の日をやったか(主働の分割)』は get_muscle_calendar / get_training_frequency を見よ。muscleLoad は ACWR の怪我予測ではなく(学術的に否定済)漸進性過負荷の記述指標。全体として医学的診断でもパフォーマンス予測でもなく相対逸脱の事実のみ —『休め/病気だ/成績が上がる』と断定せず、HRVが平常下/呼吸が上がっている/特定部位を急増させた等の事実を踏まえて会話で助言すること。注意: 当日指定は HRV/RHR 等が GH ミラー遅延で未確定/欠損になりやすく、確実な評価は前日指定が無難。使い分け: 1日の全データは get_day、直近7日集計は get_weekly_summary。`,
       inputSchema: {
         date: z
           .string()
@@ -361,11 +352,7 @@ function buildServer(env: Env): McpServer {
     'search_exercises',
     {
       title: '種目検索',
-      description:
-        '種目を部分一致検索(name_en / name_ja / エイリアス。日本語俗称・略称も可)。id 解決の起点 + 部位マッピング検証用。' +
-        '各種目は muscles[{muscle, role(primary/secondary/stabilizer), contribution}] を含む(get_muscle_volume の重み付けと同じ値)。' +
-        'query / muscle を省略すると全種目を返す(limit 既定50・最大200=全カタログ監査可)。muscle で逆引きも可' +
-        '(chest/lats/traps/front_delts/side_delts/rear_delts/biceps/triceps/forearms/abs/obliques/quads/hamstrings/glutes/calves/lower_back)。',
+      description: `種目マスタを検索し id を解決する起点ツール(log_workout の exerciseId はここで解決)。query は name_en / name_ja / エイリアス辞書(日本語俗称・略称・マシンのブランド名)を横断部分一致。返り値 exercises[] は id・name_en・name_ja・equipment・laterality(bilateral/unilateral)・load_basis(total/per_limb/per_side)・is_bodyweight・bw_factor(自重係数)に加え、muscles[{muscle, role(primary/secondary/stabilizer), contribution}] を含む。この muscles[] の重み(contribution・role)は get_muscle_volume の集計と完全に同じで、部位マッピングの妥当性検証にも使える。フィルタ: equipment(barbell/dumbbell/machine/cable/bodyweight/smith/band/kettlebell/other)・favorite(お気に入りのみ)で絞り込み可。muscle を指定すると逆引き(その部位を主働 primary または間接 secondary に持つ種目)= 安定筋 stabilizer のみの種目はヒットしない点に注意。query / muscle を省略すると全種目を返す(limit 既定50・最大200=全カタログ監査可)。並び順は お気に入り→名前。muscle に使える部位 id: chest/lats/traps/front_delts/side_delts/rear_delts/biceps/triceps/forearms/abs/obliques/quads/hamstrings/glutes/calves/lower_back。注意: 部位の数え方は2系統ある。『何の日をやったか(主働の分割)』は get_training_frequency / get_muscle_calendar、『その部位が間接刺激まで含め十分鍛えられているか』は get_muscle_volume の actual_sets / landmark_zone を見る — 本ツールの muscles[] は後者(間接含む重み)と同じ基準。`,
       inputSchema: {
         query: z.string().optional(),
         muscle: z.string().optional(),
@@ -408,8 +395,7 @@ function buildServer(env: Env): McpServer {
     'autocomplete_foods',
     {
       title: '食品オートコンプリート',
-      description:
-        '過去に記録した食品の PFC を名前部分一致で再利用候補として返す(log_meal の補助)。',
+      description: `過去に記録した食品を food_name の部分一致で検索し、再利用候補として返す(log_meal の items を埋める補助)。同名食品は最新の記録行をそのまま1件返す(食品名で重複排除・最新1件のみ・古い記録や別量バリエーションは返らない)。返り値 foods[] は food_name・quantity・unit に加え栄養値 calories_kcal・protein_g・fat_g・carbs_g・fiber_g・sugar_g・sodium_mg(後3つは nullable)を含む。単位は kcal/g、sodium のみ mg。q は1文字以上、limit 既定8・最大50。いつ使うか: 過去に食べたものを再記録する際に PFC を引き写す用途。複数品からなる『朝の定番』等のワンタップ記録は save_meal_preset で保存→ log_preset / get_meal_presets を使う(本ツールは単品候補)。`,
       inputSchema: { q: z.string().min(1), limit: z.number().int().min(1).max(50).optional() },
       annotations: READ,
     },
@@ -426,9 +412,7 @@ function buildServer(env: Env): McpServer {
     'get_day',
     {
       title: '日次の俯瞰',
-      description:
-        '指定日(既定 今日JST)の 食事(PFC合計+品目明細)・ワークアウト・体重・睡眠サマリ(deep/light/rem/efficiency)・' +
-        'センシング(RHR/HRV/SpO2/呼吸/VO2max/歩数/active_energy_kcal)をまとめて返す。1日の総合評価・エネルギー収支に。',
+      description: `指定日(date 省略時は今日JST, YYYY-MM-DD)のその日の全データを1度に返す。返り値: nutrition{totals(kcal/P/F/C・fiber/sugar(g)・sodium(mg)の合算), meals(品目明細)}・workouts(その日のセッション)・body(体重/体脂肪%)・sleep(主睡眠の deep/light/rem/awake/efficiency)・sensing(RHR/HRV/SpO2/呼吸/VO2max/歩数/active_energy_kcal)。いつ使うか: 1日の総合評価やエネルギー収支(摂取 vs 消費)に。使い分け: 直近7日の集計は get_weekly_summary、コンディション信号は get_readiness、1種目の時系列は get_exercise_history。注意: 未記録/未取得の項目は null。当日指定時、sensing/sleep は Fitbit→GH ミラーで数時間遅れて欠損や暫定値になりうる(前日まではほぼ確定)。`,
       inputSchema: {
         date: z
           .string()
@@ -498,8 +482,7 @@ function buildServer(env: Env): McpServer {
     'log_meal',
     {
       title: '食事を記録',
-      description:
-        '食事(items の合算)を D1 に記録し GH へ push。栄養値(kcal 必須、PFC/繊維/糖/ナトリウム任意)は呼び出し側が見積もって渡す。同じ記録の再送防止に clientRequestId を再利用(省略時はサーバ生成し結果に返す)。kcal は kcal、各栄養は g、sodium は mg。',
+      description: `食事を D1 に記録し(正本)、可能なら Google Health(GH)へ push する。返り値は { mealId, ghPushed, clientRequestId }。ghPushed は GH 反映の真偽(栄養 push は機能フラグ依存で、OFF 時は D1 記録のみ・ghPushed=false になる。記録自体は失われない)。引数: mealType(必須・アプリ6種 Breakfast/MorningSnack/Lunch/AfternoonSnack/Dinner/Anytime。一般的な breakfast/lunch 等と混同しない)、items[](最低1品)。栄養値は呼び出し側が見積もって品目ごとに渡す: caloriesKcal は必須、proteinG/fatG/carbsG/fiberG/sugarG/sodiumMg は任意。単位は kcal・g(sodium のみ mg)。date 省略時は今日(JST)。冪等: 同じ記録の再送防止に clientRequestId を再利用(省略時はサーバ生成し返り値に含める)。既存 clientRequestId で再送すると新規作成せず既存 mealId を返す(その際 ghPushed=false)。訂正: 編集ツールは無い。誤記録は delete_recent_log で取消 → 再記録が公式フロー。写真から記録するなら log_meal_photo を使う。`,
       inputSchema: LogMealInputSchema.shape,
       annotations: WRITE_GH,
     },
@@ -516,8 +499,7 @@ function buildServer(env: Env): McpServer {
     'log_workout',
     {
       title: 'ワークアウトを記録',
-      description:
-        'ワークアウト(種目×セット)を D1 に記録し GH へ push。e1RM/PR/総ボリュームは core が計算。exerciseId は search_exercises で解決した id。重量種目は entryValue 必須(自重は省略可=bodyweight、reps のみでよい)。entryUnit は kg/lb。loadMode 省略時は種目マスタに従う。title は不要(主働筋の部位から自動命名)。clientRequestId は再送で再利用。返り値 newPrs に新自己ベスト(name/recordType=推定1RM/value/prevValue/unit/isProvisional)が入る — あれば普通に称えてよい。isProvisional=true は RPE 未入力で推定の確度が低い旨を、重量の絶対値を語るときだけ注意に添える(祝福自体は控えめにしない)。',
+      description: `ワークアウト(種目×セット)を D1 に記録し、completed なら GH へ push する。e1RM/PR/総ボリュームは core が計算。exerciseId は search_exercises で解決した id。重量種目は各セットに entryValue 必須(欠落だとエラーで弾く)、自重種目は省略可(loadMode を bodyweight、reps のみで可)。entryUnit は kg/lb。loadMode 省略時は種目マスタに従う。title 不要(主働筋の部位から自動命名、例「胸・腕」)。返り値: { sessionId, totalVolumeKg, title, ghPushed, newPrs[], clientRequestId }。ghPushed は GH 反映の真偽。newPrs は新自己ベスト{ name, recordType=e1rm, value, prevValue, unit=kg, isProvisional } — あれば普通に称えてよい。isProvisional=true は RPE 未入力で推定確度が低い(実測より低めに出る)暫定 PR で、重量の絶対値を語るときだけその旨を注に添える(祝福自体は控えめにしない)。冪等: clientRequestId を再送で再利用(省略時サーバ生成)。既存 clientRequestId の再送は新規作成せず既存 sessionId を返す(その際 totalVolumeKg=0・newPrs=[]・ghPushed=false になるため、再送結果から『PRなし』と判断しないこと)。分析は get_exercise_history(1種目の時系列)/ get_muscle_calendar・get_training_frequency(主働の分割・頻度)/ get_muscle_volume(間接含む総刺激)を併用。`,
       inputSchema: SaveWorkoutInputSchema.shape,
       annotations: WRITE_GH,
     },
@@ -557,8 +539,7 @@ function buildServer(env: Env): McpServer {
     'log_weight',
     {
       title: '体重を記録',
-      description:
-        '体重(+任意で体脂肪%)を手入力で記録し GH へ push。entryUnit は kg/lb。同日に近い記録があると status:"similar_exists" を返すので、別測定(朝晩など)なら confirm:true を付けて再呼び出し、重複なら呼ばない。',
+      description: `体重(+任意で体脂肪%)を手入力で記録し GH へ push する(体重 push は機能フラグ非依存で常に実行)。entryUnit は kg/lb。返り値は { id, ghPushed }(ghPushed=体重 datapoint の GH 反映の真偽)。soft-guard: 同日に体重差 0.5kg 未満の既存記録があると、記録せず status が similar_exists(requireConfirm:true)と existing(weight_kg/body_fat_pct/source)を返す。別測定(朝晩など)として記録するなら confirm:true を付けて再呼び出し、単なる重複なら呼ばない。日付は date 省略時、measuredAtSec があればその JST 日付・無ければ今日(JST)。bodyFatPct は別 datapoint として独立に push される。`,
       inputSchema: {
         entryValue: z.number().positive().max(1000),
         entryUnit: z.enum(['kg', 'lb']),
@@ -602,8 +583,7 @@ function buildServer(env: Env): McpServer {
     'set_nutrition_target',
     {
       title: '栄養目標を設定',
-      description:
-        '栄養目標(phase=bulk/cut/maintain、kcal、P/F/C g、任意で塩 g・繊維 g、適用開始日)を設定。AI が目標基準で分析・提案するための基準。dateFrom 省略時は今日から適用(同日は上書き)。',
+      description: `栄養目標を設定する(D1 のみ・GH には送らない)。AI が目標基準で食事を分析・講評するための基準値で、get_settings / get_weekly_summary / get_day の評価に使われる。引数: phase(bulk/cut/maintain)、kcal、proteinG/fatG/carbsG(g)、任意で saltG(塩分 g・省略時 6)/fiberG(食物繊維 g・省略時 20)、dateFrom。注意: saltG は『塩分のグラム』であって他ツールの sodium(ナトリウム mg)とは別単位なので混同しない。dateFrom 省略時は今日(JST)から適用。同日 dateFrom は既存目標を上書き、別日なら新しいフェーズ行を追加(履歴として残る)。返り値は { ok:true }。`,
       inputSchema: {
         phase: z.enum(['bulk', 'cut', 'maintain']),
         kcal: z.number().positive().max(10000),
@@ -630,8 +610,7 @@ function buildServer(env: Env): McpServer {
     'get_meal_presets',
     {
       title: '食事プリセット一覧',
-      description:
-        '保存済みの食事プリセット(id / name / default_meal_type / use_count / items[])を返す。log_preset で id 指定 + servings 倍率で按分記録する。',
+      description: `保存済みの食事プリセットを返す(D1のみ・GH無関係)。各プリセットは id / name / default_meal_type(アプリ内6種: Breakfast/MorningSnack/Lunch/AfternoonSnack/Dinner/Anytime)/ use_count / items[](1 serving 基準の栄養値)。並び順は使用回数の多い順(同数なら更新が新しい順)。いつ使うか: log_preset で記録する前に presetId を解決する起点。返ってきた id を log_preset の presetId に渡し、servings 倍率で按分記録する(例: 30g 登録のプリセットを 40g 記録 → servings=1.3333)。入力なし。`,
       inputSchema: {},
       annotations: READ,
     },
@@ -652,8 +631,7 @@ function buildServer(env: Env): McpServer {
     'save_meal_preset',
     {
       title: '食事プリセットを保存',
-      description:
-        'よく食べる構成をプリセット保存。栄養値は「1 serving 分」で登録する(例: WPI 30g を 1 serving として登録 → 後で log_preset の servings=1.3333 で 40g 記録できる)。',
+      description: `よく食べる構成を再利用用プリセットとして保存する(D1ローカルのみ・GHには書かない・use_count は0始まり)。返り値は { presetId }。注意: これは保存だけで食事の記録にはならない — 実際に記録するのは log_preset。栄養値は必ず『1 serving 分』で登録する(例: WPI 30g を 1 serving として登録 → 後で log_preset の servings=1.3333 で 40g 相当を記録できる)。単位は kcal / g、sodium のみ mg。defaultMealType はアプリ内6種(Breakfast/MorningSnack/Lunch/AfternoonSnack/Dinner/Anytime)から指定し、log_preset で mealType 省略時の既定になる。`,
       inputSchema: {
         name: z.string().min(1).max(80),
         defaultMealType: MealType,
@@ -671,8 +649,7 @@ function buildServer(env: Env): McpServer {
     'log_preset',
     {
       title: 'プリセットから記録',
-      description:
-        'プリセット(presetId)から食事を記録し GH へ push。servings 倍率で全栄養素を按分する(例: 30g 登録のプリセットを 40g 記録 → servings=1.3333)。省略時は 1。mealType 省略時はプリセット既定。clientRequestId は再送で再利用。',
+      description: `プリセット(presetId)から食事を1件記録し、GHへ best-effort で push する。返り値は { mealId, ghPushed, clientRequestId }。ghPushed は GH へ反映できたかの真偽(機能フラグOFFや一時失敗時は false でも D1 正本には記録済み)。servings 倍率で各 item の全栄養素と quantity を按分し、結果は0.1単位に丸める(例: 30g 登録のプリセットで 40g 記録 → servings=1.3333)。省略時 servings=1。mealType 省略時はプリセットの default_meal_type。date は JST の YYYY-MM-DD、省略時は当日。clientRequestId は冪等キー: 同一値で再送すると新規記録せず既存の mealId を返す(ghPushed:false)。省略時はサーバ生成し返却。記録内容の訂正に編集機能は無く、delete_recent_log で取消→再記録が公式フロー。`,
       inputSchema: {
         presetId: z.string().min(1),
         servings: z.number().positive().max(50).optional().describe('倍率。例 30g→40g は 1.3333'),
@@ -699,8 +676,7 @@ function buildServer(env: Env): McpServer {
     'delete_meal_preset',
     {
       title: '食事プリセットを削除',
-      description:
-        'プリセットを削除する(D1 のみ・GH 無関係)。confirm 省略時は対象名を echo するので確認して confirm:true で実行。既に記録済みの食事には影響しない。',
+      description: `保存済みプリセットを削除する(D1のみ・GH無関係)。echo+confirm の二段: confirm 省略時は削除せず対象 { id, name } を echo するので、内容を確認のうえ confirm:true で実行する(成功時 { deleted:true })。presetId が見つからない場合は error が not_found。既に記録済みの食事には一切影響しない(プリセット定義のみ消す)。`,
       inputSchema: { presetId: z.string().min(1), confirm: z.boolean().optional() },
       annotations: {
         readOnlyHint: false,
@@ -729,8 +705,7 @@ function buildServer(env: Env): McpServer {
     'log_meal_photo',
     {
       title: '写真から食事を記録',
-      description:
-        '食事写真を見て解析した内容(items[])を記録し GH へ push。画像は **あなた(Claude)が視覚解析**して栄養値(kcal/PFC 等)を見積もり items[] に変換して渡す(画像バイナリは渡さない)。inputMethod は photo 固定。それ以外は log_meal と同契約。',
+      description: `食事写真を**あなた(Claude)が視覚解析**して栄養値(kcal/PFC 等)を見積もり、items[] に変換して記録する。画像バイナリは渡さない(解析済みの items[] のみ渡す契約)。inputMethod はサーバ側で photo に固定される(他値を渡しても無視)。それ以外は log_meal と同契約。mealType は必須(アプリ6種 Breakfast/MorningSnack/Lunch/AfternoonSnack/Dinner/Anytime)。栄養は品目ごとに caloriesKcal 必須・PFC/繊維/糖/Na 任意、単位は kcal・g(sodium のみ mg)。返り値は { mealId, ghPushed, clientRequestId }。ghPushed は GH 反映の真偽(栄養 push は機能フラグ依存で OFF 時は D1 のみ・ghPushed=false)。冪等は clientRequestId を再利用(省略時サーバ生成)。訂正は delete_recent_log で取消 → 再記録。`,
       inputSchema: LogMealInputSchema.shape,
       annotations: WRITE_GH,
     },
@@ -748,8 +723,7 @@ function buildServer(env: Env): McpServer {
     'delete_recent_log',
     {
       title: '直近の記録を取消',
-      description:
-        '直近の食事 / ワークアウト / 体重を取消(D1 削除 + GH datapoint も削除)。confirm 省略時は削除せず対象内容を echo するので、確認して confirm:true で実行する。**訂正は「取消→再記録」が公式フロー**(編集ツールは無い)。対象は当日(JST)作成(食事/体重は前日まで、ワークアウトは加えて最新3件まで)。範囲外はエラー。',
+      description: `直近の食事 / ワークアウト / 体重を取消す(D1から削除し、GH datapoint も best-effort で削除)。返り値は { deleted, ghDeleted }: ghDeleted は GH 側 datapoint を消せたかの真偽で、false でも D1 正本は削除済み。echo+confirm 二段: confirm 省略時は削除せず対象内容を echo するので、確認して confirm:true で実行する。取消可能範囲(JST基準)— 食事/体重は当日または前日まで、ワークアウトは当日または直近3セッションまで。範囲外は error が not_recent。対象 id は事前に取得すること(食事・体重は get_day、ワークアウトは get_recent_sessions)。重要: 記録の編集ツールは存在しないため、内容を直す唯一の公式フローは『この取消 → 正しい内容で再記録』。`,
       inputSchema: {
         type: z.enum(['meal', 'workout', 'weight']),
         id: z.string().min(1),

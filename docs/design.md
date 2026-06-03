@@ -673,6 +673,10 @@ stimulus(muscle, window) =
 - 集計の前提(レビュー指摘): `exercise_muscles` は (exercise_id, muscle_group_id) が PK で1ペア1行のため二重カウント不可。万一データ不整合があっても muscle_group ごとに最大 role を採用するルールを集計クエリに明記。
 - 正規化2モード: ① 相対(窓内全部位のmin-max/95%ile, 「今週どこを多くやったか」) ② **目標基準**(`actual_sets / muscle_groups.weekly_target_sets`, 弱点部位の可視化)。**目標値は `muscle_groups.weekly_target_sets` から引く**(レビュー指摘の欠落テーブルを §7 で追加済)。**ヒートマップ=減衰あり / 週間ボリューム表=減衰なし合計**で使い分け。
 - 色マップ: intensity 0→1 を 青(不足)→緑→黄→赤(高刺激)。`muscle_groups.svg_region_id` でSVGパスへ流し込み、前面/背面トグル。
+- **集計の2系統(重要・MCP誤読の温床)**: 部位別の数え方は目的別に2つあり**意図的に異なる**:
+  - **主働のみ系**(`getMuscleCalendar` / `getTrainingFrequency`)= 各セットを種目の **primary mover のみ**に帰属(「ベンチ=胸であって腕ではない」)。「何の日(分割)をやったか・最後にいつ叩いたか」を答える。`total_sets` も主働のみ。
+  - **間接含む総量系**(`getMuscleVolume` の `actual_sets`/`landmark_zone`、`getMuscleLoadRatios`)= **secondary/stabilizer も各1セット計上**した総刺激。「その部位が(間接含め)十分鍛えられているか」を答える。
+  - 罠: プレス由来で三頭・前三角は主働系では0でも間接系では十分。**主働系の0/低値だけで「手薄」と判断すると誤る**(実際にMCPトレーナーが誤結論した)。MCPツール説明文(`apps/mcp`)に各ツールの数え方と相互参照を明記し、この取り違えを防いでいる。
 
 ### 8.4 消費カロリー推定(METs)
 GH push用 `est_calories`(GHは手動exerciseにカロリー自動付与しない):
