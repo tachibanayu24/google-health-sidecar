@@ -6,7 +6,7 @@ import {
   CloudOff,
   Dumbbell,
   Flame,
-  HeartPulse,
+  Gauge,
   RefreshCw,
   Scale,
   Share2,
@@ -17,8 +17,15 @@ import { DateField } from '../components/DateField';
 import { NutrientBars } from '../components/NutrientBars';
 import { ErrorBox, Loading } from '../components/state';
 import { WeeklyReport } from '../components/WeeklyReport';
-import { api, type BodyReading, type NutritionTarget, type Today } from '../lib/api';
+import {
+  api,
+  type BodyReading,
+  type NutritionTarget,
+  type Readiness,
+  type Today,
+} from '../lib/api';
 import { DOW_JA, formatDateForDisplay, jstDayOfWeek, shiftDate, todayJst } from '../lib/datetime';
+import { energyBalance } from '../lib/energy';
 import { invalidateAfterFlush } from '../lib/invalidate';
 import { flushOutbox, pendingCount, subscribeOutbox } from '../lib/outbox';
 import { round } from '../lib/units';
@@ -62,6 +69,8 @@ export function HomeScreen({
     queryFn: () => api.trends(90),
     staleTime: 60_000,
   });
+  // コンディション信号(からだ画面と queryKey 共有)。選択日のコンディションを Home でも一目に。
+  const readiness = useQuery({ queryKey: ['readiness', date], queryFn: () => api.readiness(date) });
 
   if (today.isLoading) return <Loading />;
   if (today.error) return <ErrorBox error={today.error} />;
@@ -70,6 +79,17 @@ export function HomeScreen({
   const worked = (mv.data?.muscles ?? []).filter((m) => m.actual_sets > 0).length;
   // 選択日のワークアウト(無ければ null)。各グランスは選択日に整合させる。
   const daySession = recent.data?.sessions?.find((s) => s.date === date) ?? null;
+  // エネルギー収支(推定): 摂取 −(BMR+活動消費)。身体プロフィール未設定なら balance=null。
+  const settingsRow = settings.data?.settings;
+  const energy = energyBalance({
+    weightKg: t.body.weightKg,
+    heightCm: settingsRow?.height_cm ?? null,
+    birthYear: settingsRow?.birth_year ?? null,
+    sex: settingsRow?.sex ?? null,
+    currentYear: Number(todayJst().slice(0, 4)),
+    intakeKcal: Math.round(t.pfc.kcal),
+    activeKcal: t.daily.find((d) => d.metric === 'active_energy_kcal')?.value ?? null,
+  });
 
   return (
     <div className="mx-auto max-w-md space-y-4">
@@ -84,6 +104,13 @@ export function HomeScreen({
       />
 
       <BodyStrip body={t.body} series={trends.data?.body ?? []} />
+
+      <ConditionGlance
+        readiness={readiness.data}
+        sleep={t.sleep}
+        daily={t.daily}
+        onOpen={onOpenRecovery}
+      />
 
       {t.inProgress && isToday && (
         <Card accent>
@@ -105,14 +132,18 @@ export function HomeScreen({
         </Card>
       )}
 
-      <NutritionGlance pfc={t.pfc} target={target} onOpen={() => onOpenNutrition(date)} />
+      <NutritionGlance
+        pfc={t.pfc}
+        target={target}
+        energy={energy}
+        onOpen={() => onOpenNutrition(date)}
+      />
       <TrainingGlance
         session={daySession}
         worked={worked}
         isToday={isToday}
         onOpen={onOpenTraining}
       />
-      <RecoveryGlance sleep={t.sleep} daily={t.daily} onOpen={onOpenRecovery} />
 
       <button
         type="button"
@@ -268,14 +299,16 @@ function BodyStrip({
   );
 }
 
-// ============ 栄養グランス(kcal + 残/超過 + PFC/塩 ミニバー) ============
+// ============ 栄養グランス(kcal + 残[対目標] + 収支[対消費] + PFC/塩 ミニバー) ============
 function NutritionGlance({
   pfc,
   target,
+  energy,
   onOpen,
 }: {
   pfc: Today['pfc'];
   target: NutritionTarget | null;
+  energy: { expenditure: number | null; balance: number | null };
   onOpen: () => void;
 }) {
   const kcal = Math.round(pfc.kcal);
@@ -292,11 +325,23 @@ function NutritionGlance({
             className={`text-sm font-semibold ${remain != null && remain < 0 ? 'text-accent-ink' : 'text-muted'}`}
           >
             {remain != null && remain >= 0 ? `残り ${remain}` : `${Math.abs(remain ?? 0)} 超過`}
+            <span className="ml-1 text-[10px] font-normal text-faint">対目標</span>
           </span>
         ) : (
           <span className="text-xs text-accent">目標未設定</span>
         )}
       </div>
+      {/* 収支(対消費・推定)= 摂取 −(BMR+活動)。身体プロフィール設定時のみ。 */}
+      {energy.balance != null && energy.expenditure != null && (
+        <div className="mt-1 flex items-baseline gap-1.5 text-[11px] text-faint">
+          <span
+            className={`tnum font-semibold ${energy.balance <= 0 ? 'text-carb' : 'text-accent-ink'}`}
+          >
+            収支 {energy.balance <= 0 ? energy.balance : `+${energy.balance}`} kcal
+          </span>
+          <span>(消費 {energy.expenditure.toLocaleString()})</span>
+        </div>
+      )}
       <div className="mt-3">
         <NutrientBars
           values={{ p: pfc.p, f: pfc.f, c: pfc.c, salt_g: pfc.salt_g, fiber_g: pfc.fiber_g }}
@@ -357,12 +402,20 @@ function TrainingGlance({
   );
 }
 
-// ============ 回復グランス(睡眠 + RHR/HRV/歩数) ============
-function RecoveryGlance({
+// ============ コンディション グランス(Readiness信号 主役 + 睡眠/HRV/RHR 従) ============
+const SIGNAL_STYLE = {
+  green: { color: '#2f9e6e', label: '良好' },
+  yellow: { color: '#c98a2b', label: '注意' },
+  red: { color: '#e0521f', label: '要注意' },
+} as const;
+
+function ConditionGlance({
+  readiness,
   sleep,
   daily,
   onOpen,
 }: {
+  readiness: Readiness | undefined;
   sleep: Today['sleep'];
   daily: Today['daily'];
   onOpen: () => void;
@@ -370,32 +423,36 @@ function RecoveryGlance({
   const metric = (m: string) => daily.find((d) => d.metric === m)?.value ?? null;
   const rhr = metric('resting_hr');
   const hrv = metric('hrv_rmssd');
-  const steps = metric('steps');
-  const spo2 = metric('spo2_avg');
+  const sig = readiness?.overall.signal ? SIGNAL_STYLE[readiness.overall.signal] : null;
+  const headline = sig?.label ?? (readiness ? '学習中' : '—');
+  const summary = readiness?.overall.summary ?? (readiness ? '' : 'コンディションを読み込み中…');
   return (
-    <GlanceCard title="回復" Icon={HeartPulse} onOpen={onOpen}>
-      <div className="flex items-baseline justify-between">
-        <div className="flex items-baseline gap-1">
-          {sleep ? (
-            <>
-              <span className="stat text-2xl leading-none">{Math.floor(sleep.total_min / 60)}</span>
-              <span className="text-xs text-muted">h</span>
-              <span className="stat ml-1 text-2xl leading-none">{sleep.total_min % 60}</span>
-              <span className="text-xs text-muted">m</span>
-              {sleep.efficiency != null && (
-                <span className="ml-2 text-[11px] text-faint">効率 {sleep.efficiency}%</span>
-              )}
-            </>
-          ) : (
-            <span className="text-sm text-faint">睡眠データ待ち</span>
-          )}
+    <GlanceCard title="コンディション" Icon={Gauge} onOpen={onOpen}>
+      {/* 信号 + 一言(偽スコアは出さない。学習中・データ待ちは正直に) */}
+      <div className="flex items-center gap-2.5">
+        <span
+          className="h-3 w-3 shrink-0 rounded-full"
+          style={{ backgroundColor: sig?.color ?? '#b8ab97' }}
+        />
+        <div className="min-w-0">
+          <div className="text-sm font-bold" style={{ color: sig?.color ?? 'var(--color-muted)' }}>
+            {headline}
+          </div>
+          {summary && <div className="truncate text-[11px] leading-snug text-muted">{summary}</div>}
         </div>
       </div>
+      {/* 従: 睡眠 + HRV/RHR の実測値 */}
       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted tnum">
-        {rhr != null && <span>RHR {round(rhr, 0)}</span>}
+        {sleep ? (
+          <span>
+            睡眠 {Math.floor(sleep.total_min / 60)}h{sleep.total_min % 60}m
+            {sleep.efficiency != null && ` · 効率${sleep.efficiency}%`}
+          </span>
+        ) : (
+          <span className="text-faint">睡眠データ待ち</span>
+        )}
         {hrv != null && <span>HRV {round(hrv, 0)}</span>}
-        {spo2 != null && <span>SpO₂ {round(spo2, 0)}%</span>}
-        {steps != null && <span>{Math.round(steps).toLocaleString()}歩</span>}
+        {rhr != null && <span>RHR {round(rhr, 0)}</span>}
       </div>
     </GlanceCard>
   );

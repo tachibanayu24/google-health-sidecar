@@ -8,7 +8,7 @@ import { NutrientBars } from '../components/NutrientBars';
 import { Loading } from '../components/state';
 import { api, type TodayMeal } from '../lib/api';
 import { DOW_JA, formatDateForDisplay, jstDayOfWeek, shiftDate, todayJst } from '../lib/datetime';
-import { bmrMifflin } from '../lib/energy';
+import { energyBalance } from '../lib/energy';
 import { MEAL_ORDER, mealTypeJa } from '../lib/meals';
 
 /** 栄養画面(サブスクリーン)。kcal残ヒーロー + マクロ + 食事区分(タップで詳細レーダー)+ 記録導線。 */
@@ -44,10 +44,15 @@ export function NutritionScreen({
   const activeKcal = t?.daily?.find((d) => d.metric === 'active_energy_kcal')?.value ?? null;
   // 推定総消費 = BMR(身体プロフィール)+ 活動消費。収支 = 摂取 − 総消費。BMR 未設定なら出さない。
   const s = settings.data?.settings;
-  const age = s?.birth_year ? Number(todayJst().slice(0, 4)) - s.birth_year : null;
-  const bmr = bmrMifflin(t?.body?.weightKg ?? null, s?.height_cm ?? null, age, s?.sex ?? null);
-  const expenditure = bmr != null ? bmr + Math.round(activeKcal ?? 0) : null;
-  const balance = expenditure != null ? kcal - expenditure : null;
+  const { bmr, expenditure, balance } = energyBalance({
+    weightKg: t?.body?.weightKg ?? null,
+    heightCm: s?.height_cm ?? null,
+    birthYear: s?.birth_year ?? null,
+    sex: s?.sex ?? null,
+    currentYear: Number(todayJst().slice(0, 4)),
+    intakeKcal: kcal,
+    activeKcal,
+  });
 
   return (
     <div className="mx-auto max-w-md space-y-4">
