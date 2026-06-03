@@ -751,6 +751,15 @@ UI(IndexedDBアウトボックス)と MCP(Claude経由)が同一の食事/ワー
   - **重要(看板を外す)**: 元の ACWR(0.8–1.3 で怪我予防)の**怪我予測としての妥当性は学術的に否定されている**(mathematical coupling 等, Impellizzeri 2020 / Lolli 2019)。よって**怪我リスク・魔法のスイートゾーンは主張せず**、漸進性過負荷の**記述指標**(急増/定常/低下の事実)としてのみ提示する。
 - **v1 既知の簡略化**: セット数は間接関与(secondary mover)も1と数える既存規約(`getMuscleVolume.actual_sets` と統一)。複合種目の多い部位(例: 三頭=各プレスで加算)は高めに出る — これは RP が「間接で十分入る部位は直接量を抑える」と説く事実とも整合。将来 contribution 加重の「実効セット」を別途出す余地(remaining-tasks)。
 
+### 8.10 トレーニングルーティン(AI作成・参照専用)【実装済: 2026-06-03】
+AIが組んだトレーニングメニュー(計画)を保存・参照する。**役割分担: MCP=AIがCRUD / Web=美しい参照ビューア(読み取り専用)**。実績ログ(workout)とは独立した「計画」で、実行・記録は従来どおり `log_workout`。
+
+- **スキーマ(3表, migration 0017)**: `routines`(name/goal/notes(運用ルールをプレーンテキスト)/is_active/timestamps)→ `routine_days`(position/label/title/aim/main_lift/is_rest/note)→ `routine_exercises`(exercise_id=**exercises FK 必須=自由入力不可**/alt_exercise_id(「X or Y」)/sets_min,sets_max/reps_min,reps_max/target_load(任意)/note)。CASCADE で routine→day→exercise を一括削除。
+- **人体図**: 各日の種目→`exercise_muscles`(role/contribution)を計画セット数で集計(`aggregateRoutineMuscles`, §domain/routine.ts)→ react-body-highlighter に流す。シェア画像のロジックと同型。サイクル全体の合算図も出す。
+- **MCP(4本)**: `get_routines`(一覧)/`get_routine`(全詳細+日ごと部位集計)/`save_routine`(**upsert=id無し新規/id有り全置換**・単一batch原子的・isActive排他・exerciseIdは未解決なら候補返しで自由入力を弾く)/`delete_routine`(echo+confirm)。参照・追加・編集・削除が揃う。
+- **Web `/routines`**(参照専用・遅延ロード): 一覧 → 詳細(サイクル概観・各日カード〔人体図+種目リスト〕・運用ルール・画像エクスポート ShareImageModal)。編集はWebに置かない(AI/MCP担当)。
+- **設計判断**: セット/レップは範囲保持のため min/max 整数(人体図集計は代表値 sets_max?? sets_min)。荷重はメニュー構成段階で決められないため任意。種目をカタログ縛りにしたことで人体図・部位集計が自動で出せる。
+
 ---
 
 ## 9. UI/UX(PWA)

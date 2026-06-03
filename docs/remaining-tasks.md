@@ -29,6 +29,7 @@
 
 ## 0.1 機能拡張の着手・完了(enhancements.md から移動)
 
+- **トレーニングルーティン(AI作成・参照専用)** — ✅実装・デプロイ済(2026-06-03)。design.md §8.10。migration 0017(routines/routine_days/routine_exercises、種目は exercises FK 必須)。MCP 4本(get_routines/get_routine/save_routine(upsert)/delete_routine)で AI が CRUD、Web `/routines` は参照専用(各日 人体図+種目リスト・運用ルール・画像エクスポート)。役割分担=MCP authoring / Web viewer。**残**: セット範囲は min/max 保持だが人体図集計は代表値(sets_max)を使用。種目がカタログに無い場合は AI が追加できない(カタログ拡張は別途)。MCPツール計26本。
 - **Readiness(④個人ベースライン基盤 + ⑤信号 + `get_readiness` MCP)** — ✅実装・デプロイ済(2026-06-03)。設計は design.md §8.8 に昇格。中核=夜間HRV(ln→7日ローリング平均)+補助/文脈指標、中央値±MAD の robust z、N-of-M 統合(偽スコア不使用)、学習ゲート14日。からだ画面に「コンディション」カード + MCP `get_readiness`。横断文献調査(11エージェント workflow・反証検証)に基づく。v1 簡略化=呼吸数/皮膚温の2晩連続ゲート未実装(N-of-M で単発は黄止まり)。
 - **ボリュームランドマーク(⑧)+ 急性/慢性比(⑨)** — ✅実装・デプロイ済(2026-06-03)。design.md §8.9。migration 0016 で MEV/MAV/MRV を RP/Israetel 由来でシード(ガイドライン明示・obliques/lower_back は帯なし)。`get_muscle_volume` に `landmark_zone`、`get_readiness` に `muscleLoad`(急性/慢性比=記述指標, ACWR怪我予測は否定済ゆえ看板を外した)。Training に帯バー。**残: セット数が間接関与も1計上 → 将来 contribution 加重の「実効セット」を別オプションで出す余地**(§5 既知残件と関連)。
 - **構造再編** — ✅(2026-06-03)からだ=日付切替の表示専用ダッシュボード化、体組成はホームのミニグラフ(軽量SVG)、体重記録は中央+ボタンへ集約。

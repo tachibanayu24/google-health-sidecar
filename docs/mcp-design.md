@@ -5,7 +5,7 @@
 > 関連: `docs/design.md`(全体設計)、`packages/core/src/domain/inputs.ts`(Zod 入力)、`packages/core/src/services/*`(write 一点経由 §8.5)、`apps/web/src/api/routes.ts`(同型のラッパ参照実装)、`apps/web/wrangler.jsonc`(共有 D1/KV の ID)。実装の実体は `apps/mcp/src/index.ts`。
 
 > **実装ステータス(2026-06-02、設計→実装の差分。実コードが正)**
-> - **ツールは22本**で稼働。本書の R/W/D カタログ(`get_settings`・`get_exercise_history`・`get_muscle_volume`・`get_muscle_calendar`・`get_recent_sessions`・`get_recent_prs`・`search_exercises`・`autocomplete_foods`・`get_day`・`log_meal`・`log_workout`・`log_weight`・`set_nutrition_target`・`delete_recent_log`)に加え、**`get_training_frequency`(§5.5-G 実装)・`get_meal_presets`・`save_meal_preset`・`log_preset`・`delete_meal_preset`・`log_meal_photo`・`get_weekly_summary`(直近7日の総合サマリ)・`get_readiness`(コンディション信号=個人ベースライン比の相対逸脱 + 部位別 急性/慢性ボリューム比 muscleLoad 同梱, design.md §8.8/§8.9)** を実装。`log_workout` の返り値 `newPrs` は新自己ベスト(name/value/prevValue/isProvisional)を含み、Claude が会話で称えられる。
+> - **ツールは26本**で稼働(ルーティン4本を追加: `get_routines`/`get_routine`/`save_routine`(upsert=新規/全置換・exerciseIdはカタログ必須)/`delete_routine`(echo+confirm)。AI作成トレーニングメニューの参照専用ライブラリ、design.md §8.10)。本書の R/W/D カタログ(`get_settings`・`get_exercise_history`・`get_muscle_volume`・`get_muscle_calendar`・`get_recent_sessions`・`get_recent_prs`・`search_exercises`・`autocomplete_foods`・`get_day`・`log_meal`・`log_workout`・`log_weight`・`set_nutrition_target`・`delete_recent_log`)に加え、**`get_training_frequency`(§5.5-G 実装)・`get_meal_presets`・`save_meal_preset`・`log_preset`・`delete_meal_preset`・`log_meal_photo`・`get_weekly_summary`(直近7日の総合サマリ)・`get_readiness`(コンディション信号=個人ベースライン比の相対逸脱 + 部位別 急性/慢性ボリューム比 muscleLoad 同梱, design.md §8.8/§8.9)** を実装。`log_workout` の返り値 `newPrs` は新自己ベスト(name/value/prevValue/isProvisional)を含み、Claude が会話で称えられる。
 > - **`get_day`** 返却 = `nutrition`(PFC合計+品目明細, fiber/sugar/sodium 含む)・`workouts`(当日完了セッション。`getSessionsByDate` でページ取りこぼし無し)・`body`・`sleep`(deep/light/rem/awake/efficiency サマリ)・`sensing`(RHR/HRV/SpO2/呼吸/VO2max/歩数/`active_energy_kcal`)。当日 sensing はミラー遅延がありうるが現状一律 `d1_confirmed`(将来 `gh_provisional` 化は §残課題)。
 > - **`delete_recent_log`** の `type` は **`meal`/`workout`/`weight`** の3種。直近の定義: ワークアウト=当日 or 最新3件、食事=当日・前日、体重=当日・前日(§5.5-D を体重対応に拡張)。echo→`confirm:true` の二段(§5.5-E/H)。
 > - **`exercise_aliases` 実装済**(migration 0012/0013/0015)。`searchExercises` は **name_en / name_ja / alias 横断**の部分一致(§5.5-F)。`search_exercises` 返却に `muscles:[{muscle, role(primary|secondary|stabilizer), contribution(1.0/0.5/0.25)}]` を含む。
@@ -340,6 +340,13 @@ read 系:
   get_settings         {}（引数なし）
   get_weekly_summary   {}（引数なし・直近7日）
   get_readiness        { date?(YYYY-MM-DD, 既定 今日JST) }  // §8.8 コンディション信号(個人ベースライン比)
+  get_routines         {}（引数なし）                       // §8.10 ルーティン一覧
+  get_routine          { id }
+  save_routine         { id?(無=新規/有=全置換), name, goal?, notes?, isActive?,
+                         days[1..14]{ label?, title, aim?, mainLift?, isRest?, note?,
+                           exercises[..30]{ exerciseId(カタログ必須), altExerciseId?,
+                             setsMin?, setsMax?, repsMin?, repsMax?, targetLoad?, note? } } }
+  delete_routine       { id, confirm? }                     // echo+confirm
 ```
 
 > 実装注意(審査検証済): `getMuscleVolume` は `{windowDays}`、`getMuscleCalendar` は `{days}` の **オブジェクト引数で ctx を受け `services/workout.ts` にある**。`getExerciseHistory(ctx, exerciseId, {since?,limit?})` も同所。`searchExercises`/`autocompleteFoods`/`getRecentSessions`/`getRecentPrs`/`getSettings`/`getMealsByDate` は **`db/repositories`** にあり `ctx.db` を取る。positional な `getMuscleVolume(ctx, window)` と書くと型が合わない。
