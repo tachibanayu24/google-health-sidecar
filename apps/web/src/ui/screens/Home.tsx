@@ -82,7 +82,7 @@ export function HomeScreen({
         onToday={() => setDate(todayJst())}
       />
 
-      <BodyStrip body={t.body} series={trends.data?.body ?? []} onOpen={onOpenRecovery} />
+      <BodyStrip body={t.body} series={trends.data?.body ?? []} />
 
       {t.inProgress && isToday && (
         <Card accent>
@@ -197,15 +197,13 @@ function GlanceCard({
   );
 }
 
-// ============ 体組成ストリップ(現在値 + 体重ミニグラフ・タップで からだ) ============
+// ============ 体組成ストリップ(現在値 + 体重/体脂肪トレンド。タップ遷移なし=表示専用) ============
 function BodyStrip({
   body,
   series,
-  onOpen,
 }: {
   body: BodyReading;
   series: Array<{ date: string; weight_kg: number | null; body_fat_pct: number | null }>;
-  onOpen: () => void;
 }) {
   const { weightKg, bodyFatPct, prevWeightKg, source } = body;
   const diff =
@@ -216,60 +214,57 @@ function BodyStrip({
     series.filter((s) => s.weight_kg != null).length >= 2 ||
     series.filter((s) => s.body_fat_pct != null).length >= 2;
   return (
-    <button type="button" onClick={onOpen} className="block w-full text-left">
-      <Card>
-        <div className="flex items-center">
-          <Scale className="mr-3 h-5 w-5 text-faint" strokeWidth={2.2} />
-          <div className="flex items-baseline gap-1">
-            <span className="stat text-2xl leading-none">
-              {weightKg != null ? round(weightKg, 1) : '—'}
-            </span>
-            <span className="text-xs text-muted">kg</span>
-          </div>
-          {diff != null && diff !== 0 && (
-            <span
-              className={`tnum ml-2 text-[11px] font-semibold ${diff < 0 ? 'text-carb' : 'text-accent-ink'}`}
-            >
-              {diff > 0 ? '+' : ''}
-              {diff}
-            </span>
-          )}
-          <div className="ml-auto flex items-baseline gap-1">
-            <span className="stat text-xl leading-none" style={{ color: 'var(--color-fat)' }}>
-              {bodyFatPct != null ? round(bodyFatPct, 1) : '—'}
-            </span>
-            <span className="text-xs text-muted">%</span>
-          </div>
-          {source && (
-            <span className="ml-2 rounded-full bg-paper px-1.5 py-0.5 text-[9px] font-semibold text-faint">
-              {source === 'google_health' ? 'GH' : '手入力'}
-            </span>
-          )}
-          <ChevronRight className="ml-1.5 h-4 w-4 text-faint" strokeWidth={2.4} />
+    <Card>
+      <div className="flex items-center">
+        <Scale className="mr-3 h-5 w-5 text-faint" strokeWidth={2.2} />
+        <div className="flex items-baseline gap-1">
+          <span className="stat text-2xl leading-none">
+            {weightKg != null ? round(weightKg, 1) : '—'}
+          </span>
+          <span className="text-xs text-muted">kg</span>
         </div>
-        {hasTrend && (
-          <div className="mt-2.5 border-t border-line/50 pt-2.5">
-            <Suspense fallback={<div className="h-36 animate-pulse rounded-lg bg-line/40" />}>
-              <BodyTrendChart data={series} />
-            </Suspense>
-            <div className="mt-1 flex items-center justify-end gap-3 text-[10px] text-faint">
-              <span className="flex items-center gap-1">
-                <span className="h-0.5 w-3 rounded-full bg-ink" />
-                体重(左)
-              </span>
-              <span className="flex items-center gap-1">
-                <span
-                  className="h-0.5 w-3 rounded-full"
-                  style={{ backgroundColor: 'var(--color-fat)' }}
-                />
-                体脂肪(右)
-              </span>
-              <span>直近90日</span>
-            </div>
-          </div>
+        {diff != null && diff !== 0 && (
+          <span
+            className={`tnum ml-2 text-[11px] font-semibold ${diff < 0 ? 'text-carb' : 'text-accent-ink'}`}
+          >
+            {diff > 0 ? '+' : ''}
+            {diff}
+          </span>
         )}
-      </Card>
-    </button>
+        <div className="ml-auto flex items-baseline gap-1">
+          <span className="stat text-xl leading-none" style={{ color: 'var(--color-fat)' }}>
+            {bodyFatPct != null ? round(bodyFatPct, 1) : '—'}
+          </span>
+          <span className="text-xs text-muted">%</span>
+        </div>
+        {source && (
+          <span className="ml-2 rounded-full bg-paper px-1.5 py-0.5 text-[9px] font-semibold text-faint">
+            {source === 'google_health' ? 'GH' : '手入力'}
+          </span>
+        )}
+      </div>
+      {hasTrend && (
+        <div className="mt-2.5 border-t border-line/50 pt-2.5">
+          <Suspense fallback={<div className="h-36 animate-pulse rounded-lg bg-line/40" />}>
+            <BodyTrendChart data={series} />
+          </Suspense>
+          <div className="mt-1 flex items-center justify-end gap-3 text-[10px] text-faint">
+            <span className="flex items-center gap-1">
+              <span className="h-0.5 w-3 rounded-full bg-ink" />
+              体重(左)
+            </span>
+            <span className="flex items-center gap-1">
+              <span
+                className="h-0.5 w-3 rounded-full"
+                style={{ backgroundColor: 'var(--color-fat)' }}
+              />
+              体脂肪(右)
+            </span>
+            <span>直近90日</span>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 

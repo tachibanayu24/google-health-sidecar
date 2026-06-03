@@ -27,15 +27,19 @@ export interface Trends {
 }
 
 export async function getTrends(db: Db, sinceDate: string): Promise<Trends> {
-  // 体重: 日ごとに最新測定(measured_at 最大)を1点。
+  // 体重・体脂肪: 日ごとに各最新測定を1点。weight と body_fat は別行で格納されるため独立に取る
+  // (getBodyForDate と同規約)。どちらか一方しか無い日も含める。
   const body = await db.raw<BodyPoint>(
-    `SELECT bm.date AS date, bm.weight_kg AS weight_kg, bm.body_fat_pct AS body_fat_pct
-       FROM body_metrics bm
-      WHERE bm.weight_kg IS NOT NULL AND bm.date >= ?
-        AND bm.measured_at = (
-          SELECT max(b2.measured_at) FROM body_metrics b2
-           WHERE b2.date = bm.date AND b2.weight_kg IS NOT NULL)
-      ORDER BY bm.date`,
+    `SELECT d.date AS date,
+            (SELECT w.weight_kg FROM body_metrics w
+              WHERE w.date = d.date AND w.weight_kg IS NOT NULL
+              ORDER BY w.measured_at DESC LIMIT 1) AS weight_kg,
+            (SELECT f.body_fat_pct FROM body_metrics f
+              WHERE f.date = d.date AND f.body_fat_pct IS NOT NULL AND f.body_fat_pct > 0
+              ORDER BY f.measured_at DESC LIMIT 1) AS body_fat_pct
+       FROM (SELECT DISTINCT date FROM body_metrics
+              WHERE date >= ? AND (weight_kg IS NOT NULL OR (body_fat_pct IS NOT NULL AND body_fat_pct > 0))) d
+      ORDER BY d.date`,
     sinceDate,
   );
 
