@@ -26,6 +26,7 @@ import {
   setTypeStimulusWeight,
 } from '../domain/metrics';
 import type { Exercise, ExerciseHistorySet, MuscleVolume } from '../domain/models';
+import { classifyE1rmTrend, type E1rmTrend } from '../domain/training-progress';
 import {
   acuteChronicRatio,
   classifyLoadTrend,
@@ -568,6 +569,69 @@ export async function getMuscleLoadRatios(ctx: AppContext): Promise<MuscleLoad[]
   }
   // 比が出る(慢性が十分な)部位を優先し、比の大きい順。
   return out.sort((x, y) => (y.ratio ?? -1) - (x.ratio ?? -1));
+}
+
+export interface PlateauIndicator {
+  exercise_id: string;
+  name: string;
+  trend: E1rmTrend;
+  early_best_e1rm: number;
+  late_best_e1rm: number;
+  pct_change: number;
+  sessions: number;
+}
+
+/**
+ * 種目別 e1RM の停滞検知(§A-3)。窓内(既定56日)で各種目のセッション最高 e1RM 系列を作り、
+ * 前半 vs 後半の最高で 伸び/停滞/低下 を記述分類。3セッション以上の種目のみ。判定はせず材料を返す。
+ */
+export async function getPlateauIndicators(
+  ctx: AppContext,
+  opts: { windowDays?: number } = {},
+): Promise<PlateauIndicator[]> {
+  const windowDays = opts.windowDays ?? 56;
+  const since = jstDaysAgo(windowDays - 1);
+  const [sets, settings] = await Promise.all([getWindowSets(ctx.db, since), getSettings(ctx.db)]);
+
+  // exercise_id → (session_date → そのセッションの最高 e1RM)
+  const byExercise = new Map<string, Map<string, number>>();
+  for (const s of sets) {
+    if (!countsTowardVolume(s.set_type as SetType)) continue;
+    const e1rm = computeE1rmKg(loadKgOf(s), s.reps, settings.e1rm_formula);
+    if (e1rm == null) continue;
+    let perDate = byExercise.get(s.exercise_id);
+    if (!perDate) {
+      perDate = new Map();
+      byExercise.set(s.exercise_id, perDate);
+    }
+    if (e1rm > (perDate.get(s.session_date) ?? 0)) perDate.set(s.session_date, e1rm);
+  }
+  const exerciseIds = [...byExercise.keys()];
+  if (exerciseIds.length === 0) return [];
+  const nameRows = await ctx.db.raw<{ id: string; name_en: string }>(
+    `SELECT id, name_en FROM exercises WHERE id IN (${exerciseIds.map(() => '?').join(',')})`,
+    ...exerciseIds,
+  );
+  const nameById = new Map(nameRows.map((r) => [r.id, r.name_en]));
+
+  const out: PlateauIndicator[] = [];
+  for (const [exId, perDate] of byExercise) {
+    const series = [...perDate].map(([date, e1rm]) => ({ date, e1rm }));
+    const r = classifyE1rmTrend(series);
+    if (!r) continue; // 3セッション未満は対象外
+    out.push({
+      exercise_id: exId,
+      name: nameById.get(exId) ?? exId,
+      trend: r.trend,
+      early_best_e1rm: r.earlyBestE1rm,
+      late_best_e1rm: r.lateBestE1rm,
+      pct_change: r.pctChange,
+      sessions: r.sessions,
+    });
+  }
+  // 停滞/低下を上に(注意が要る順)、次いでセッション数が多い順。
+  const rank = { declining: 0, plateau: 1, progressing: 2 } as const;
+  return out.sort((a, b) => rank[a.trend] - rank[b.trend] || b.sessions - a.sessions);
 }
 
 export interface SessionMuscle {

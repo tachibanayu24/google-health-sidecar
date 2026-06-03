@@ -3,7 +3,7 @@ import { Check, ChevronLeft, Gauge, Ruler, Target } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Card } from '../components/Card';
 import { ErrorBox, Loading } from '../components/state';
-import { api } from '../lib/api';
+import { api, type Settings } from '../lib/api';
 import { invalidateSettings } from '../lib/invalidate';
 
 type Phase = 'bulk' | 'cut' | 'maintain';
@@ -29,12 +29,9 @@ export function SettingsScreen({ onBack }: { onBack: () => void }) {
         </button>
         <h1 className="font-display text-lg font-bold tracking-tight">設定</h1>
       </div>
-      <UnitsCard
-        unit={settings.unit_preference}
-        formula={settings.e1rm_formula}
-        onSaved={() => invalidateSettings(qc)}
-      />
+      <UnitsCard settings={settings} onSaved={() => invalidateSettings(qc)} />
       <TargetsCard target={nutritionTarget} onSaved={() => invalidateSettings(qc)} />
+      <BodyProfileCard settings={settings} onSaved={() => invalidateSettings(qc)} />
       <Card title="連携" right={<Gauge className="h-4 w-4 text-faint" strokeWidth={2.2} />}>
         <p className="text-sm text-muted">
           Google Health 連携(体重・睡眠の取り込み / ワークアウト・食事の書き出し)は接続済み。
@@ -45,16 +42,30 @@ export function SettingsScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
+// settings 全体を1回のPATCHで送る共通ペイロード(部分更新でも他フィールドを保持=BMRを消さない)。
+function fullSettingsPayload(
+  s: Settings,
+  patch: Partial<{
+    unitPreference: 'kg' | 'lb';
+    e1rmFormula: 'epley' | 'brzycki';
+    heightCm: number | null;
+    birthYear: number | null;
+    sex: 'male' | 'female' | null;
+  }>,
+) {
+  return {
+    unitPreference: patch.unitPreference ?? s.unit_preference,
+    e1rmFormula: patch.e1rmFormula ?? s.e1rm_formula,
+    heightCm: patch.heightCm !== undefined ? patch.heightCm : s.height_cm,
+    birthYear: patch.birthYear !== undefined ? patch.birthYear : s.birth_year,
+    sex: patch.sex !== undefined ? patch.sex : s.sex,
+  };
+}
+
 // ============ 単位・計算(タップで即保存) ============
-function UnitsCard({
-  unit,
-  formula,
-  onSaved,
-}: {
-  unit: 'kg' | 'lb';
-  formula: 'epley' | 'brzycki';
-  onSaved: () => void;
-}) {
+function UnitsCard({ settings, onSaved }: { settings: Settings; onSaved: () => void }) {
+  const unit = settings.unit_preference;
+  const formula = settings.e1rm_formula;
   const [saved, setSaved] = useState(false);
   const m = useMutation({
     mutationFn: api.updateSettings,
@@ -65,10 +76,7 @@ function UnitsCard({
     },
   });
   const save = (next: { unitPreference?: 'kg' | 'lb'; e1rmFormula?: 'epley' | 'brzycki' }) =>
-    m.mutate({
-      unitPreference: next.unitPreference ?? unit,
-      e1rmFormula: next.e1rmFormula ?? formula,
-    });
+    m.mutate(fullSettingsPayload(settings, next));
 
   return (
     <Card
@@ -101,6 +109,86 @@ function UnitsCard({
           onChange={(v) => save({ e1rmFormula: v as 'epley' | 'brzycki' })}
         />
       </Field>
+    </Card>
+  );
+}
+
+// ============ 身体プロフィール(BMR用・任意) ============
+function BodyProfileCard({ settings, onSaved }: { settings: Settings; onSaved: () => void }) {
+  const [height, setHeight] = useState(
+    settings.height_cm != null ? String(settings.height_cm) : '',
+  );
+  const [year, setYear] = useState(settings.birth_year != null ? String(settings.birth_year) : '');
+  const [sex, setSex] = useState<'male' | 'female' | null>(settings.sex);
+  const [saved, setSaved] = useState(false);
+  const m = useMutation({
+    mutationFn: api.updateSettings,
+    onSuccess: () => {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+      onSaved();
+    },
+  });
+  const save = () =>
+    m.mutate(
+      fullSettingsPayload(settings, {
+        heightCm: height === '' ? null : Number(height),
+        birthYear: year === '' ? null : Number(year),
+        sex,
+      }),
+    );
+
+  return (
+    <Card
+      title="身体プロフィール(BMR用)"
+      right={
+        saved ? (
+          <Check className="h-4 w-4 text-accent" strokeWidth={3} />
+        ) : (
+          <Ruler className="h-4 w-4 text-faint" strokeWidth={2.2} />
+        )
+      }
+    >
+      <p className="mb-2 text-[11px] leading-snug text-faint">
+        基礎代謝(Mifflin-St Jeor)の算出に使用。任意。入力すると AI
+        の消費カロリー推定が一段精密になります。
+      </p>
+      <Field label="身長 (cm)">
+        <input
+          type="number"
+          inputMode="decimal"
+          value={height}
+          onChange={(e) => setHeight(e.target.value)}
+          className="tnum w-24 rounded-lg border border-line bg-paper px-2 py-1 text-right text-sm font-semibold outline-none focus:border-accent"
+        />
+      </Field>
+      <Field label="生年 (西暦)">
+        <input
+          type="number"
+          inputMode="numeric"
+          value={year}
+          onChange={(e) => setYear(e.target.value)}
+          className="tnum w-24 rounded-lg border border-line bg-paper px-2 py-1 text-right text-sm font-semibold outline-none focus:border-accent"
+        />
+      </Field>
+      <Field label="性別">
+        <Segmented
+          options={[
+            { value: 'male', label: '男性' },
+            { value: 'female', label: '女性' },
+          ]}
+          value={sex ?? ''}
+          onChange={(v) => setSex(v as 'male' | 'female')}
+        />
+      </Field>
+      <button
+        type="button"
+        onClick={save}
+        disabled={m.isPending}
+        className="mt-3 w-full rounded-xl bg-accent py-2.5 text-sm font-bold text-card disabled:opacity-40"
+      >
+        {m.isPending ? '保存中…' : '保存'}
+      </button>
     </Card>
   );
 }

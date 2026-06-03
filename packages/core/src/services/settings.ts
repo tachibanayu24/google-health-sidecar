@@ -11,6 +11,9 @@ export interface UpdateSettingsInput {
   unitPreference: WeightUnit;
   e1rmFormula: E1rmFormula;
   locale?: string;
+  heightCm?: number | null;
+  birthYear?: number | null;
+  sex?: 'male' | 'female' | null;
 }
 
 export async function updateSettings(ctx: AppContext, input: UpdateSettingsInput): Promise<void> {
@@ -18,6 +21,9 @@ export async function updateSettings(ctx: AppContext, input: UpdateSettingsInput
     unit_preference: input.unitPreference,
     e1rm_formula: input.e1rmFormula,
     locale: input.locale ?? 'ja',
+    height_cm: input.heightCm ?? null,
+    birth_year: input.birthYear ?? null,
+    sex: input.sex ?? null,
   });
 }
 

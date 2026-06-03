@@ -25,10 +25,13 @@ import {
   getMealById,
   getMealItems,
   getMealItemsForMeals,
+  getMealRecoveryCorrelation,
   getMealsByDate,
   getMuscleCalendar,
   getMuscleLoadRatios,
   getMuscleVolume,
+  getNutritionStatus,
+  getPlateauIndicators,
   getReadiness,
   getRecentPrs,
   getRecentSessions,
@@ -351,6 +354,57 @@ function buildServer(env: Env): McpServer {
         getMuscleLoadRatios(ctx),
       ]);
       return ok({ provenance: 'd1_confirmed', ...readiness, muscleLoad });
+    },
+  );
+
+  server.registerTool(
+    'get_nutrition_status',
+    {
+      title: '適応型TDEE/栄養ステータス',
+      description:
+        '体重トレンド(直近 windowDays 日・既定28の直線回帰)× 食事摂取から**実測ベースで消費(TDEE)を逆算**して返す(MacroFactor 方式)。{ daysLogged, avgIntakeKcal, weightTrend{startKg,endKg,perWeekKg}, estimatedTdeeKcal, confidence(high/medium/low/insufficient), bmrKcal(身体プロフィール settings があれば Mifflin-St Jeor), phase, targetKcal, intakeVsTargetKcal }。**推定値であり実測の代謝測定ではない**。体重トレンドが7日未満 or 食事記録が7日未満は confidence=insufficient で TDEE を出さない(遵守ゲート)。記録日数が窓の半分未満は confidence=low。Claude は「来週 ±◯kcal、根拠は…」と会話で提案する材料に使う(数値の断定はしない)。',
+      inputSchema: { windowDays: z.number().int().min(7).max(120).optional() },
+      annotations: READ,
+    },
+    async ({ windowDays }) => {
+      const ctx = makeContext(env);
+      return ok({ provenance: 'd1_confirmed', ...(await getNutritionStatus(ctx, { windowDays })) });
+    },
+  );
+
+  server.registerTool(
+    'get_plateau_indicators',
+    {
+      title: '種目別 停滞検知(e1RM)',
+      description:
+        '直近 windowDays 日(既定56)で各種目のセッション最高 e1RM を集計し、前半 vs 後半の最高で trend(progressing/plateau/declining)を記述分類して返す。{ exercise_id, name, trend, early_best_e1rm, late_best_e1rm, pct_change, sessions }。3セッション以上の種目のみ。±2% を停滞帯とする工学的閾値。**これは判定材料であり「デロードせよ」等の処方はしない** — Claude が会話で「ベンチが3週間停滞→デロードやレップ調整を検討?」と提案する。e1RM は推定1RM(reps>12 等は除外済)。',
+      inputSchema: { windowDays: z.number().int().min(14).max(180).optional() },
+      annotations: READ,
+    },
+    async ({ windowDays }) => {
+      const ctx = makeContext(env);
+      return ok({
+        provenance: 'd1_confirmed',
+        plateaus: await getPlateauIndicators(ctx, { windowDays }),
+      });
+    },
+  );
+
+  server.registerTool(
+    'get_meal_recovery_correlation',
+    {
+      title: '食事×翌朝の回復 相関',
+      description:
+        '直近 days 日(既定28)の食事(塩分/糖質/炭水化物/最後の食事時刻)と**翌朝**の回復(HRV/安静時心拍/睡眠効率)を層別クロス。各 dimension を中央値で高/低に分け、各回復指標の**中央値差と n** のみ返す: { dimension, split, metric, highN, lowN, highMedian, lowMedian, diff }。**因果・p値・相関係数は出さない**(実測主義)。各群 n<5 は出さない(発見なしは findings 空)。「高塩分の翌朝は安静時心拍が高め(中央値+3bpm, n=18)」のような事実提示にとどめ、Claude は傾向として慎重に扱う。D1食事正本 × GH回復ミラーの両方を持つ本アプリ固有の分析。',
+      inputSchema: { days: z.number().int().min(14).max(120).optional() },
+      annotations: READ,
+    },
+    async ({ days }) => {
+      const ctx = makeContext(env);
+      return ok({
+        provenance: 'd1_confirmed',
+        ...(await getMealRecoveryCorrelation(ctx, { days })),
+      });
     },
   );
 

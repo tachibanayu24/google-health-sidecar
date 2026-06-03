@@ -88,7 +88,17 @@ api.patch('/settings', async (c) => {
   ) {
     return c.json({ error: 'unitPreference(kg|lb) and e1rmFormula(epley|brzycki) required' }, 400);
   }
-  await updateSettings(ctx, body);
+  // BMR用プロフィール(任意)。範囲外は null に正規化(捏造を避ける)。
+  const num = (v: unknown, lo: number, hi: number) =>
+    typeof v === 'number' && v >= lo && v <= hi ? v : null;
+  await updateSettings(ctx, {
+    unitPreference: body.unitPreference,
+    e1rmFormula: body.e1rmFormula,
+    locale: body.locale,
+    heightCm: num(body.heightCm, 50, 300),
+    birthYear: num(body.birthYear, 1900, 2100),
+    sex: body.sex === 'male' || body.sex === 'female' ? body.sex : null,
+  });
   return c.json({ ok: true });
 });
 

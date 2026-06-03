@@ -47,6 +47,9 @@ export interface Settings {
   unit_preference: 'kg' | 'lb';
   e1rm_formula: 'epley' | 'brzycki';
   locale: string;
+  height_cm: number | null;
+  birth_year: number | null;
+  sex: 'male' | 'female' | null;
 }
 export interface NutritionTarget {
   phase: string;
@@ -317,6 +320,9 @@ export const api = {
     unitPreference: 'kg' | 'lb';
     e1rmFormula: 'epley' | 'brzycki';
     locale?: string;
+    heightCm?: number | null;
+    birthYear?: number | null;
+    sex?: 'male' | 'female' | null;
   }) => req<{ ok: true }>('/settings', { method: 'PATCH', body: JSON.stringify(body) }),
   setNutritionTarget: (body: {
     phase: 'bulk' | 'cut' | 'maintain';

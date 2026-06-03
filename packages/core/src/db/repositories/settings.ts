@@ -25,13 +25,24 @@ export async function getActiveNutritionTarget(
 /** settings(単一行 id=1)を更新。public な write API は services 層(updateSettings)。 */
 export async function updateSettingsRow(
   db: Db,
-  input: { unit_preference: WeightUnit; e1rm_formula: E1rmFormula; locale: string },
+  input: {
+    unit_preference: WeightUnit;
+    e1rm_formula: E1rmFormula;
+    locale: string;
+    height_cm?: number | null;
+    birth_year?: number | null;
+    sex?: 'male' | 'female' | null;
+  },
 ): Promise<void> {
   await db.run(
-    'UPDATE settings SET unit_preference=?, e1rm_formula=?, locale=?, updated_at=unixepoch() WHERE id=1',
+    `UPDATE settings SET unit_preference=?, e1rm_formula=?, locale=?,
+       height_cm=?, birth_year=?, sex=?, updated_at=unixepoch() WHERE id=1`,
     input.unit_preference,
     input.e1rm_formula,
     input.locale,
+    input.height_cm ?? null,
+    input.birth_year ?? null,
+    input.sex ?? null,
   );
 }
 

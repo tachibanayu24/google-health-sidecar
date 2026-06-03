@@ -40,6 +40,10 @@ export const Settings = z.object({
   unit_preference: WeightUnit,
   e1rm_formula: E1rmFormula,
   locale: z.string(),
+  // BMR(Mifflin-St Jeor)用の身体プロフィール(任意。§energy / migration 0018)。
+  height_cm: z.number().nullable(),
+  birth_year: z.number().int().nullable(),
+  sex: z.enum(['male', 'female']).nullable(),
   updated_at: Unix,
 });
 export type Settings = z.infer<typeof Settings>;

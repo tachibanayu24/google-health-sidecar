@@ -19,16 +19,13 @@
 - ☑ **C-11 own-write 第2キー(gh_data_origin)のテスト**
   既に前回レビュー対応でテスト済(782/784/791/792)だったため、「両キー無しガード」の1ケースのみ追加(計131 tests)。
 
-## Phase 2 — MCP read 面を厚く(最高レバレッジ・§0.5 バケツB)
+## Phase 2 — MCP read 面を厚く(最高レバレッジ・§0.5 バケツB)✅完了
 
-- ☐ **BMR 基盤(A-1 の前提)**
-  settings に身長/年齢/性別を追加 → Mifflin-St Jeor で BMR 算出する純関数(domain)。総消費 = BMR + active_energy の定義を可能に。
-- ☐ **A-1 `get_nutrition_status`(適応型TDEE)**
-  体重トレンド(加重移動平均)× 摂取kcal から消費を逆算。フェーズ目標レート vs 実レートのズレ。遵守ゲート(記録薄い週は出さない)。純関数 + repo + MCP read ツール。実測主義: 推定は推定明示。
-- ☐ **A-3 `get_plateau_indicators`(停滞検知)**
-  主要種目の e1RM 確定値を時系列で見て、同RPE帯で横ばい/低下を検出。純関数 + MCP read。デロード提案の判断材料(判定はClaude)。
-- ☐ **A-2 `get_meal_recovery_correlation`(食事×回復相関)**
-  過去N日の食事(PFC/塩/糖/食事時刻)× 翌朝の回復(HRV/RHR/睡眠効率)を層別クロス。**n と中央値差のみ**(因果・p値は出さない)。N不足は「発見なし」。
+- ☑ **BMR 基盤** migration 0018(settings に height_cm/birth_year/sex)+ `bmrMifflin`(domain/energy.ts, Mifflin-St Jeor)。web 設定に「身体プロフィール」カード(任意入力・他設定を消さないマージ保存)。
+- ☑ **A-1 `get_nutrition_status`** domain/energy.ts(`linearWeightTrend`+`computeAdaptiveTdee`)+ services/insights.ts + MCP。体重直線トレンド×摂取で TDEE 逆算。遵守ゲート(<7日/記録薄→insufficient/low)。BMR 同梱。
+- ☑ **A-3 `get_plateau_indicators`** domain/training-progress.ts(`classifyE1rmTrend`)+ services/workout.ts(セッション最高e1RMの前後半比較)+ MCP。±2%帯で plateau。
+- ☑ **A-2 `get_meal_recovery_correlation`** domain/nutrition-recovery.ts(`correlate`・中央値分割)+ services/insights.ts + MCP。食事×翌朝回復、n と中央値差のみ・各群n<5は非表示。
+- テスト: energy 8 / training-progress 4 / nutrition-recovery 2 追加(計145)。
 
 ## Phase 3 — Web UX
 
