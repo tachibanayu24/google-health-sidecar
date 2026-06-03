@@ -34,10 +34,13 @@
 - ☑ **B-7 セット削除見直し + ルーティン空状態ガイド** 記録画面: 最後の1セット削除で種目ごと除去(disabled撤廃)。Routines 空状態を具体的な頼み方の例つきカードに。
 - ☑ **(追加)ルーティンの web 削除** オーナー指摘で、Routine 詳細に削除ボタン + `DeleteConfirmModal`(kind='routine')を追加(`DELETE /routines/:id`)。
 
-## Phase 4 — 品質保証(新ツールも対象に)
+## Phase 4 — 品質保証 ✅完了
 
-- ☐ **C-8 MCP/Web contract テスト**
-  core は130 tests あるが web/mcp はゼロ。MCPツール(特に Phase2 の新ツール)と認証ゲート(timingSafeEqual/ipv4InCidr)・主要 API エンドポイントの contract を vitest で。
+- ☑ **C-8 MCP/Web contract テスト(土台)**
+  MCP 認証ガードの純関数(timingSafeEqual/ipv4InCidr)を `apps/mcp/src/auth.ts` に切り出し vitest 10件。
+  web は最小 vitest 設定(Cloudflare/Reactプラグイン非読込)+ lib/datetime のテスト6件(日付演算=ナビ/ピッカーの土台)。
+  両アプリに `test` script を追加し `pnpm -r test` で core(145)+web(6)+mcp(10)が走る。
+  **残(別タスク)**: 全MCPツール/全APIルートの網羅的 contract テストは大きいので段階的に。今回は最重要の認証境界 + 日付演算を固めた。
 
 ---
 
