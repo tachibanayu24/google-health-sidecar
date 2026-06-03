@@ -13,7 +13,9 @@ import {
   Trash2,
   Wind,
 } from 'lucide-react';
+import { useState } from 'react';
 import { Card, Stat } from '../components/Card';
+import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { Empty, ErrorBox, Loading } from '../components/state';
 import {
   api,
@@ -99,12 +101,22 @@ export function RecoveryScreen({
 function BodyLogCard({ date }: { date: string }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['body-log', date], queryFn: () => api.bodyLog(date) });
+  const [confirm, setConfirm] = useState<{ id: string; label: string } | null>(null);
   const del = useMutation({
     mutationFn: (id: string) => api.deleteBodyMetric(id),
-    onSuccess: () => invalidateBody(qc),
+    onSuccess: () => {
+      invalidateBody(qc);
+      setConfirm(null);
+    },
   });
   const logs = q.data?.logs ?? [];
   if (logs.length === 0) return null; // その日の測定が無ければ非表示
+  const labelOf = (l: BodyLogEntry) => {
+    const parts: string[] = [];
+    if (l.weight_kg != null) parts.push(`${round(l.weight_kg, 1)}kg`);
+    if (l.body_fat_pct != null) parts.push(`${round(l.body_fat_pct, 1)}%`);
+    return `${epochToJstHhmm(l.measured_at)} ${parts.join(' / ')}`;
+  };
   return (
     <Card title="体組成" right={<Scale className="h-4 w-4 text-faint" strokeWidth={2.2} />}>
       <ul className="divide-y divide-line/50">
@@ -112,24 +124,24 @@ function BodyLogCard({ date }: { date: string }) {
           <BodyLogRow
             key={l.id}
             log={l}
-            onDelete={() => del.mutate(l.id)}
-            deleting={del.isPending && del.variables === l.id}
+            onRequestDelete={() => setConfirm({ id: l.id, label: labelOf(l) })}
           />
         ))}
       </ul>
+      {confirm && (
+        <DeleteConfirmModal
+          kind="body"
+          targetLabel={confirm.label}
+          isPending={del.isPending}
+          onConfirm={() => del.mutate(confirm.id)}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
     </Card>
   );
 }
 
-function BodyLogRow({
-  log,
-  onDelete,
-  deleting,
-}: {
-  log: BodyLogEntry;
-  onDelete: () => void;
-  deleting: boolean;
-}) {
+function BodyLogRow({ log, onRequestDelete }: { log: BodyLogEntry; onRequestDelete: () => void }) {
   return (
     <li className="flex items-center gap-3 py-2">
       <span className="tnum w-12 shrink-0 text-[11px] font-semibold text-faint">
@@ -155,9 +167,8 @@ function BodyLogRow({
       <button
         type="button"
         aria-label="この測定を削除"
-        onClick={onDelete}
-        disabled={deleting}
-        className="flex h-7 w-7 items-center justify-center rounded-full text-faint transition-colors hover:text-accent disabled:opacity-40 [-webkit-tap-highlight-color:transparent]"
+        onClick={onRequestDelete}
+        className="flex h-7 w-7 items-center justify-center rounded-full text-faint transition-colors hover:text-accent [-webkit-tap-highlight-color:transparent]"
       >
         <Trash2 className="h-4 w-4" strokeWidth={2.2} />
       </button>

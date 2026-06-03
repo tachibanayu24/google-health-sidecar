@@ -11,21 +11,23 @@ export function DeleteConfirmModal({
   onConfirm,
   onCancel,
 }: {
-  kind: 'meal' | 'workout';
+  kind: 'meal' | 'workout' | 'body';
   targetLabel: string;
   isPending?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const note =
+    kind === 'workout'
+      ? 'セットや自己ベストの記録も削除され、復元できません。'
+      : kind === 'body'
+        ? 'この測定値を削除します。手入力分は Google Health からも削除されます。元に戻せません。'
+        : 'この操作は取り消せません。';
   return (
     <Modal onClose={onCancel}>
       <div className="text-center">
         <h2 className="font-display text-base font-bold">{targetLabel} を削除しますか?</h2>
-        <p className="mt-1.5 text-sm text-muted">
-          {kind === 'workout'
-            ? 'セットや自己ベストの記録も削除され、復元できません。'
-            : 'この操作は取り消せません。'}
-        </p>
+        <p className="mt-1.5 text-sm text-muted">{note}</p>
         <div className="mt-4 flex gap-2">
           <button
             type="button"

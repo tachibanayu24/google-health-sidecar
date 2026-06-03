@@ -11,7 +11,7 @@ import {
   Scale,
   Share2,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Card } from '../components/Card';
 import { NutrientBars } from '../components/NutrientBars';
 import { ErrorBox, Loading } from '../components/state';
@@ -21,6 +21,11 @@ import { DOW_JA, formatDateForDisplay, jstDayOfWeek, shiftDate, todayJst } from 
 import { invalidateAfterFlush } from '../lib/invalidate';
 import { flushOutbox, pendingCount, subscribeOutbox } from '../lib/outbox';
 import { round } from '../lib/units';
+
+// 体重/体脂肪のデュアル軸トレンド。recharts を eager(Home初期)に入れないため lazy 読み込み。
+const BodyTrendChart = lazy(() =>
+  import('../components/BodyTrendChart').then((m) => ({ default: m.BodyTrendChart })),
+);
 
 /** ホーム = 今日のグランス + 日付ナビ(選択日に各グランスを整合)。詰め込みは排除。 */
 export function HomeScreen({
@@ -244,18 +249,20 @@ function BodyStrip({
         </div>
         {hasTrend && (
           <div className="mt-2.5 border-t border-line/50 pt-2.5">
-            <Sparkline series={series} />
+            <Suspense fallback={<div className="h-36 animate-pulse rounded-lg bg-line/40" />}>
+              <BodyTrendChart data={series} />
+            </Suspense>
             <div className="mt-1 flex items-center justify-end gap-3 text-[10px] text-faint">
               <span className="flex items-center gap-1">
                 <span className="h-0.5 w-3 rounded-full bg-ink" />
-                体重
+                体重(左)
               </span>
               <span className="flex items-center gap-1">
                 <span
                   className="h-0.5 w-3 rounded-full"
                   style={{ backgroundColor: 'var(--color-fat)' }}
                 />
-                体脂肪
+                体脂肪(右)
               </span>
               <span>直近90日</span>
             </div>
@@ -263,72 +270,6 @@ function BodyStrip({
         )}
       </Card>
     </button>
-  );
-}
-
-/**
- * 依存なしの軽量スパークライン(recharts を初期バンドルに足さない)。
- * 体重と体脂肪を同一グラフに2ライン重ね描き。スケールが違うため各系列を独立に min-max 正規化。
- */
-function Sparkline({
-  series,
-}: {
-  series: Array<{ weight_kg: number | null; body_fat_pct: number | null }>;
-}) {
-  const w = 100;
-  const h = 38;
-  const n = series.length;
-  if (n < 2) return null;
-  // 系列を「(元indexでのx, 正規化y)」の polyline points 文字列に。非nullのみ連結。
-  const line = (key: 'weight_kg' | 'body_fat_pct'): string | null => {
-    const pts = series
-      .map((s, i) => ({ i, v: s[key] }))
-      .filter((p): p is { i: number; v: number } => p.v != null);
-    if (pts.length < 2) return null;
-    const vals = pts.map((p) => p.v);
-    const min = Math.min(...vals);
-    const max = Math.max(...vals);
-    const span = max - min || 1;
-    return pts
-      .map((p) => {
-        const x = (p.i / (n - 1)) * w;
-        const y = h - 3 - ((p.v - min) / span) * (h - 6); // 上下3pxパディング
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-      })
-      .join(' ');
-  };
-  const weightLine = line('weight_kg');
-  const fatLine = line('body_fat_pct');
-  return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      preserveAspectRatio="none"
-      className="h-9 w-full"
-      aria-hidden="true"
-    >
-      {fatLine && (
-        <polyline
-          points={fatLine}
-          fill="none"
-          stroke="var(--color-fat)"
-          strokeWidth={2.2}
-          vectorEffect="non-scaling-stroke"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-      )}
-      {weightLine && (
-        <polyline
-          points={weightLine}
-          fill="none"
-          stroke="var(--color-ink)"
-          strokeWidth={2.2}
-          vectorEffect="non-scaling-stroke"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-      )}
-    </svg>
   );
 }
 
