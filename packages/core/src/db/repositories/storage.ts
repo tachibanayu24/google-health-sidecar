@@ -19,23 +19,13 @@ export interface GhBodyPoint {
  *  weight と body-fat は別 dataType=別行で入り、read 層が date で coalesce する。 */
 export async function upsertGhBodyPoint(db: Db, p: GhBodyPoint): Promise<void> {
   const date = toJstDateString(p.measuredAtSec * 1000);
-  const existing = await db.raw<{ id: string }>(
-    'SELECT id FROM body_metrics WHERE gh_external_id = ?',
-    p.ghExternalId,
-  );
-  if (existing[0]) {
-    await db.run(
-      `UPDATE body_metrics SET ${p.field} = ?, measured_at = ?, updated_at = ? WHERE gh_external_id = ?`,
-      p.value,
-      p.measuredAtSec,
-      nowSec(),
-      p.ghExternalId,
-    );
-    return;
-  }
+  // 単一文の ON CONFLICT で冪等 upsert(daily_metrics/sleep と統一)。SELECT→INSERT の非原子2段を排し
+  // 重複行を構造的に防ぐ。p.field は 'weight_kg' | 'body_fat_pct'(マッパー由来の固定値)。
   await db.run(
     `INSERT INTO body_metrics (id, date, measured_at, ${p.field}, source, gh_external_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'google_health', ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, 'google_health', ?, ?, ?)
+     ON CONFLICT (gh_external_id) WHERE gh_external_id IS NOT NULL DO UPDATE SET
+       ${p.field} = excluded.${p.field}, measured_at = excluded.measured_at, updated_at = excluded.updated_at`,
     ulid(),
     date,
     p.measuredAtSec,

@@ -791,4 +791,10 @@ describe('isKnownOwnWrite(echo ループ防止=二重計上防止の核)', () =>
     expect(await isKnownOwnWrite(db, 'dp-EXTERNAL', '')).toBe(false); // ''='' の誤一致なし
     expect(await isKnownOwnWrite(db, 'dp-A', '')).toBe(true); // datapoint_id 一致は有効
   });
+
+  it('datapoint_id も origin も無ければ own-write でない(両 null ガード)', async () => {
+    const db = makeTestDb();
+    expect(await isKnownOwnWrite(db, undefined, undefined)).toBe(false);
+    expect(await isKnownOwnWrite(db, '', '')).toBe(false); // 空文字は null 扱い
+  });
 });

@@ -10,14 +10,14 @@
 
 ---
 
-## Phase 1 — 小さな堅牢化(低リスク・ウォームアップ)
+## Phase 1 — 小さな堅牢化(低リスク・ウォームアップ)✅完了
 
-- ☐ **C-10 body_metrics upsert を ON CONFLICT 統一**
-  `storage.ts` の `upsertGhBodyPoint` が SELECT→UPDATE/INSERT の2段構造。daily_metrics/sleep と同じ `ON CONFLICT(gh_external_id) DO UPDATE` に統一し、重複行(先日の18.1×2のような)を構造的に防ぐ。要: body_metrics に gh_external_id の UNIQUE があるか確認。
-- ☐ **C-9 save_routine の N+1 解消**
-  MCP `save_routine` の exerciseId 解決がループ毎クエリ。Map キャッシュで重複解決を1回に(同一idの再解決を避ける)。`resolveExerciseId` 呼び出しを unique 集合に対してのみ実行(既に Set 化済みか確認)。
-- ☐ **C-11 own-write 第2キー(gh_data_origin)のテスト**
-  `isKnownOwnWrite` の datapoint_id 一致 / gh_data_origin 一致 / 空文字ガード を core テストで固める(review-findings P1#5)。
+- ☑ **C-10 body_metrics upsert を ON CONFLICT 統一**
+  `storage.ts upsertGhBodyPoint` を SELECT→分岐 から単一 `INSERT ... ON CONFLICT(gh_external_id) WHERE gh_external_id IS NOT NULL DO UPDATE` に(sleep と同型)。部分UNIQUEインデックス確認済。重複行を構造的に防止。
+- ☑ **C-9 save_routine の N+1 解消**
+  既に unique Set で重複解決は回避済だったが、さらに `getExistingExerciseIds`(新規・1クエリ)で実在id を一括判定し、名前/エイリアスのみ個別解決に。通常ケース(全部id)はDB 1クエリ。
+- ☑ **C-11 own-write 第2キー(gh_data_origin)のテスト**
+  既に前回レビュー対応でテスト済(782/784/791/792)だったため、「両キー無しガード」の1ケースのみ追加(計131 tests)。
 
 ## Phase 2 — MCP read 面を厚く(最高レバレッジ・§0.5 バケツB)
 

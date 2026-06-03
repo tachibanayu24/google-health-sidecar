@@ -73,3 +73,14 @@ export async function getExerciseMusclesForExercises(
 export async function listMuscleGroups(db: Db): Promise<MuscleGroup[]> {
   return db.all(MuscleGroup, 'SELECT * FROM muscle_groups ORDER BY region, id');
 }
+
+/** 渡した id 群のうちカタログに実在するものの集合を1クエリで返す(save_routine の一括解決用)。 */
+export async function getExistingExerciseIds(db: Db, ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = await db.raw<{ id: string }>(
+    `SELECT id FROM exercises WHERE id IN (${placeholders})`,
+    ...ids,
+  );
+  return new Set(rows.map((r) => r.id));
+}

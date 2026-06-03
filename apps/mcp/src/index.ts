@@ -21,6 +21,7 @@ import {
   getDailyMetricsByDate,
   getExerciseHistory,
   getExerciseMusclesForExercises,
+  getExistingExerciseIds,
   getMealById,
   getMealItems,
   getMealItemsForMeals,
@@ -898,9 +899,16 @@ function buildServer(env: Env): McpServer {
           raws.add(e.exerciseId);
           if (e.altExerciseId) raws.add(e.altExerciseId);
         }
+      // 実在 id は1クエリで一括判定し、残り(名前/エイリアス)だけ個別解決(N+1回避)。
+      const rawList = [...raws];
+      const existing = await getExistingExerciseIds(ctx.db, rawList);
       const resolved = new Map<string, string>();
       const unresolved: Array<{ input: string; candidates: unknown }> = [];
-      for (const raw of raws) {
+      for (const raw of rawList) {
+        if (existing.has(raw)) {
+          resolved.set(raw, raw);
+          continue;
+        }
         const r = await resolveExerciseId(ctx.db, raw);
         if ('id' in r) resolved.set(raw, r.id);
         else unresolved.push({ input: raw, candidates: r.candidates });
