@@ -13,7 +13,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import Model, { type IExerciseData } from 'react-body-highlighter';
 import { createPortal } from 'react-dom';
-import { Card } from '../components/Card';
+import { Card, StatTile } from '../components/Card';
 import { WorkoutReport } from '../components/WorkoutReport';
 import {
   api,
@@ -489,9 +489,9 @@ export function RecordScreen({
 
       {items.length > 0 && (
         <div className="flex items-center justify-around rounded-2xl bg-ink px-4 py-3 text-card">
-          <Metric label="種目" value={items.length} />
-          <Metric label="セット" value={totalSets} />
-          <Metric label={`総量(${unit})`} value={Math.round(totalVolume).toLocaleString()} />
+          <StatTile label="種目" value={items.length} />
+          <StatTile label="セット" value={totalSets} />
+          <StatTile label={`総量(${unit})`} value={Math.round(totalVolume).toLocaleString()} />
         </div>
       )}
 
@@ -645,17 +645,6 @@ function BodyPicker({
         bodyColor="#e6e1d5"
         onClick={onClick}
       />
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="text-center">
-      <div className="stat text-xl leading-none">{value}</div>
-      <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-card/60">
-        {label}
-      </div>
     </div>
   );
 }

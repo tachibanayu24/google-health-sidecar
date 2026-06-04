@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bookmark, Check, Plus, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Card } from '../components/Card';
+import { Card, StatTile } from '../components/Card';
 import { Sheet } from '../components/Overlay';
 import { api, type FoodSuggestion, type MealPreset } from '../lib/api';
 import { jstHourNow } from '../lib/datetime';
@@ -256,11 +256,11 @@ export function MealScreen({
           <span className="text-xs font-semibold text-card/55">kcal</span>
         </div>
         <div className="flex gap-3.5">
-          <M label="P" v={Math.round(total.p)} />
-          <M label="F" v={Math.round(total.f)} />
-          <M label="C" v={Math.round(total.c)} />
-          <M label="塩g" v={round(total.salt, 1)} />
-          <M label="繊g" v={round(total.fiber, 1)} />
+          <StatTile label="P" value={Math.round(total.p)} />
+          <StatTile label="F" value={Math.round(total.f)} />
+          <StatTile label="C" value={Math.round(total.c)} />
+          <StatTile label="塩g" value={round(total.salt, 1)} />
+          <StatTile label="繊g" value={round(total.fiber, 1)} />
         </div>
       </div>
 
@@ -489,17 +489,6 @@ function Field({
         className="w-full rounded-lg border border-line bg-paper px-1 py-2 text-center text-sm font-semibold tnum outline-none focus:border-accent focus:bg-card"
       />
     </label>
-  );
-}
-
-function M({ label, v }: { label: string; v: number }) {
-  return (
-    <div className="text-center">
-      <div className="stat text-xl leading-none">{v}</div>
-      <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-card/60">
-        {label}
-      </div>
-    </div>
   );
 }
 

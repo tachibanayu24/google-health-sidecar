@@ -59,3 +59,15 @@ export function Stat({
     </div>
   );
 }
+
+/** 暗色/アクセント背景に乗せる小さな中央寄せ統計タイル(value 上・label 下)。Record/Meal の集計サマリに共用。 */
+export function StatTile({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="text-center">
+      <div className="stat text-xl leading-none">{value}</div>
+      <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-card/60">
+        {label}
+      </div>
+    </div>
+  );
+}
