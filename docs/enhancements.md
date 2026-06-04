@@ -207,11 +207,76 @@
 
 ---
 
+## 18. データ拡張ロードマップ(2026-06-04 調査・9エージェント workflow 由来)
+
+§1-17 が「**持っているデータ**の計算・可視化」なのに対し、ここは「**扱えるデータそのものを増やす**」別軸の棚卸し。「GH網羅性」「GH外で価値あるデータ」「取得手段」を多角調査し、実測主義・MCP-first・単一オーナー(男性・フィジーク志向)のレンズで選別した。§0.5 の通り **取込は必ず MCP read 露出と対**(データを入れても Claude が読めなければ moat にならない)。
+
+### 18.0 結論(3行)
+- **GH のセンシング(客観指標)はほぼ取り尽くした。** 残る伸びしろは GH内に少し(皮膚温・血糖・水分)。
+- **本丸は GH外。** ボディメイクで一番効くデータ(周径・進捗写真・血液検査・主観コンディション)は GH に器が無い。
+- **手段は全部ある。** MCP手入力 / Web手入力 / Claude vision OCR(検査票)/ 一部公式API(Dexcom・Withings・Oura は単一ユーザー無料枠あり)。アグリゲータ(Terra=月$399〜)だけは個人に非現実的で不採用。
+
+### 18.1 GH(センシング)網羅性 — ほぼ取り尽くした
+取込済み **10種**: 体重・体脂肪・睡眠・安静時心拍・HRV・SpO₂・VO₂max・呼吸数・歩数・活動消費kcal。GH内の残り:
+
+| dataType | 状態 | 判断 |
+|---|---|---|
+| **皮膚温** `daily-sleep-temperature-derivations` | **配線済みで眠っている**(`discovery-pin.ts` 定義・`mappers.ts` 抽出・`daily_metrics.skin_temp_c` カラムまで実装、`unverified` フラグで停止中) | **起こす価値・大。** baseline+30日相対SD が API 付属 → 自前ベースライン計算不要で readiness に体温逸脱を1チャンネル追加。**ほぼタダ**(impact:大 / effort:低) |
+| **血糖** `blood-glucose` | GHにスキーマ・実データ有(CGM=間質液) | CGM 着用時のみ高価値。未着用なら空(impact:大 / effort:大) |
+| **水分** `hydration-log` | GH自己入力前提・interval | 塩分(既追跡)との合わせ技(impact:中 / effort:中) |
+| 心拍ゾーン/深部体温/基礎代謝/total-calories | データ未供給 or 単一スカラに乗らない | 取らない(空 or 既存モデルと相性悪) |
+| ECG/不整脈通知(IRN) | 専用scope承認の壁・医療用途 | **不採用**(非ボディメイク・非医療方針) |
+
+### 18.2 GH外で価値あるデータ(本丸)
+
+| カテゴリ | データ | impact / effort | 一言 |
+|---|---|---|---|
+| **体づくり実測** | **周径**(腕/胸/腰/腿・左右) | 大 / **低** | GHに器なし。見た目進捗の数値化の唯一安価手段。**テーブル実在(§18.5)** |
+| | 進捗写真(前/横/後) | 大 / 中 | 停滞期でも見た目は変わる。R2 が必要 |
+| | DEXA/InBody 体組成 | 大 / 中 | 除脂肪量・部位別・骨密度。体重でなく**除脂肪量**でバルク/カット判定 |
+| | キャリパー皮脂厚(mm) | 中 / 低 | 自宅で高頻度に追える体脂肪トレンド(%は推定ラベル、mm生値が一次) |
+| | **セット毎 RIR** | 中 / **低** | 既存 `rpe` 列の隣。e1RM/PR精度・停滞検知(⑭)の入力 |
+| **臨床(健康診断)** | **血液パネル**(脂質/HbA1c/肝/腎/CBC/**テストステロン等ホルモン**/VitD) | 大 / 中 | 検査機関の**実測=最高信頼**。食事(D1)×検査値の時系列対比は二層モデル固有の価値。AST/ALT は筋逸脱で上がる等の交絡を AI が文脈化 |
+| | 血圧 | 中 / 中 | GH取得不可確定。塩分(既追跡)×血圧 |
+| **主観コンディション** | **Hooper式ウェルネス**(疲労/ストレス/睡眠/筋肉痛 1-7)+ **部位別DOMS 0-10** | 大 / 中 | 客観(HRV)と弱相関の独立情報。「HRVは平常だが本人疲労7=黄」を拾う。DOMSは既存16筋群IDと部位粒度で突合できる唯一の主観回復軸 |
+| | セッションRPE(Foster sRPE)/ 気分・モチベ / カフェイン・アルコール / サプリ継続 / リビドー(回復プロキシ) | 中〜低 | オーバーリーチ・減量破綻の早期サイン。男性特化プロキシも |
+| メタ | 体重測定条件フラグ(空腹・排尿後・同スケール) | 中 / 低 | 適応型TDEE(⑩)・トレンド体重(⑪)の計量ノイズ除去 |
+
+### 18.3 取得手段(コスト順)
+1. **MCP手入力(最汎用・最安)** — 既存の単一書込パス+冪等(clientRequestId)+echo+confirm を再利用。`ghPushed=false` 明示。新dataタイプの最短取込パス。
+2. **Web手入力** — 週次の周径など定型反復はフォームが速く揃う。
+3. **Claude vision OCR** — 検査結果票・栄養ラベルの画像取込。**API が無いデータ(健診)の唯一現実的手段**。誤読防止に確認1段(echo+confirm)。
+4. **公式API(単一ユーザー無料枠あり)** — Dexcom(CGM・Individual枠 最大5ユーザー)/ Withings(体組成・血圧)/ Oura(睡眠・HRV・体温、生指標のみ取り合成スコアは捨てる)/ Strava。既存 OAuth+cron pull パターンに乗る(`tokenStore.ts`/KV)。
+5. **CSV/ファイルインポート** — Libre/Renpho 等。過去データ遡及にも(design §5.5 懸案)。
+6. **Health Connect ブリッジ** — 3rd-party→Health Connect→GHミラー→既存cron。GHに出れば `READ_DATATYPES` に1行(要 `gh:probe`)。
+7. ~~アグリゲータ(Terra/Spike/Vital)~~ — 月$399〜で**個人に非現実的 → 不採用**。無料公式API+手入力+OCR で十分。
+
+### 18.4 着手優先度
+- **Tier S(ほぼタダ・本人が今すぐ測れる)**: ①周径を実稼働化(§18.5)/ ②皮膚温を起こして readiness 組込 / ③主観コンディション(Hooper+部位別DOMS、既存ベースライン関数④を再利用)/ ④セット毎RIR。
+- **Tier A(器を先に作ると後で効く)**: ⑤`lab_results` 縦持ち表 + `log_lab_result` + vision OCR + read ツール。健診の実データが来た瞬間に入る器(「来たらやる」と整合)。
+- **Tier B(デバイス次第)**: CGM(Dexcom公式)/ Withings・Oura / 血圧。
+
+### 18.5 設計上の確定事項(調査で固めた前提)
+- **`body_measurements` テーブルは migration 0001 で実在・本番適用済みだが休眠**(`packages/core/src/db/migrations/0001_schema.sql` L235、`id/date/site/value_cm/note/created_at`。service/MCP/UI 未配線)。→ 周径は **migration不要**、`saveBodyMeasurement` service + MCP `log_body_measurement`/`get_body_measurements` + からだ画面フォームのみ。左右は `site` 命名規約(`arm_l`/`arm_r`)で吸収。**最安・最速の勝ち筋**。
+- **皮膚温は配線済みで `unverified` 停止中** — フラグを外し baseline/30日相対SD も保存すれば自前ベースライン計算不要で robust な体温逸脱を N-of-M に追加できる。
+- **血液検査は項目ごとにテーブルを作らない** — `lab_results` を**縦持ち1表**(`panel/analyte/value/unit/ref_low/ref_high/measured_at/lab_name/method/draw_time/fasting`)に集約。項目追加で migration を切らずに済む。基準値レンジ・採血時刻・絶食フラグを最初から持つ(テストステロン/コルチゾールは日内変動が大きく時刻必須)。診断・p値は出さず実値+基準値のみ。
+- **カフェイン/アルコールは別テーブルより `meal_items` に列追加**(`caffeine_mg` 等)— 時刻は `meals.logged_at` で既に持つ。食事タイムラインとの二重管理を避ける。GH cloud に栄養素フィールド無し=D1のみ保持(push対象外)。
+- **取込は MCP read 露出と対**(§0.5-B)— 周径/体組成/labs を入れたら `get_circumference_trend`/`get_body_composition_trend`/`get_lab_trend` 等の read ツールも同梱。
+
+### 18.6 抜け漏れ(批判フェーズ指摘・将来検討)
+- 実行品質メタ(目標レップ到達/未達・フォーム破綻・partial/full ROM)— RIR/sRPE に次ぐプログレッション入力。
+- 中断/欠席・体調不良・怪我イベントの離散ログ(annotation 1表)— readiness/停滞検知の交絡を切り分ける。低コスト。
+- USDA/OFF の GTIN/Food ID 保持 — 将来 GH identified-food push(design §5.2 保留)や `autocomplete_foods` 再現性に効く。
+
+---
+
 ## あえてやらない(再提起防止)
 - **微量栄養素84種(Cronometer級)** — データを持っていない → 捏造になる。非対象。
 - **実績バッジ / 単純ストリーク** — 不要と判断済み。Gentler型「休養もOK」の思想は Readiness に吸収。
 - **5/3/1等の固定プログラム** — スタイルに硬すぎ。RPEベースの「次回提案1案」(⑬)で代替。
 - **偽の合成スコア(0-100)** — 実測主義に反する。信号+実測値+平常範囲で。
+- **ECG / 不整脈通知(IRN)** — 専用scope承認(SaMD審査)の壁が高く、ボディメイク分析に無価値・非医療方針に反する(§18.1)。
+- **統合アグリゲータ(Terra/Spike/Vital)** — 月$399〜で単一オーナーに費用対効果が成立しない。無料公式API+手入力+OCR で代替(§18.3)。
 
 ## 関連
 - 既存設計: `docs/design.md`(§8.2 PR / §8.3 stimulus / §8.6 将来項目 / §12 cron・通知)、`docs/mcp-design.md`(ツールカタログ)。
