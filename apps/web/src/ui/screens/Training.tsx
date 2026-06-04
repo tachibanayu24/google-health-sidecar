@@ -8,6 +8,7 @@ import {
   Refrigerator,
   Sparkles,
   Trophy,
+  Truck,
 } from 'lucide-react';
 import { useState } from 'react';
 import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter';
@@ -121,6 +122,8 @@ const VOLUME_UNITS: Array<{
   { name: '軽自動車', kg: 850, counter: '台', Icon: Car },
   { name: 'アフリカゾウ', kg: 6000, counter: '頭', emoji: '🐘' },
   { name: 'バス', kg: 12000, counter: '台', Icon: Bus },
+  { name: 'トラック', kg: 25000, counter: '台', Icon: Truck },
+  { name: 'シロナガスクジラ', kg: 100000, counter: '頭', emoji: '🐋' },
   { name: 'ジャンボジェット', kg: 180000, counter: '機', Icon: Plane },
 ];
 
