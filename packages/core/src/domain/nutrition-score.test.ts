@@ -108,24 +108,40 @@ describe('scoreNutrition(1日・cut)', () => {
 });
 
 describe('scoreNutrition(カテゴリ・cut)', () => {
-  it('1食のたんぱく質20gで満点(絶対バンド)・10gは低スコア', () => {
-    const ok = scoreNutrition({
-      totals: { kcal: 400, protein: 30, fat: 12, carbs: 40, fiber: 5, saltG: 1.5 },
+  it('たんぱく質は1食の取り分を満点とする(取り分以上=満点・未満=比例減点)', () => {
+    // default share=1/3 → 取り分 = 125/3 ≈ 41.7g
+    const full = scoreNutrition({
+      totals: { kcal: 500, protein: 45, fat: 12, carbs: 40, fiber: 5, saltG: 1.5 },
       targets: T,
       phase: 'cut',
       scope: 'category',
     });
-    expect(ok.axes.find((a) => a.key === 'protein')?.score).toBe(1);
-
-    const low = scoreNutrition({
-      totals: { kcal: 300, protein: 10, fat: 12, carbs: 40, fiber: 5, saltG: 1.5 },
+    expect(full.axes.find((a) => a.key === 'protein')?.score).toBe(1); // 取り分以上=満点
+    const half = scoreNutrition({
+      totals: { kcal: 300, protein: 20, fat: 12, carbs: 40, fiber: 5, saltG: 1.5 },
       targets: T,
       phase: 'cut',
       scope: 'category',
     });
-    const p = low.axes.find((a) => a.key === 'protein');
-    expect(p?.score ?? 1).toBeLessThan(0.6);
+    const p = half.axes.find((a) => a.key === 'protein');
+    expect(p?.score ?? 1).toBeLessThan(0.6); // 20g=取り分の半分以下
     expect(p?.zone).toBe('low');
+  });
+
+  it('昼食(取り分0.35)で P20g/F18.4g は満点にならない(取り分基準・実例)', () => {
+    const r = scoreNutrition({
+      totals: { kcal: 600, protein: 20, fat: 18.4, carbs: 60, fiber: 6, saltG: 1.5 },
+      targets: T,
+      phase: 'cut',
+      scope: 'category',
+      mealShare: 0.35,
+    });
+    const p = r.axes.find((a) => a.key === 'protein');
+    const f = r.axes.find((a) => a.key === 'fat');
+    expect(p?.score ?? 1).toBeLessThan(0.6); // 20g << 昼の取り分≈44g
+    expect(p?.zone).toBe('low');
+    expect(f?.score ?? 1).toBeLessThan(1); // 18.4g > 昼の脂質取り分≈17.5g
+    expect(f?.zone).toBe('high');
   });
 
   it('カテゴリには収支ゲートをかけない(カロリー超過でも overall を一律上限にしない)', () => {

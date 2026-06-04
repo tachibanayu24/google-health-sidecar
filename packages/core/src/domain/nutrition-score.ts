@@ -144,44 +144,33 @@ function specAndRef(
 ): { spec: BandSpec; ref: number | null } {
   if (scope === 'category') {
     switch (key) {
-      // たんぱく質: 取り分で割らず絶対バンド[20,40]・上振れ寛容(ロイシン閾値は食事サイズに依らず一定・§5)。
-      case 'protein':
+      // たんぱく質: 1食の取り分(=1日目標×取り分)を満点とする下限型。取り分未満は比例減点
+      // (例 昼の取り分44gに対し20gは半分以下=満点でない)。取り分以上は満点(floor型=more可)。
+      // ※「20gでロイシン閾値クリア」は別観点で、満点にはしない(オーナーの1日目標125gへの寄与で見る)。
+      case 'protein': {
+        const m = t.protein * mealShare;
         return {
-          spec: {
-            z0: 8,
-            i0: 20,
-            i1: INF,
-            z1: INF,
-            floorLow: 0.05,
-            floorHigh: 0,
-            downCurve: 'linear',
-          },
-          ref: 20,
-        };
-      // 他マクロは「1日目標×取り分(朝<昼<夕)」中心の広いバンド(食間配分は柔軟・夜の糖質減等を罰さない)。
-      case 'fat': {
-        const m = t.fat * mealShare; // ゆるい上限: 1食の低脂質は罰しない
-        return {
-          spec: {
-            z0: 0,
-            i0: 0,
-            i1: m * 1.5,
-            z1: m * 2.5,
-            floorLow: 1,
-            floorHigh: 0,
-            downCurve: 'linear',
-          },
+          spec: { z0: 0, i0: m, i1: INF, z1: INF, floorLow: 0, floorHigh: 0, downCurve: 'linear' },
           ref: round1(m),
         };
       }
+      // 脂質: ゆるい上限を1食の取り分に締める。取り分以下は満点(低脂質は罰しない)、取り分超で減点。
+      case 'fat': {
+        const m = t.fat * mealShare;
+        return {
+          spec: { z0: 0, i0: 0, i1: m, z1: m * 2, floorLow: 1, floorHigh: 0, downCurve: 'linear' },
+          ref: round1(m),
+        };
+      }
+      // 糖質: 山型を取り分中心に(day と同形 0.8〜1.1倍を取り分で縮尺)。低すぎ/高すぎ両方を減点。
       case 'carbs': {
         const m = t.carbs * mealShare;
         return {
           spec: {
-            z0: m * 0.2,
-            i0: m * 0.5,
-            i1: m * 1.5,
-            z1: m * 2.5,
+            z0: m * 0.4,
+            i0: m * 0.8,
+            i1: m * 1.1,
+            z1: m * 1.7,
             floorLow: 0,
             floorHigh: 0,
             downCurve: 'linear',
