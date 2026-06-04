@@ -16,9 +16,6 @@ export const GH_SCOPES = {
   sleepRead: `${BASE}.sleep.readonly`,
 } as const;
 
-/** OIDC ログイン(系統A)用の最小スコープ。 */
-export const OIDC_SCOPES = ['openid', 'email'] as const;
-
 /**
  * Pattern B(系統B)で要求するスコープ集合。
  * nutritionRead は GH 既存の食事を取り込む(pull)ために常時要求(§5.2)。

@@ -55,13 +55,6 @@ export async function getBodyLogByDate(db: Db, date: string): Promise<BodyLogRow
   );
 }
 
-export async function getLatestWeight(db: Db): Promise<BodyMetric | null> {
-  return db.one(
-    BodyMetric,
-    'SELECT * FROM body_metrics WHERE weight_kg IS NOT NULL ORDER BY measured_at DESC LIMIT 1',
-  );
-}
-
 // ============ センシング read(GH ミラー。Home ダッシュボード用) ============
 export interface SleepSummaryRow {
   total_min: number;

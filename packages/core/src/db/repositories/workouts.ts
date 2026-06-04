@@ -1,47 +1,9 @@
-import type { WorkoutExercise, WorkoutSession, WorkoutSet } from '../../domain/models';
+import type { WorkoutSession } from '../../domain/models';
 import { WorkoutSession as WorkoutSessionSchema } from '../../domain/models';
 import { nowSec } from '../../util/date';
-import { insertStmt, runBatch, type Stmt } from '../batch-helpers';
 import type { Db } from '../client';
 
-/**
- * ワークアウト永続化(§8.5: 多表書込みは単一 db.batch で原子的に)。
- * load_kg 等の集計は service(M1)が metrics.ts で計算し total_volume_kg を埋めて渡す。
- */
-
-export interface SaveSessionInput {
-  session: WorkoutSession;
-  exercises: { exercise: WorkoutExercise; sets: WorkoutSet[] }[];
-}
-
-/** セッション+種目+セットを単一 batch で原子的に保存(§8.5)。 */
-export async function saveSessionBatch(db: Db, input: SaveSessionInput): Promise<void> {
-  const stmts: Stmt[] = [];
-  stmts.push(insertStmt('workout_sessions', input.session as unknown as Record<string, unknown>));
-  for (const { exercise, sets } of input.exercises) {
-    stmts.push(insertStmt('workout_exercises', exercise as unknown as Record<string, unknown>));
-    for (const s of sets) {
-      stmts.push(insertStmt('workout_sets', s as unknown as Record<string, unknown>));
-    }
-  }
-  await runBatch(db, stmts);
-}
-
-/** 派生(total_volume_kg / active_duration / est_calories)を再計算更新(§8.5: batch外で可)。 */
-export async function updateSessionDerived(
-  db: Db,
-  sessionId: string,
-  d: { totalVolumeKg: number; activeDurationSec: number | null; estCalories: number | null },
-): Promise<void> {
-  await db.run(
-    `UPDATE workout_sessions SET total_volume_kg=?, active_duration_sec=?, est_calories=?, updated_at=? WHERE id=?`,
-    d.totalVolumeKg,
-    d.activeDurationSec,
-    d.estCalories,
-    nowSec(),
-    sessionId,
-  );
-}
+/** ワークアウトの read 群。書き込みは services 経由(単一 db.batch・§8.5)。 */
 
 /** 中断再開(§9.3): in_progress の最新セッション。24h 超の放置は除外(バナーが残り続けない)。 */
 export async function getInProgressSession(db: Db): Promise<WorkoutSession | null> {
@@ -207,11 +169,6 @@ export async function getSessionsByDate(db: Db, date: string): Promise<RecentSes
       ORDER BY s.started_at DESC`,
     date,
   );
-}
-
-/** D1 からセッション削除(workout_exercises/sets は ON DELETE CASCADE)。public は services.deleteWorkout。 */
-export async function deleteSessionRow(db: Db, id: string): Promise<void> {
-  await db.run('DELETE FROM workout_sessions WHERE id = ?', id);
 }
 
 export interface SessionDetailRow {

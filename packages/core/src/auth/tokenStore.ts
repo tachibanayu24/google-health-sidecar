@@ -59,19 +59,6 @@ async function persist(
   return { accessToken: resp.access_token, refreshToken, expiresAt };
 }
 
-/** 初回 bootstrap(CLI / OAuth callback)でトークンを投入。 */
-export async function storeInitialTokens(
-  tokens: KVNamespace,
-  resp: GoogleTokenResponse,
-): Promise<void> {
-  if (!resp.refresh_token) {
-    throw new ProviderAuthError(
-      'refresh_token が無い。access_type=offline + prompt=consent + 同意画面 In production publish を確認(§6.2)。',
-    );
-  }
-  await persist(tokens, resp, nowSec(), resp.refresh_token);
-}
-
 /**
  * 有効な access_token を返す。失効60s前なら自動refresh。
  * 両Worker共通。LOCK 取得失敗側は短く待って再read。

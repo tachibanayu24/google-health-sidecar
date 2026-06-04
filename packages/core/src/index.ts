@@ -20,7 +20,6 @@ export * from './providers/google-health/provider';
 export * from './providers/HealthProvider';
 export * from './providers/scopes';
 export * from './services/index';
-export * from './util/cache';
 export * from './util/date';
 export * from './util/errors';
 export * from './util/rate-limit';

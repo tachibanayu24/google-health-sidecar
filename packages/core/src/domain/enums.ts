@@ -155,10 +155,6 @@ export const DailyMetricKind = z.enum([
 ]);
 export type DailyMetricKind = z.infer<typeof DailyMetricKind>;
 
-// 読み取り境界の出所(§10.2)。
-export const Provenance = z.enum(['d1_confirmed', 'gh_provisional']);
-export type Provenance = z.infer<typeof Provenance>;
-
 // ---------- GH同期 ----------
 // body_metric=体重 datapoint、body_metric_fat=体脂肪 datapoint(同一 body_metrics 行を別 datapoint で追跡)。
 export const SyncEntityType = z.enum(['workout', 'meal', 'body_metric', 'body_metric_fat']);
@@ -184,11 +180,4 @@ export const MEAL_TYPE_TO_GH: Record<MealType, Exclude<GhMealType, 'UNSPECIFIED'
   MorningSnack: 'SNACK',
   AfternoonSnack: 'SNACK',
   Anytime: 'SNACK',
-};
-
-/** role 既定の contribution(§7 exercise_muscles。種目別に上書き可)。 */
-export const ROLE_DEFAULT_CONTRIBUTION: Record<MuscleRole, number> = {
-  primary: 1.0,
-  secondary: 0.5,
-  stabilizer: 0.25,
 };
