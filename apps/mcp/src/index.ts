@@ -951,7 +951,7 @@ function registerRoutineTools(server: McpServer, env: Env) {
                     repsMin: z.number().int().min(1).max(100).optional(),
                     repsMax: z.number().int().min(1).max(100).optional(),
                     targetLoad: z.string().max(40).optional(),
-                    note: z.string().max(500).optional(),
+                    note: z.string().max(120).optional(), // 種目ごとの淡色サブ行に出る短いキュー(UI都合で簡潔に)
                   }),
                 )
                 .max(30)
