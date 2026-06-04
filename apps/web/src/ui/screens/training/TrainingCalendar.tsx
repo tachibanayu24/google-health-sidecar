@@ -159,7 +159,6 @@ function DayCell({
     : rested
       ? `${formatDateForDisplay(date)} 実施(補助のみ)`
       : `${formatDateForDisplay(date)} レスト`;
-  const multi = regions.length > 1;
   return (
     <div
       title={title}
@@ -174,11 +173,10 @@ function DayCell({
         {day}
       </span>
       {trained && (
-        <div
-          className={`absolute inset-0 flex items-center justify-center font-bold leading-none ${multi ? 'gap-0 text-[9px]' : 'text-[11px]'}`}
-        >
+        // 部位ラベルは縮小せず一定サイズ。各 span を半幅にして「1行2文字まで・3つ目は改行」で折り返す。
+        <div className="absolute inset-0 flex flex-wrap content-center justify-center font-bold leading-none">
           {regions.map((r) => (
-            <span key={r.key} style={{ color: r.color }}>
+            <span key={r.key} className="w-1/2 text-center text-[12px]" style={{ color: r.color }}>
               {r.label === '体幹' ? '幹' : r.label}
             </span>
           ))}
