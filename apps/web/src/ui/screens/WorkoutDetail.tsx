@@ -116,14 +116,12 @@ export function WorkoutDetail({
         </span>
       </BackHeader>
 
-      {/* スタッツ */}
-      <Card>
-        <div className="flex items-center justify-around rounded-2xl bg-ink px-4 py-3 text-card">
-          <StatTile label="種目" value={exercises.length} />
-          <StatTile label="セット" value={setCount} />
-          <StatTile label="総量(kg)" value={Math.round(session.totalVolumeKg).toLocaleString()} />
-        </div>
-      </Card>
+      {/* スタッツ(赤系グラデの強調カード。白カード内に黒カードを入れ子にしない) */}
+      <div className="flex items-center justify-around rounded-2xl bg-gradient-to-br from-[#e0521f] to-[#bf3d18] px-4 py-3.5 text-card shadow-[0_10px_26px_-12px] shadow-accent/60">
+        <StatTile label="種目" value={exercises.length} />
+        <StatTile label="セット" value={setCount} />
+        <StatTile label="総量(kg)" value={Math.round(session.totalVolumeKg).toLocaleString()} />
+      </div>
 
       {/* メモ(UI=あなた / MCP=AIラベル。最大200文字・単一欄) */}
       <Card title="メモ">

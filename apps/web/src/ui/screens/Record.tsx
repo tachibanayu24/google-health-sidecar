@@ -488,7 +488,7 @@ export function RecordScreen({
       </div>
 
       {items.length > 0 && (
-        <div className="flex items-center justify-around rounded-2xl bg-ink px-4 py-3 text-card">
+        <div className="flex items-center justify-around rounded-2xl bg-gradient-to-br from-[#e0521f] to-[#bf3d18] px-4 py-3.5 text-card shadow-[0_10px_26px_-12px] shadow-accent/60">
           <StatTile label="種目" value={items.length} />
           <StatTile label="セット" value={totalSets} />
           <StatTile label={`総量(${unit})`} value={Math.round(totalVolume).toLocaleString()} />
