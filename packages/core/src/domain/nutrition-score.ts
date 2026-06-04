@@ -95,7 +95,9 @@ const LABEL: Record<NutritionAxisKey, string> = {
   sodium: '塩分',
 };
 
-const KEYS: NutritionAxisKey[] = ['protein', 'fat', 'carbs', 'fiber', 'sodium'];
+// 塩分は1日単位の予算(カロリーと同じ)= 1食を単独で断じない。よって category は塩分を軸に含めない。
+const DAY_KEYS: NutritionAxisKey[] = ['protein', 'fat', 'carbs', 'fiber', 'sodium'];
+const CATEGORY_KEYS: NutritionAxisKey[] = ['protein', 'fat', 'carbs', 'fiber'];
 
 type WeightTable = Record<NutritionAxisKey, number>;
 
@@ -202,14 +204,7 @@ function specAndRef(
           ref: round1(m),
         };
       }
-      // 塩分(カテゴリ): 1食で食塩 >0.5·target だけ減点フラグ。1食で断じない。
-      case 'sodium': {
-        const s = t.salt;
-        return {
-          spec: { z0: 0, i0: 0, i1: 0.5 * s, z1: s, floorLow: 1, floorHigh: 0, downCurve: 'quad' },
-          ref: round1(0.5 * s),
-        };
-      }
+      // 塩分(sodium)は category では採点しない(1日単位の予算=CATEGORY_KEYS に含めない)。
     }
   }
   // ---- day ----
@@ -279,7 +274,8 @@ function specAndRef(
         ref: T,
       };
     }
-    // 上限型・累進(quad)。目標(=食塩相当量g)まで満点、超過は加速的に減点。
+    // 上限型・累進(quad)。目標(=食塩相当量g)=上限まで満点、超過は加速的に減点。
+    // ※塩分は1日単位の予算なので day スコープのみ採点(category では軸に含めない=CATEGORY_KEYS)。
     case 'sodium': {
       const T = t.salt;
       return {
@@ -309,8 +305,9 @@ export function scoreNutrition(input: {
 }): NutritionScore {
   const { totals, targets, phase, scope } = input;
   const weights = WEIGHTS[phase][scope];
+  const keys = scope === 'day' ? DAY_KEYS : CATEGORY_KEYS;
 
-  const axes: AxisScore[] = KEYS.map((key) => {
+  const axes: AxisScore[] = keys.map((key) => {
     const value = axisInput(key, totals);
     const { spec, ref } = specAndRef(key, scope, targets);
     if (value == null) {

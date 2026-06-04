@@ -5,6 +5,7 @@ import { Card } from '../components/Card';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { MealReport } from '../components/MealReport';
 import { NutrientBars } from '../components/NutrientBars';
+import { NutritionScoreCard } from '../components/NutritionScoreCard';
 import { Empty, Loading } from '../components/state';
 import { api } from '../lib/api';
 import { formatDateForDisplay } from '../lib/datetime';
@@ -29,6 +30,10 @@ export function MealCategoryDetail({
   const qc = useQueryClient();
   const today = useQuery({ queryKey: ['today', date], queryFn: () => api.today(date) });
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
+  const score = useQuery({
+    queryKey: ['nutrition-score', date],
+    queryFn: () => api.nutritionScore(date),
+  });
   const [confirm, setConfirm] = useState<{ id: string; label: string } | null>(null);
   const [share, setShare] = useState(false);
   const del = useMutation({
@@ -63,6 +68,8 @@ export function MealCategoryDetail({
     salt_g: Math.round(saltFromSodiumMg(tot.sodium) * 10) / 10,
     fiber_g: Math.round(tot.fiber * 10) / 10,
   };
+  // この区分の栄養スコア(マクロ目標適合度・4軸=塩分/カロリーは1日単位)。
+  const catScore = score.data?.categories.find((c) => c.mealType === mealType)?.score ?? null;
 
   return (
     <div className="mx-auto max-w-md space-y-4">
@@ -124,6 +131,9 @@ export function MealCategoryDetail({
               <span className="ml-2 text-[11px] text-faint">{items.length}品</span>
             </div>
           </Card>
+
+          {/* この区分の栄養スコア(マクロ目標適合度レーダー) */}
+          {catScore && <NutritionScoreCard score={catScore} isCategory />}
 
           {/* 品目別 内訳 */}
           <Card title="内訳">

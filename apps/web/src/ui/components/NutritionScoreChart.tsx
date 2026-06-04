@@ -79,8 +79,11 @@ export function NutritionScoreChart({ score }: { score: NutritionScopeScore }) {
         </ResponsiveContainer>
       </div>
 
-      {/* 軸の実測値/目標と zone。na は「—」で明示(0と区別)。 */}
-      <div className="mt-1 grid grid-cols-5 gap-1 text-center">
+      {/* 軸の実測値/目標と zone。na は「—」で明示(0と区別)。軸数は scope で可変(day=5/category=4)。 */}
+      <div
+        className="mt-1 grid gap-1 text-center"
+        style={{ gridTemplateColumns: `repeat(${score.axes.length}, minmax(0, 1fr))` }}
+      >
         {score.axes.map((a) => (
           <div key={a.key}>
             <div className="text-[10px] text-faint">{a.labelJa}</div>

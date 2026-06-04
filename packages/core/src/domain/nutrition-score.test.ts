@@ -138,4 +138,45 @@ describe('scoreNutrition(カテゴリ・cut)', () => {
     // たんぱく質満点・他もバンド内なので総合は高い(day なら kcal ゲートで 0.6 だがカテゴリは別)
     expect(r.overall).toBeGreaterThan(0.6);
   });
+
+  it('カテゴリは塩分を軸に含めない(1日単位の予算=4軸)', () => {
+    const r = scoreNutrition({
+      totals: { kcal: 400, protein: 30, fat: 12, carbs: 40, fiber: 5, saltG: 5 },
+      targets: T,
+      phase: 'cut',
+      scope: 'category',
+    });
+    expect(r.axes).toHaveLength(4);
+    expect(r.axes.find((a) => a.key === 'sodium')).toBeUndefined();
+    expect(r.axes.map((a) => a.key)).toEqual(['protein', 'fat', 'carbs', 'fiber']);
+  });
+});
+
+describe('scoreNutrition(1日・塩分は上限型)', () => {
+  it('6g(目標=上限)まで満点、超過で累進減点', () => {
+    const at = scoreNutrition({
+      totals: { kcal: 1700, protein: 125, fat: 50, carbs: 170, fiber: 21, saltG: 6 },
+      targets: T,
+      phase: 'cut',
+      scope: 'day',
+    });
+    expect(at.axes.find((a) => a.key === 'sodium')?.score).toBe(1); // 6gまで満点
+    // quad累進: 9g(+50%)→0.75、12g(+100%)→0。超過ほど急減。
+    const over = scoreNutrition({
+      totals: { kcal: 1700, protein: 125, fat: 50, carbs: 170, fiber: 21, saltG: 9 },
+      targets: T,
+      phase: 'cut',
+      scope: 'day',
+    });
+    const s9 = over.axes.find((a) => a.key === 'sodium')?.score ?? 1;
+    expect(s9).toBeLessThan(1);
+    expect(s9).toBeCloseTo(0.75, 2);
+    const far = scoreNutrition({
+      totals: { kcal: 1700, protein: 125, fat: 50, carbs: 170, fiber: 21, saltG: 12 },
+      targets: T,
+      phase: 'cut',
+      scope: 'day',
+    });
+    expect(far.axes.find((a) => a.key === 'sodium')?.score).toBe(0);
+  });
 });

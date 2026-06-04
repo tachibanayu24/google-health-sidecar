@@ -1,10 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
+import { lazy, Suspense } from 'react';
 import { api } from '../lib/api';
 import { formatDateLong } from '../lib/datetime';
 import { MEAL_ORDER, mealTypeJa } from '../lib/meals';
 import { saltFromSodiumMg } from '../lib/units';
 import { NutrientBars } from './NutrientBars';
 import { ShareImageModal } from './ShareImageModal';
+import { Loading } from './state';
+
+// recharts は eager に入れない(chart チャンクに lazy 同梱)。
+const NutritionScoreChart = lazy(() =>
+  import('./NutritionScoreChart').then((m) => ({ default: m.NutritionScoreChart })),
+);
 
 /**
  * 食事のシェアレポート(画像エクスポート)。
@@ -24,7 +31,16 @@ export function MealReport({
 }) {
   const today = useQuery({ queryKey: ['today', date], queryFn: () => api.today(date) });
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
+  const score = useQuery({
+    queryKey: ['nutrition-score', date],
+    queryFn: () => api.nutritionScore(date),
+  });
   const target = settings.data?.nutritionTarget ?? null;
+  // スコープに対応する栄養スコア(day=1日全体 / category=その区分)。
+  const scopeScore =
+    mode === 'day'
+      ? (score.data?.day ?? null)
+      : (score.data?.categories.find((c) => c.mealType === mealType)?.score ?? null);
 
   const allMeals = today.data?.meals ?? [];
   const meals = mode === 'category' ? allMeals.filter((m) => m.meal_type === mealType) : allMeals;
@@ -96,6 +112,15 @@ export function MealReport({
           showContribution={mode === 'category'}
         />
       </div>
+
+      {/* 栄養スコア(マクロ目標適合度レーダー)。day=5軸 / category=4軸(塩分・カロリーは1日単位)。 */}
+      {scopeScore && (
+        <div className="mt-4 rounded-2xl border border-line/70 bg-card/70 px-3 py-3">
+          <Suspense fallback={<Loading />}>
+            <NutritionScoreChart score={scopeScore} />
+          </Suspense>
+        </div>
+      )}
 
       {/* 内訳 */}
       {mode === 'day' ? (
