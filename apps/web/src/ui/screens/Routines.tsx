@@ -92,16 +92,20 @@ function ExerciseRow({ e }: { e: RoutineDay['exercises'][number] }) {
   const reps = rangeLabel(e.reps_min, e.reps_max);
   return (
     <li className="py-1.5">
-      <div className="flex items-baseline gap-2">
-        <span className="text-sm font-semibold text-ink">{e.exercise_name ?? e.exercise_id}</span>
-        {e.alt_exercise_name && (
-          <span className="text-[11px] text-muted">or {e.alt_exercise_name}</span>
-        )}
-        <span className="tnum ml-auto shrink-0 text-[11px] font-semibold text-muted">
-          {sets && `${sets}セット`}
-          {sets && reps && ' / '}
-          {reps && `${reps}レップ`}
-          {e.target_load && <span className="ml-1 text-accent-ink">{e.target_load}</span>}
+      <div className="flex items-start gap-2">
+        <span className="min-w-0 flex-1 text-sm font-semibold text-ink">
+          {e.exercise_name ?? e.exercise_id}
+          {e.alt_exercise_name && (
+            <span className="ml-1.5 text-[11px] font-normal text-muted">
+              or {e.alt_exercise_name}
+            </span>
+          )}
+        </span>
+        {/* セット/レップは slash でなく改行スタックにし、種目名の左スペースを広く取る。 */}
+        <span className="tnum flex shrink-0 flex-col items-end text-[11px] font-semibold leading-tight text-muted">
+          {sets && <span>{sets}セット</span>}
+          {reps && <span>{reps}レップ</span>}
+          {e.target_load && <span className="text-accent-ink">{e.target_load}</span>}
         </span>
       </div>
       {e.note && <div className="mt-0.5 text-[11px] leading-snug text-faint">{e.note}</div>}
