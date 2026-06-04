@@ -95,9 +95,8 @@ const LABEL: Record<NutritionAxisKey, string> = {
   sodium: '塩分',
 };
 
-// 塩分は1日単位の予算(カロリーと同じ)= 1食を単独で断じない。よって category は塩分を軸に含めない。
-const DAY_KEYS: NutritionAxisKey[] = ['protein', 'fat', 'carbs', 'fiber', 'sodium'];
-const CATEGORY_KEYS: NutritionAxisKey[] = ['protein', 'fat', 'carbs', 'fiber'];
+// 5軸。day=1日目標、category=1食の取り分(他マクロ=1日目標÷3、塩分=上限の取り分 target/3)で採点。
+const KEYS: NutritionAxisKey[] = ['protein', 'fat', 'carbs', 'fiber', 'sodium'];
 
 type WeightTable = Record<NutritionAxisKey, number>;
 
@@ -141,10 +140,11 @@ function specAndRef(
   key: NutritionAxisKey,
   scope: NutritionScope,
   t: ScoreTargets,
+  mealShare: number, // category の1食の取り分(普通の食事ボリューム=朝<昼<夕)。day では未使用。
 ): { spec: BandSpec; ref: number | null } {
   if (scope === 'category') {
     switch (key) {
-      // たんぱく質: 1日目標÷3 ではなく絶対バンド[20,40]・上振れ寛容(ロイシン閾値・§5)。
+      // たんぱく質: 取り分で割らず絶対バンド[20,40]・上振れ寛容(ロイシン閾値は食事サイズに依らず一定・§5)。
       case 'protein':
         return {
           spec: {
@@ -158,9 +158,9 @@ function specAndRef(
           },
           ref: 20,
         };
-      // 他マクロは 1日目標÷3 中心の広いバンド(食間配分は柔軟・夜の糖質減等を罰さない)。
+      // 他マクロは「1日目標×取り分(朝<昼<夕)」中心の広いバンド(食間配分は柔軟・夜の糖質減等を罰さない)。
       case 'fat': {
-        const m = t.fat / 3; // ゆるい上限: 単日/1食の低脂質は罰しない
+        const m = t.fat * mealShare; // ゆるい上限: 1食の低脂質は罰しない
         return {
           spec: {
             z0: 0,
@@ -175,7 +175,7 @@ function specAndRef(
         };
       }
       case 'carbs': {
-        const m = t.carbs / 3;
+        const m = t.carbs * mealShare;
         return {
           spec: {
             z0: m * 0.2,
@@ -190,7 +190,7 @@ function specAndRef(
         };
       }
       case 'fiber': {
-        const m = t.fiber / 3;
+        const m = t.fiber * mealShare;
         return {
           spec: {
             z0: m * 0.2,
@@ -204,7 +204,15 @@ function specAndRef(
           ref: round1(m),
         };
       }
-      // 塩分(sodium)は category では採点しない(1日単位の予算=CATEGORY_KEYS に含めない)。
+      // 塩分(カテゴリ)= 上限型を1食の取り分(target×share、朝<昼<夕)に縮尺。少ない分には満点(less=可)、
+      // 取り分超過で quad 累進、1食だけで1日分(target)使い切ると0。「この食事は塩分が重い」を捉える。
+      case 'sodium': {
+        const i1 = t.salt * mealShare;
+        return {
+          spec: { z0: 0, i0: 0, i1, z1: t.salt, floorLow: 1, floorHigh: 0, downCurve: 'quad' },
+          ref: round1(i1),
+        };
+      }
     }
   }
   // ---- day ----
@@ -274,8 +282,8 @@ function specAndRef(
         ref: T,
       };
     }
-    // 上限型・累進(quad)。目標(=食塩相当量g)=上限まで満点、超過は加速的に減点。
-    // ※塩分は1日単位の予算なので day スコープのみ採点(category では軸に含めない=CATEGORY_KEYS)。
+    // 上限型・累進(quad)。目標(=食塩相当量g/日)=上限まで満点、超過は加速的に減点。
+    // category は同型を1食の取り分(target/3)に縮尺(§5)。
     case 'sodium': {
       const T = t.salt;
       return {
@@ -302,14 +310,15 @@ export function scoreNutrition(input: {
   targets: ScoreTargets;
   phase: NutritionPhase;
   scope: NutritionScope;
+  mealShare?: number; // category の1食の取り分(朝<昼<夕)。未指定は均等 1/3。
 }): NutritionScore {
   const { totals, targets, phase, scope } = input;
   const weights = WEIGHTS[phase][scope];
-  const keys = scope === 'day' ? DAY_KEYS : CATEGORY_KEYS;
+  const mealShare = input.mealShare ?? 1 / 3;
 
-  const axes: AxisScore[] = keys.map((key) => {
+  const axes: AxisScore[] = KEYS.map((key) => {
     const value = axisInput(key, totals);
-    const { spec, ref } = specAndRef(key, scope, targets);
+    const { spec, ref } = specAndRef(key, scope, targets, mealShare);
     if (value == null) {
       return {
         key,

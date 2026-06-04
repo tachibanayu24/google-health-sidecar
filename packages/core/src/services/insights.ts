@@ -191,10 +191,12 @@ export interface NutritionScoreResponse {
   note: string;
 }
 
-const CATEGORY_LABEL: [string, string][] = [
-  ['Breakfast', '朝食'],
-  ['Lunch', '昼食'],
-  ['Dinner', '夕食'],
+// [mealType, 表示名, 1食の取り分(普通の食事ボリューム: 朝<昼<夕・合計1.0)]。
+// カテゴリ採点の閾値 = 1日目標 × share(塩分/脂質/糖質/繊維)。たんぱく質は絶対バンドで share 非依存。
+const CATEGORY_LABEL: [string, string, number][] = [
+  ['Breakfast', '朝食', 0.25],
+  ['Lunch', '昼食', 0.35],
+  ['Dinner', '夕食', 0.4],
 ];
 
 // アプリでは採点しない=トレーナーAIが会話で担う観点(なぜ不可かを併記・docs/nutrition-scoring-design.md §3.2)。
@@ -306,14 +308,20 @@ export async function getNutritionScore(
 
   const day = scoreNutrition({ totals: totalsFrom(rows), targets, phase, scope: 'day' });
 
-  const categories = CATEGORY_LABEL.flatMap(([mt, ja]) => {
+  const categories = CATEGORY_LABEL.flatMap(([mt, ja, share]) => {
     const catRows = rows.filter((r) => r.meal_type === mt);
     if (!catRows.length) return [];
     return [
       {
         mealType: mt,
         labelJa: ja,
-        score: scoreNutrition({ totals: totalsFrom(catRows), targets, phase, scope: 'category' }),
+        score: scoreNutrition({
+          totals: totalsFrom(catRows),
+          targets,
+          phase,
+          scope: 'category',
+          mealShare: share,
+        }),
       },
     ];
   });

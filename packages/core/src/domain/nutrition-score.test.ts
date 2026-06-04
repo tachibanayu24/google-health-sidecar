@@ -139,16 +139,47 @@ describe('scoreNutrition(カテゴリ・cut)', () => {
     expect(r.overall).toBeGreaterThan(0.6);
   });
 
-  it('カテゴリは塩分を軸に含めない(1日単位の予算=4軸)', () => {
-    const r = scoreNutrition({
-      totals: { kcal: 400, protein: 30, fat: 12, carbs: 40, fiber: 5, saltG: 5 },
+  it('カテゴリも塩分を採点(5軸・1食の取り分=target/3≈2gを上限)', () => {
+    const light = scoreNutrition({
+      totals: { kcal: 400, protein: 30, fat: 12, carbs: 40, fiber: 5, saltG: 1.5 },
       targets: T,
       phase: 'cut',
       scope: 'category',
     });
-    expect(r.axes).toHaveLength(4);
-    expect(r.axes.find((a) => a.key === 'sodium')).toBeUndefined();
-    expect(r.axes.map((a) => a.key)).toEqual(['protein', 'fat', 'carbs', 'fiber']);
+    const heavy = scoreNutrition({
+      totals: { kcal: 600, protein: 30, fat: 18, carbs: 60, fiber: 5, saltG: 5 },
+      targets: T,
+      phase: 'cut',
+      scope: 'category',
+    });
+    expect(light.axes).toHaveLength(5);
+    expect(light.axes.find((a) => a.key === 'sodium')?.score).toBe(1); // 取り分以下=満点
+    const hs = heavy.axes.find((a) => a.key === 'sodium');
+    expect(hs?.score ?? 1).toBeLessThan(0.6); // 1食5g=塩分過多
+    expect(hs?.zone).toBe('high');
+  });
+
+  it('取り分は朝<昼<夕(同じ塩分2gでも朝は減点・夕は満点)', () => {
+    const meal = { kcal: 500, protein: 30, fat: 16, carbs: 55, fiber: 6, saltG: 2 };
+    const bf = scoreNutrition({
+      totals: meal,
+      targets: T,
+      phase: 'cut',
+      scope: 'category',
+      mealShare: 0.25,
+    });
+    const dn = scoreNutrition({
+      totals: meal,
+      targets: T,
+      phase: 'cut',
+      scope: 'category',
+      mealShare: 0.4,
+    });
+    const bfSalt = bf.axes.find((a) => a.key === 'sodium')?.score ?? 1;
+    const dnSalt = dn.axes.find((a) => a.key === 'sodium')?.score ?? 0;
+    expect(dnSalt).toBe(1); // 夕(取り分=6×0.4=2.4g)では 2g は満点
+    expect(bfSalt).toBeLessThan(1); // 朝(取り分=6×0.25=1.5g)では 2g は取り分超過=減点
+    expect(dnSalt).toBeGreaterThan(bfSalt);
   });
 });
 

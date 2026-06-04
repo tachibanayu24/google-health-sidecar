@@ -68,7 +68,7 @@ export function MealCategoryDetail({
     salt_g: Math.round(saltFromSodiumMg(tot.sodium) * 10) / 10,
     fiber_g: Math.round(tot.fiber * 10) / 10,
   };
-  // この区分の栄養スコア(マクロ目標適合度・4軸=塩分/カロリーは1日単位)。
+  // この区分の栄養スコア(5軸・1食の取り分基準。塩分も採点、カロリーのみ1日単位ゆえ非対象)。
   const catScore = score.data?.categories.find((c) => c.mealType === mealType)?.score ?? null;
 
   return (

@@ -27,7 +27,7 @@ export function NutritionScoreCard({
       <p className="mt-2 text-[10px] leading-relaxed text-faint">
         マクロの目標適合度のみ(実測)。脂質の質・血糖負荷・食事の質は未採点 —
         トレーナーAIが会話で判断します。
-        {isCategory && ' 塩分・カロリーは1日単位で評価します。'}
+        {isCategory && ' 塩分はこの食事の取り分基準・カロリーは1日単位で評価。'}
       </p>
     </Card>
   );
