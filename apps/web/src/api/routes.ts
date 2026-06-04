@@ -54,6 +54,7 @@ import {
 } from '@ghs/core';
 import { Hono } from 'hono';
 import type { HonoEnv } from '../env';
+import { clampQueryInt } from './helpers';
 
 /** 破損しても落ちない JSON.parse(失敗時 null)。 */
 function safeJson(s: string): unknown {
@@ -169,7 +170,7 @@ api.get('/exercises/:id/history', async (c) => {
 
 api.get('/trends', async (c) => {
   const ctx = makeContext(c.env);
-  const days = Math.min(365, Number(c.req.query('days') ?? '90') || 90);
+  const days = clampQueryInt(c, 'days', 90, 365);
   const trends = await getTrends(ctx.db, jstDaysAgo(days));
   return c.json({ days, provenance: 'd1_confirmed', ...trends });
 });
@@ -237,7 +238,7 @@ api.get('/muscle-volume', async (c) => {
 
 api.get('/training-calendar', async (c) => {
   const ctx = makeContext(c.env);
-  const days = Math.min(120, Number(c.req.query('days') ?? '30') || 30);
+  const days = clampQueryInt(c, 'days', 30, 120);
   const cal = await getMuscleCalendar(ctx, { days });
   return c.json({ provenance: 'd1_confirmed', ...cal });
 });
@@ -304,7 +305,7 @@ api.post('/workouts', async (c) => {
 
 api.get('/workouts/recent', async (c) => {
   const ctx = makeContext(c.env);
-  const limit = Math.min(60, Number(c.req.query('limit') ?? '30') || 30);
+  const limit = clampQueryInt(c, 'limit', 30, 60);
   const sessions = await getRecentSessions(ctx.db, limit);
   return c.json({ sessions });
 });
