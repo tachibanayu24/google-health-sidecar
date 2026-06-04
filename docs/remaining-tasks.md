@@ -29,6 +29,9 @@
 
 ## 0.1 機能拡張の着手・完了(enhancements.md から移動)
 
+- **ワークアウト詳細画面 + メモ(著者ラベル)** — ✅実装・稼働(2026-06-04)。トレーニングの「最近のワークアウト」を食事ログと同じメンタルモデルに: Accordion 廃止→常時サマリのフラット一覧(最新10件+もっと見る)、行タップで `/workout/:id` 詳細(人体ヒートマップ + 種目×セット + メモ + 共有/編集/削除)。**ワークアウトごとのメモ**= 単一メモ欄 + 著者(user/ai)・last-writer-wins・最大200文字・GH非送信。UI(PATCH /workouts/:id/note=user)と **MCP `set_workout_note`(author=ai)** から書け、AI が書いたら UI/画像エクスポートに「AIコメント」ラベル。migration 0019(workout_sessions.note_author)。MCP 31本目。
+- **コードベース・リファクタリング(ファット解消/重複排除/構造)** — ✅(2026-06-04)。死コード一掃(cache.ts 等)、web→core 純関数の単一ソース化、`workout.ts`(813)→write/analytics 分割、MCP `index.ts`(1061)→register 関数分解+contract テスト、`Training.tsx`(928)→`screens/training/` 分割、`api.ts` 型を `api-types.ts` 分離、人体図 bucket 共通化、`StatTile` 統合、routes の read 定型を helpers 集約。全て挙動不変。
+
 - **食事スコアリング(マクロ目標適合度・レーダー)** — ✅実装・稼働(2026-06-04)。設計+トレーナーAIレビュー反映は `docs/nutrition-scoring-design.md`。1日全体+カテゴリ別(朝昼夕・間食除く)を P/脂質/糖質/繊維/塩分の5軸×目標適合度で 0..1 採点(台形バンド=下限/上限/山型・非対称ペナルティ・phase×scope加重・加重幾何平均・欠損は—で除外・収支致命軸ゲート)。カロリーは軸でなく収支ゲート+実数。**質(脂質の質/GI・GL/食事の質)は採点不能=実測で持たないため未採点**、`get_nutrition_score` は食品名を返し**トレーナーAIが会話で質を判断**(§8)。MCP 30本目 + web 食事画面レーダー(1日/朝昼夕トグル・理想輪郭・画像エクスポート)。**残**: 脂質/たんぱく質の質をAIが主観ラベルで採点組込は future work(設計書§10・今はやらない)。
 
 - **エネルギー収支の可視化 + Home 状態ファースト再構成** — ✅(2026-06-03)。食事画面とHomeに「収支(推定)= 摂取 −(BMR+活動消費)」を表示(BMRは身体プロフィール×Mifflin、`lib/energy.ts` 共通)。Home は 体組成→**コンディション(Readiness信号を昇格)**→栄養(収支統合)→トレーニング の順に再構成。MCP server instructions も維持カロリー=get_nutrition_status 優先に更新。design.md §8.11。
