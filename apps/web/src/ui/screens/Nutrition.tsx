@@ -1,15 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bookmark, ChevronLeft, ChevronRight, Flame, Plus, Share2, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { Card } from '../components/Card';
 import { DateField } from '../components/DateField';
 import { MealReport } from '../components/MealReport';
 import { NutrientBars } from '../components/NutrientBars';
+import { ShareImageModal } from '../components/ShareImageModal';
 import { Loading } from '../components/state';
-import { api, type TodayMeal } from '../lib/api';
+import { api, type NutritionScopeScore, type TodayMeal } from '../lib/api';
 import { DOW_JA, formatDateForDisplay, jstDayOfWeek, shiftDate, todayJst } from '../lib/datetime';
 import { energyBalance } from '../lib/energy';
 import { MEAL_ORDER, mealTypeJa } from '../lib/meals';
+
+// recharts(レーダー)を eager 食事バンドルに入れないため lazy 読み込み(chart チャンク)。
+const NutritionScoreChart = lazy(() =>
+  import('../components/NutritionScoreChart').then((m) => ({ default: m.NutritionScoreChart })),
+);
 
 /** 栄養画面(サブスクリーン)。kcal残ヒーロー + マクロ + 食事区分(タップで詳細レーダー)+ 記録導線。 */
 export function NutritionScreen({
@@ -31,7 +37,13 @@ export function NutritionScreen({
   const isToday = date === todayJst();
   const today = useQuery({ queryKey: ['today', date], queryFn: () => api.today(date) });
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
+  const score = useQuery({
+    queryKey: ['nutrition-score', date],
+    queryFn: () => api.nutritionScore(date),
+  });
   const [shareDay, setShareDay] = useState(false);
+  const [scope, setScope] = useState<string>('day'); // 'day' | mealType
+  const [shareScore, setShareScore] = useState(false);
   if (today.isLoading) return <Loading />;
   const t = today.data;
   const target = settings.data?.nutritionTarget ?? null;
@@ -53,6 +65,12 @@ export function NutritionScreen({
     intakeKcal: kcal,
     activeKcal,
   });
+
+  const sc = score.data;
+  const selectedScore: NutritionScopeScore | null =
+    scope === 'day'
+      ? (sc?.day ?? null)
+      : (sc?.categories.find((c) => c.mealType === scope)?.score ?? null);
 
   return (
     <div className="mx-auto max-w-md space-y-4">
@@ -185,6 +203,47 @@ export function NutritionScreen({
         />
       </Card>
 
+      {/* 栄養スコア(マクロ目標適合度・レーダー)。1日全体を主・カテゴリ別を従。 */}
+      {sc?.day && (
+        <Card title="栄養スコア(対目標)">
+          <div className="mb-2 flex items-center gap-1">
+            <ScopeTab label="1日" active={scope === 'day'} onClick={() => setScope('day')} />
+            {sc.categories.map((c) => (
+              <ScopeTab
+                key={c.mealType}
+                label={c.labelJa}
+                active={scope === c.mealType}
+                onClick={() => setScope(c.mealType)}
+              />
+            ))}
+            {selectedScore && (
+              <button
+                type="button"
+                aria-label="栄養スコアを画像で保存"
+                onClick={() => setShareScore(true)}
+                className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-muted active:bg-line/60"
+              >
+                <Share2 className="h-3.5 w-3.5" strokeWidth={2.2} />
+              </button>
+            )}
+          </div>
+          {selectedScore ? (
+            <Suspense fallback={<Loading />}>
+              <NutritionScoreChart score={selectedScore} />
+            </Suspense>
+          ) : (
+            <p className="py-6 text-center text-sm text-faint">この区分の記録がありません</p>
+          )}
+          {scope !== 'day' && (
+            <p className="mt-1 text-[10px] text-faint">※カテゴリ別は間食を含みません</p>
+          )}
+          <p className="mt-2 text-[10px] leading-relaxed text-faint">
+            マクロの目標適合度のみ(実測)。脂質の質・血糖負荷・食事の質は未採点 —
+            トレーナーAIが会話で判断します。
+          </p>
+        </Card>
+      )}
+
       <MealsCard meals={t?.meals ?? []} onOpenCategory={(mt) => onOpenCategory(mt, date)} />
 
       <PresetsCard onStart={onStartFromPreset} />
@@ -207,7 +266,50 @@ export function NutritionScreen({
       </div>
 
       {shareDay && <MealReport mode="day" date={date} onClose={() => setShareDay(false)} />}
+
+      {shareScore && selectedScore && (
+        <ShareImageModal
+          heading={`栄養スコア${scope === 'day' ? '・1日' : `・${selectedScore ? mealTypeJa(scope) : ''}`}`}
+          filename={`nutrition-score-${date}${scope === 'day' ? '' : `-${scope}`}.png`}
+          headerRight={
+            <span className="tnum whitespace-nowrap text-[12px] font-semibold text-muted">
+              {formatDateForDisplay(date)}({wd})
+            </span>
+          }
+          onClose={() => setShareScore(false)}
+        >
+          <Suspense fallback={<Loading />}>
+            <NutritionScoreChart score={selectedScore} />
+          </Suspense>
+          {scope !== 'day' && (
+            <p className="mt-2 text-center text-[10px] text-faint">※カテゴリ別は間食を含みません</p>
+          )}
+        </ShareImageModal>
+      )}
     </div>
+  );
+}
+
+/** 栄養スコアの scope 切替タブ(1日 / 朝昼夕)。 */
+function ScopeTab({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+        active ? 'bg-ink text-card' : 'text-muted active:bg-line/60'
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 

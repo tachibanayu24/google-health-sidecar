@@ -6,7 +6,14 @@ import {
   type TdeeResult,
 } from '../domain/energy';
 import { type CorrelationFinding, correlate, type DayPair } from '../domain/nutrition-recovery';
+import {
+  type NutritionScore,
+  type ScoreTargets,
+  type ScoreTotals,
+  scoreNutrition,
+} from '../domain/nutrition-score';
 import { jstDaysAgo, todayJst, toJstDateString } from '../util/date';
+import { saltGFromSodiumMg } from '../util/units';
 import type { AppContext } from './context';
 
 /**
@@ -171,4 +178,163 @@ export async function getMealRecoveryCorrelation(
     });
   }
   return { days, pairs: pairs.length, findings: correlate(pairs) };
+}
+
+export interface NutritionScoreResponse {
+  date: string;
+  hasTarget: boolean;
+  phase: string | null;
+  day: NutritionScore | null;
+  categories: { mealType: string; labelJa: string; score: NutritionScore }[];
+  meals: { mealType: string; foods: string[] }[]; // 全食事(間食含む)の食品名=AIの質判断用
+  uncomputable: string[]; // 計算不能観点の但し書き(§3.2)
+  note: string;
+}
+
+const CATEGORY_LABEL: [string, string][] = [
+  ['Breakfast', '朝食'],
+  ['Lunch', '昼食'],
+  ['Dinner', '夕食'],
+];
+
+// アプリでは採点しない=トレーナーAIが会話で担う観点(なぜ不可かを併記・docs/nutrition-scoring-design.md §3.2)。
+const UNCOMPUTABLE = [
+  '脂質の質(飽和/不飽和/オメガ3・揚げ物か): fat_g 総量しか持たず脂肪酸内訳が無いため不可',
+  '血糖負荷(GI/GL): GI 値を持たず carbs_g/sugar_g から導出不可',
+  '食事の質/微量栄養素/野菜量/加工度: 未保存・food_name は自由テキストで非決定的',
+];
+
+interface NutritionItemRow {
+  meal_type: string;
+  food_name: string;
+  calories_kcal: number;
+  protein_g: number;
+  fat_g: number;
+  carbs_g: number;
+  fiber_g: number | null;
+  sugar_g: number | null;
+  sodium_mg: number | null;
+}
+
+/** meal_items 行群をマクロ合算。fiber/sodium は値を持つ行が1つも無ければ null(0扱いしない=§4.6)。 */
+function totalsFrom(rows: NutritionItemRow[]): ScoreTotals {
+  let kcal = 0;
+  let protein = 0;
+  let fat = 0;
+  let carbs = 0;
+  let fiber = 0;
+  let fiberN = 0;
+  let na = 0;
+  let naN = 0;
+  for (const r of rows) {
+    kcal += r.calories_kcal;
+    protein += r.protein_g;
+    fat += r.fat_g;
+    carbs += r.carbs_g;
+    if (r.fiber_g != null) {
+      fiber += r.fiber_g;
+      fiberN++;
+    }
+    if (r.sodium_mg != null) {
+      na += r.sodium_mg;
+      naN++;
+    }
+  }
+  return {
+    kcal,
+    protein,
+    fat,
+    carbs,
+    fiber: fiberN ? fiber : null,
+    saltG: naN ? saltGFromSodiumMg(na) : null,
+  };
+}
+
+/**
+ * 食事スコア(マクロ目標適合度・レーダー)。1日全体 + カテゴリ別(朝昼夕・間食除く)を採点。
+ * 設計: docs/nutrition-scoring-design.md。質は採点せず食品名を返す=トレーナーAIが会話で判断(§8)。
+ */
+export async function getNutritionScore(
+  ctx: AppContext,
+  date?: string,
+): Promise<NutritionScoreResponse> {
+  const d = date ?? todayJst();
+  const rows = await ctx.db.raw<NutritionItemRow>(
+    `SELECT m.meal_type AS meal_type, mi.food_name AS food_name,
+            mi.calories_kcal AS calories_kcal, mi.protein_g AS protein_g, mi.fat_g AS fat_g,
+            mi.carbs_g AS carbs_g, mi.fiber_g AS fiber_g, mi.sugar_g AS sugar_g, mi.sodium_mg AS sodium_mg
+       FROM meals m JOIN meal_items mi ON mi.meal_id = m.id
+      WHERE m.date = ?`,
+    d,
+  );
+  const target = await getActiveNutritionTarget(ctx.db, d);
+
+  if (!target) {
+    return {
+      date: d,
+      hasTarget: false,
+      phase: null,
+      day: null,
+      categories: [],
+      meals: [],
+      uncomputable: UNCOMPUTABLE,
+      note: '栄養目標が未設定のため採点できません(set_nutrition_target)。',
+    };
+  }
+  if (rows.length === 0) {
+    return {
+      date: d,
+      hasTarget: true,
+      phase: target.phase,
+      day: null,
+      categories: [],
+      meals: [],
+      uncomputable: UNCOMPUTABLE,
+      note: `${d} の食事記録がありません。`,
+    };
+  }
+
+  const targets: ScoreTargets = {
+    kcal: target.target_kcal,
+    protein: target.target_protein_g,
+    fat: target.target_fat_g,
+    carbs: target.target_carbs_g,
+    salt: target.target_salt_g,
+    fiber: target.target_fiber_g,
+  };
+  const phase = target.phase;
+
+  const day = scoreNutrition({ totals: totalsFrom(rows), targets, phase, scope: 'day' });
+
+  const categories = CATEGORY_LABEL.flatMap(([mt, ja]) => {
+    const catRows = rows.filter((r) => r.meal_type === mt);
+    if (!catRows.length) return [];
+    return [
+      {
+        mealType: mt,
+        labelJa: ja,
+        score: scoreNutrition({ totals: totalsFrom(catRows), targets, phase, scope: 'category' }),
+      },
+    ];
+  });
+
+  // 食品名リスト(全食事=間食含む・AIの質判断用)。
+  const byMeal = new Map<string, string[]>();
+  for (const r of rows) {
+    const a = byMeal.get(r.meal_type) ?? [];
+    a.push(r.food_name);
+    byMeal.set(r.meal_type, a);
+  }
+  const meals = [...byMeal.entries()].map(([mealType, foods]) => ({ mealType, foods }));
+
+  return {
+    date: d,
+    hasTarget: true,
+    phase,
+    day,
+    categories,
+    meals,
+    uncomputable: UNCOMPUTABLE,
+    note: '採点はマクロの目標適合度のみ(実測)。脂質の質・GL・食事の質は不可ゆえ未採点 — 食品名から会話で質を判断してください(§8)。',
+  };
 }

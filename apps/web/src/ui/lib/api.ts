@@ -232,6 +232,39 @@ export interface Readiness {
   disclaimer: string;
 }
 
+export type NutritionAxisKey = 'protein' | 'fat' | 'carbs' | 'fiber' | 'sodium';
+export interface NutritionAxis {
+  key: NutritionAxisKey;
+  labelJa: string;
+  value: number | null;
+  target: number | null;
+  score: number | null; // 0..1。null=データ無し(—)
+  zone: 'low' | 'ideal' | 'high' | 'na';
+  weight: number;
+}
+export interface NutritionScopeScore {
+  scope: 'day' | 'category';
+  phase: string;
+  axes: NutritionAxis[];
+  overall: number | null;
+  calories: {
+    kcal: number;
+    target: number | null;
+    ratio: number | null;
+    gate: 'under' | 'ok' | 'over' | 'na';
+  };
+}
+export interface NutritionScore {
+  date: string;
+  hasTarget: boolean;
+  phase: string | null;
+  day: NutritionScopeScore | null;
+  categories: { mealType: string; labelJa: string; score: NutritionScopeScore }[];
+  meals: { mealType: string; foods: string[] }[];
+  uncomputable: string[];
+  note: string;
+}
+
 export interface RoutineSummary {
   id: string;
   name: string;
@@ -351,6 +384,8 @@ export const api = {
     }>(`/training-calendar?days=${days}`),
   trends: (days = 90) => req<Trends>(`/trends?days=${days}`),
   readiness: (date?: string) => req<Readiness>(`/readiness${date ? `?date=${date}` : ''}`),
+  nutritionScore: (date?: string) =>
+    req<NutritionScore>(`/nutrition-score${date ? `?date=${date}` : ''}`),
   bodyLog: (date: string) => req<{ date: string; logs: BodyLogEntry[] }>(`/body-log?date=${date}`),
   deleteBodyMetric: (id: string) =>
     req<{ deleted: boolean; ghDeleted: boolean }>(`/body-metrics/${encodeURIComponent(id)}`, {

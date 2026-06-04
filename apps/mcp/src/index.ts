@@ -30,6 +30,7 @@ import {
   getMuscleCalendar,
   getMuscleLoadRatios,
   getMuscleVolume,
+  getNutritionScore,
   getNutritionStatus,
   getPlateauIndicators,
   getReadiness,
@@ -337,6 +338,26 @@ function buildServer(env: Env): McpServer {
     async ({ windowDays }) => {
       const ctx = makeContext(env);
       return ok({ provenance: 'd1_confirmed', ...(await getNutritionStatus(ctx, { windowDays })) });
+    },
+  );
+
+  server.registerTool(
+    'get_nutrition_score',
+    {
+      title: '食事スコア(マクロ目標適合度・レーダー)',
+      description:
+        '指定日(既定=今日)の食事を「1日全体」と「カテゴリ別(朝昼夕・**間食は除外**)」で、たんぱく質/脂質/糖質/食物繊維/塩分の**5軸 × 目標適合度**を 0..1 で採点(台形バンド+加重幾何平均)。返り値: { day{axes[{key,labelJa,value,target,score,zone,weight}],overall,calories{kcal,target,ratio,gate}}, categories[{mealType,labelJa,score}], meals[{mealType,foods[]}], uncomputable[], note }。**カロリーは軸でなく収支ゲート+実数**(>1.25T 超過/<0.8T 赤字で総合に上限)。**質(脂質の質・血糖負荷GI/GL・食事の質/微量栄養)はアプリでは採点しない** — fat_g 総量しか持たず GI も持たず food_name は自由テキストで非決定的なため(uncomputable に理由)。**代わりに各食事の food_name を meals で返すので、あなた(トレーナーAI)が会話で質を判断すること**(「P満点だが揚げ物中心=脂質の質が低い」等)。欠損軸は score=null(—)で0扱いしない。phase(cut/bulk/maintain)で加重が変わる。',
+      inputSchema: {
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+      },
+      annotations: READ,
+    },
+    async ({ date }) => {
+      const ctx = makeContext(env);
+      return ok({ provenance: 'd1_confirmed', ...(await getNutritionScore(ctx, date)) });
     },
   );
 

@@ -21,6 +21,7 @@ import {
   getMealsByDate,
   getMuscleCalendar,
   getMuscleVolume,
+  getNutritionScore,
   getPushQueueStats,
   getReadiness,
   getRecentPrs,
@@ -188,6 +189,13 @@ api.get('/readiness', async (c) => {
   const ctx = makeContext(c.env);
   const date = c.req.query('date') ?? undefined;
   return c.json({ provenance: 'd1_confirmed', ...(await getReadiness(ctx.db, date)) });
+});
+
+// 食事スコア(マクロ目標適合度・レーダー)。MCP get_nutrition_score と共有。
+api.get('/nutrition-score', async (c) => {
+  const ctx = makeContext(c.env);
+  const date = c.req.query('date') ?? undefined;
+  return c.json({ provenance: 'd1_confirmed', ...(await getNutritionScore(ctx, date)) });
 });
 
 // トレーニングルーティン(AI作成・参照専用)。CRUD は MCP、Web は読み取りのみ。
