@@ -20,7 +20,7 @@ const REGION_GROUPS: Array<{ key: string; label: string; color: string; muscles:
   {
     key: 'legs',
     label: '脚',
-    color: '#3f7d52',
+    color: '#2f6fb0', // 背(ティール)と紛れないよう青系へ
     muscles: ['quads', 'hamstrings', 'glutes', 'calves'],
   },
   { key: 'core', label: '体幹', color: '#9c6b4a', muscles: ['abs', 'obliques', 'lower_back'] },
