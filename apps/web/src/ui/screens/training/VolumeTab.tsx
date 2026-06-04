@@ -201,10 +201,7 @@ function MuscleExercisesInline({ muscle, open }: { muscle: string; open: boolean
       <ul>
         {q.data?.exercises.map((ex) => (
           <li key={ex.id} className="flex items-center justify-between gap-2 py-1 text-xs">
-            <span className="min-w-0 truncate">
-              <span className="font-medium">{ex.name_ja}</span>
-              <span className="ml-1.5 text-[10px] text-faint">{ex.name_en}</span>
-            </span>
+            <span className="min-w-0 truncate font-medium">{ex.name_ja}</span>
             <span className="shrink-0 rounded-full bg-paper px-1.5 py-0.5 text-[10px] font-semibold text-faint">
               {ex.equipment}
             </span>

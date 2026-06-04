@@ -461,10 +461,7 @@ export function RecordScreen({
                   onClick={() => addExercise(ex)}
                   className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm hover:bg-paper"
                 >
-                  <span className="min-w-0">
-                    <span className="font-medium">{ex.name_ja}</span>
-                    <span className="ml-1.5 text-[10px] text-faint">{ex.name_en}</span>
-                  </span>
+                  <span className="min-w-0 truncate font-medium">{ex.name_ja}</span>
                   <span className="shrink-0 rounded-full bg-paper px-2 py-0.5 text-[10px] font-semibold text-faint">
                     {ex.equipment}
                   </span>
@@ -488,7 +485,7 @@ export function RecordScreen({
       </div>
 
       {items.length > 0 && (
-        <div className="flex items-center justify-around rounded-2xl bg-gradient-to-br from-[#e0521f] to-[#bf3d18] px-4 py-3.5 text-card shadow-[0_10px_26px_-12px] shadow-accent/60">
+        <div className="flex items-center justify-around rounded-2xl bg-gradient-to-br from-[#ea6e44] to-[#d24a20] px-4 py-3.5 text-card shadow-[0_10px_26px_-12px] shadow-accent/60">
           <StatTile label="種目" value={items.length} />
           <StatTile label="セット" value={totalSets} />
           <StatTile label={`総量(${unit})`} value={Math.round(totalVolume).toLocaleString()} />

@@ -65,7 +65,7 @@ export function ExerciseTrend() {
                 onClick={() => setEx(e)}
                 className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-paper"
               >
-                {e.name_ja} <span className="ml-1 text-[10px] text-faint">{e.name_en}</span>
+                {e.name_ja}
               </button>
             </li>
           ))}

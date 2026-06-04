@@ -117,7 +117,7 @@ export function WorkoutDetail({
       </BackHeader>
 
       {/* スタッツ(赤系グラデの強調カード。白カード内に黒カードを入れ子にしない) */}
-      <div className="flex items-center justify-around rounded-2xl bg-gradient-to-br from-[#e0521f] to-[#bf3d18] px-4 py-3.5 text-card shadow-[0_10px_26px_-12px] shadow-accent/60">
+      <div className="flex items-center justify-around rounded-2xl bg-gradient-to-br from-[#ea6e44] to-[#d24a20] px-4 py-3.5 text-card shadow-[0_10px_26px_-12px] shadow-accent/60">
         <StatTile label="種目" value={exercises.length} />
         <StatTile label="セット" value={setCount} />
         <StatTile label="総量(kg)" value={Math.round(session.totalVolumeKg).toLocaleString()} />
