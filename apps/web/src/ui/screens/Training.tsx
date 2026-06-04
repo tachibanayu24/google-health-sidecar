@@ -1,5 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, Sparkles, Trophy } from 'lucide-react';
+import {
+  Bus,
+  Car,
+  ChevronRight,
+  type LucideIcon,
+  Plane,
+  Refrigerator,
+  Sparkles,
+  Trophy,
+} from 'lucide-react';
 import { useState } from 'react';
 import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter';
 import { Card } from '../components/Card';
@@ -98,15 +107,33 @@ export function TrainingScreen({
   );
 }
 
-// ============ 累計総ボリューム(全期間の達成感。アフリカゾウ換算でスケール感を出す) ============
-const ELEPHANT_KG = 6000; // アフリカゾウ(成獣)≒ 6 トン
+// ============ 累計総ボリューム(全期間の達成感。身近なモノ換算でスケール感を出す) ============
+// 総量が増えるほど重い単位へ“レベルアップ”(その時点で count≥1 の最重量を選ぶ)。
+// lucide があるものは lucide アイコン、無いもの(アフリカゾウ)は emoji。
+const VOLUME_UNITS: Array<{
+  name: string;
+  kg: number;
+  counter: string;
+  Icon?: LucideIcon;
+  emoji?: string;
+}> = [
+  { name: '冷蔵庫', kg: 85, counter: '台', Icon: Refrigerator },
+  { name: '軽自動車', kg: 850, counter: '台', Icon: Car },
+  { name: 'アフリカゾウ', kg: 6000, counter: '頭', emoji: '🐘' },
+  { name: 'バス', kg: 12000, counter: '台', Icon: Bus },
+  { name: 'ジャンボジェット', kg: 180000, counter: '機', Icon: Plane },
+];
 
 function Performance({ volumeDaily }: { volumeDaily: Array<{ date: string; volume_kg: number }> }) {
   // 全期間の累計総ボリューム(これまで挙上した総重量)= 達成感の単一指標。
   const allTimeKg = volumeDaily.reduce((a, d) => a + d.volume_kg, 0);
   const tons = allTimeKg / 1000;
-  const n = allTimeKg / ELEPHANT_KG;
-  const elephants = n < 10 ? Math.round(n * 10) / 10 : Math.round(n);
+  // count≥1 になる最も重い単位を選ぶ(無ければ最軽量=冷蔵庫)。
+  let unit = VOLUME_UNITS[0]!;
+  for (const u of VOLUME_UNITS) if (allTimeKg >= u.kg) unit = u;
+  const n = allTimeKg / unit.kg;
+  const count = n < 10 ? Math.round(n * 10) / 10 : Math.round(n);
+  const Icon = unit.Icon;
   return (
     <Card>
       <div className="mb-1 font-display text-[11px] font-bold uppercase tracking-[0.12em] text-faint">
@@ -118,10 +145,16 @@ function Performance({ volumeDaily }: { volumeDaily: Array<{ date: string; volum
         </span>
         <span className="text-sm font-semibold text-muted">t</span>
       </div>
-      <div className="mt-1.5 text-xs text-muted">
-        これまでに挙上 ·{' '}
+      <div className="mt-1.5 flex items-center gap-1 text-xs text-muted">
+        <span>これまでに挙上 ·</span>
+        {Icon ? (
+          <Icon className="h-3.5 w-3.5 text-accent" strokeWidth={2.2} />
+        ) : (
+          <span aria-hidden>{unit.emoji}</span>
+        )}
         <span className="font-semibold text-ink">
-          アフリカゾウ 約{elephants.toLocaleString()}頭分
+          {unit.name} 約{count.toLocaleString()}
+          {unit.counter}分
         </span>
       </div>
     </Card>
