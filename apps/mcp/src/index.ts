@@ -143,6 +143,12 @@ function buildServer(env: Env): McpServer {
     },
   );
 
+  for (const register of REGISTRARS) register(server, env);
+  return server;
+}
+
+// ===== read(分析/参照・トレーナーAI/UI 用)=====
+function registerReadTools(server: McpServer, env: Env) {
   server.registerTool(
     'get_settings',
     {
@@ -524,9 +530,10 @@ function buildServer(env: Env): McpServer {
       });
     },
   );
+}
 
-  // ===== M2-c: write(全て @ghs/core/services 経由・§8.5。GH push 成否を ghPushed で正直に返す)=====
-
+// ===== M2-c: write(全て @ghs/core/services 経由・§8.5。GH push 成否を ghPushed で正直に返す)=====
+function registerWriteTools(server: McpServer, env: Env) {
   server.registerTool(
     'log_meal',
     {
@@ -766,8 +773,10 @@ function buildServer(env: Env): McpServer {
       return ok({ ...res, clientRequestId });
     },
   );
+}
 
-  // ===== M2-d: destructive(直近の取消のみ。echo+confirm 二段, §5.5-D/E・§6.4)=====
+// ===== M2-d: destructive(直近の取消のみ。echo+confirm 二段, §5.5-D/E・§6.4)=====
+function registerDestructiveTools(server: McpServer, env: Env) {
   server.registerTool(
     'delete_recent_log',
     {
@@ -856,8 +865,10 @@ function buildServer(env: Env): McpServer {
       return ok(await deleteMeal(ctx, id));
     },
   );
+}
 
-  // ===== トレーニングルーティン(AI作成・参照専用ライブラリ。CRUD, §8.10)=====
+// ===== トレーニングルーティン(AI作成・参照専用ライブラリ。CRUD, §8.10)=====
+function registerRoutineTools(server: McpServer, env: Env) {
   server.registerTool(
     'get_routines',
     {
@@ -1020,9 +1031,15 @@ function buildServer(env: Env): McpServer {
       return ok(await deleteRoutine(ctx.db, id));
     },
   );
-
-  return server;
 }
+
+// buildServer が順に呼ぶ登録関数(機能群ごと)。呼び忘れ=ツール消失を index.test.ts の contract で防ぐ。
+export const REGISTRARS = [
+  registerReadTools,
+  registerWriteTools,
+  registerDestructiveTools,
+  registerRoutineTools,
+];
 
 const app = new Hono<{ Bindings: Env }>();
 
