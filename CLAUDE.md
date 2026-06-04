@@ -102,7 +102,7 @@ push は失敗しても D1 には残る(best-effort)。`gh_sync_state` 台帳が
 
 ### MCP サーバ(`apps/mcp/src/index.ts`)
 
-- Hono + `@hono/mcp` の `StreamableHTTPTransport`。**ステートレス**(リクエスト毎に `McpServer` 生成)。`server.registerTool(...)` を **29本**(記録→分析→週次サマリ→コンディション→ルーティン→栄養/エネルギー→GH反映→取消)。catalog の説明は `docs/mcp-design.md`。
+- Hono + `@hono/mcp` の `StreamableHTTPTransport`。**ステートレス**(リクエスト毎に `McpServer` 生成)。`server.registerTool(...)` を **30本**(記録→分析→週次サマリ→コンディション→ルーティン→栄養/エネルギー/食事スコア→GH反映→取消)。catalog の説明は `docs/mcp-design.md`。
 - web と**同一の D1 / KV(TOKENS/LOCK/CACHE)を共有**。`migrations_dir` も cron も assets も持たない(スキーマの正本は web)。
 - 全 write ツールは `makeContext(env)` → core service を呼ぶ薄いラッパ。生 SQL は書かない。返り値は必ず `ghPushed` / `ghDeleted`(GH 反映の真偽)を含める — **嘘をつくと Claude がデータ可視性を失う**。
 - 認証は2層: 一次 = `MCP_SHARED_SECRET`(URL 埋め込み, fail-closed, 定数時間比較)、二次 = Anthropic 送信元 IP allowlist `ANTHROPIC_OUTBOUND_CIDR`(=`160.79.104.0/21`, fail-open)。比較ヘルパー `timingSafeEqual`/`ipv4InCidr` は `apps/mcp/src/auth.ts`(`auth.test.ts` でテスト)。
@@ -110,7 +110,7 @@ push は失敗しても D1 には残る(best-effort)。`gh_sync_state` 台帳が
 
 ### ドメイン計算(`packages/core/src/domain/`)
 
-純粋関数群(`metrics.ts` の load_kg / set_volume_kg / e1rm、`training-progress.ts` の MEV/MAV/MRV・停滞検知、`readiness.ts`、`nutrition-recovery.ts`、`routine.ts`)。DB を触らず、services / UI が read-only rollup に使う。筋部位は固定16群。
+純粋関数群(`metrics.ts` の load_kg / set_volume_kg / e1rm、`training-progress.ts` の MEV/MAV/MRV・停滞検知、`readiness.ts`、`nutrition-recovery.ts`、`nutrition-score.ts` の食事スコア(台形バンド+加重幾何平均)、`routine.ts`)。DB を触らず、services / UI が read-only rollup に使う。筋部位は固定16群。
 
 - **筋ボリュームには非互換な2つの集計基準がある(混同禁止)**: ①**主働のみ**(`get_training_frequency` / `get_muscle_calendar` = どの日にどの部位を叩いたか)、②**間接含む**(`get_muscle_volume` / `get_readiness.muscleLoad` = 二次・スタビライザの貢献度 primary 1.0 / secondary 0.5 / stabilizer 0.25 込みで刺激が足りているか)。
 - ウォームアップセットは intensity 系集計から除外(`countsTowardVolume()`)。
@@ -131,7 +131,8 @@ push は失敗しても D1 には残る(best-effort)。`gh_sync_state` 台帳が
 | `gh-datatypes.md` | GH v4 dataType の権威カタログ(ID を推測せずここを参照) |
 | `deploy.md` | 接続・デプロイ手順(GCP OAuth → bootstrap → check → probe → Cloud) |
 | `remaining-tasks.md` / `work-plan.md` | バックログ・進行中スプリント |
-| `enhancements.md` | 機能拡張アイデア(MCP-first レンズで選別) |
+| `enhancements.md` | 機能拡張アイデア(MCP-first レンズで選別)。§18=データ拡張ロードマップ |
+| `nutrition-scoring-design.md` | 食事スコアリング設計(マクロ目標適合度の採点・レーダー。実装済) |
 | `research-appendix.md` | GH API / 既存アプリの深掘り調査 |
 | `ux-review.md` / `review-findings.md` | UI 評価 / 6観点レビュー結果 |
 | `mcp-review-packet*.md` | MCP 認証方式の事前レビュー(secret+IP を採用した経緯) |

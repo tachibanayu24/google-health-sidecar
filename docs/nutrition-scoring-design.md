@@ -1,6 +1,8 @@
 # 栄養評価(食事スコアリング)設計書
 
-2026-06-04 作成 / 同日トレーナーAI レビュー反映(§9)。実装前の確定設計。
+2026-06-04 作成 / 同日トレーナーAI レビュー反映(§9)/ **同日実装・稼働**。
+実装: `packages/core/src/domain/nutrition-score.ts`(+test)/ `services/insights.ts getNutritionScore` /
+MCP `get_nutrition_score` / web `/api/nutrition-score` + `NutritionScoreChart`(食事画面レーダー・画像エクスポート)。
 関連: `docs/design.md`(§9 栄養 / §0.5 MCP露出)、`docs/enhancements.md`(⑥相関・⑮蛋白分配・⑯傾向)、`docs/mcp-design.md`。
 
 > **目的**: 食事を「カテゴリ別(朝昼夕・間食除く)」と「1日全体」で、観点ごとに採点し、レーダーチャートで UI / 画像エクスポートに出す。加重を考慮した採点ロジックを定める。
