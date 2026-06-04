@@ -93,14 +93,16 @@ function ExerciseRow({ e }: { e: RoutineDay['exercises'][number] }) {
   return (
     <li className="py-1.5">
       <div className="flex items-start gap-2">
-        <span className="min-w-0 flex-1 text-sm font-semibold text-ink">
-          {e.exercise_name ?? e.exercise_id}
+        {/* 種目名 + 代替 + note を左カラムに入れ子にし、note は名前直下へ(右側メトリクスの高さに引きずられない)。 */}
+        <div className="min-w-0 flex-1">
+          <span className="text-sm font-semibold text-ink">{e.exercise_name ?? e.exercise_id}</span>
           {e.alt_exercise_name && (
             <span className="ml-1.5 text-[11px] font-normal text-muted">
               or {e.alt_exercise_name}
             </span>
           )}
-        </span>
+          {e.note && <p className="mt-0.5 text-[11px] leading-snug text-faint">{e.note}</p>}
+        </div>
         {/* セット/レップは slash でなく改行スタックにし、種目名の左スペースを広く取る。 */}
         <span className="tnum flex shrink-0 flex-col items-end text-[11px] font-semibold leading-tight text-muted">
           {sets && <span>{sets}セット</span>}
@@ -108,7 +110,6 @@ function ExerciseRow({ e }: { e: RoutineDay['exercises'][number] }) {
           {e.target_load && <span className="text-accent-ink">{e.target_load}</span>}
         </span>
       </div>
-      {e.note && <div className="mt-0.5 text-[11px] leading-snug text-faint">{e.note}</div>}
     </li>
   );
 }
