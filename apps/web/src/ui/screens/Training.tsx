@@ -32,7 +32,7 @@ import {
   todayJst,
 } from '../lib/datetime';
 import { invalidateWorkouts } from '../lib/invalidate';
-import { MUSCLE_JA, MUSCLE_TO_SLUGS } from '../lib/muscles';
+import { stimulusBucket as bucket, MUSCLE_JA, MUSCLE_TO_SLUGS } from '../lib/muscles';
 import { HEATMAP_RAMP } from '../lib/theme';
 
 // 部位ラベル(MUSCLE_JA)・slug(MUSCLE_TO_SLUG)・ヒートマップランプ(HEATMAP_RAMP)は単一ソースを import。
@@ -58,10 +58,6 @@ const REGION_GROUPS: Array<{ key: string; label: string; color: string; muscles:
   },
   { key: 'core', label: '体幹', color: '#9c6b4a', muscles: ['abs', 'obliques', 'lower_back'] },
 ];
-function bucket(s: number): number {
-  if (s <= 0.02) return 0;
-  return Math.min(5, Math.max(1, Math.ceil(s * 5)));
-}
 
 type Tab = 'workouts' | 'volume' | 'exercises';
 

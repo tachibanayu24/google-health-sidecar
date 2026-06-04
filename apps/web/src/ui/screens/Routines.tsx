@@ -7,15 +7,11 @@ import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { ReportStat, ShareImageModal } from '../components/ShareImageModal';
 import { Empty, ErrorBox, Loading } from '../components/state';
 import { api, type RoutineDay, type RoutineDetail } from '../lib/api';
-import { MUSCLE_JA, MUSCLE_TO_SLUGS } from '../lib/muscles';
+import { stimulusBucket as bucket, MUSCLE_JA, MUSCLE_TO_SLUGS } from '../lib/muscles';
 import { HEATMAP_RAMP } from '../lib/theme';
 
 const RAMP = HEATMAP_RAMP;
 const BASE_BODY = '#c2b8a6';
-function bucket(i: number): number {
-  if (i <= 0.02) return 0;
-  return Math.min(5, Math.max(1, Math.ceil(i * 5)));
-}
 
 type RMuscle = { muscle: string; sets: number; intensity: number };
 

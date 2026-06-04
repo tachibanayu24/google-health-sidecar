@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter';
 import { api, type RecentSession } from '../lib/api';
 import { formatDateLong } from '../lib/datetime';
-import { MUSCLE_JA, MUSCLE_TO_SLUGS } from '../lib/muscles';
+import { stimulusBucket as bucket, MUSCLE_JA, MUSCLE_TO_SLUGS } from '../lib/muscles';
 import { HEATMAP_RAMP } from '../lib/theme';
 import { ReportStat, ShareImageModal } from './ShareImageModal';
 
@@ -10,11 +10,6 @@ import { ReportStat, ShareImageModal } from './ShareImageModal';
 const RAMP = HEATMAP_RAMP;
 // シェア画像の人体ベース色。カード背景(ウォームクリーム)に埋もれないよう本体より濃いめ。
 const BASE_BODY = '#c2b8a6';
-
-function bucket(i: number): number {
-  if (i <= 0.02) return 0;
-  return Math.min(5, Math.max(1, Math.ceil(i * 5)));
-}
 
 /**
  * ワークアウトのシェアレポート(画像エクスポート)。

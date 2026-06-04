@@ -3,17 +3,12 @@ import type { ReactNode } from 'react';
 import Model, { type IExerciseData, type Muscle } from 'react-body-highlighter';
 import { api } from '../lib/api';
 import { formatDateForDisplay } from '../lib/datetime';
-import { MUSCLE_TO_SLUGS } from '../lib/muscles';
+import { stimulusBucket as bucket, MUSCLE_TO_SLUGS } from '../lib/muscles';
 import { HEATMAP_RAMP } from '../lib/theme';
 import { ShareImageModal } from './ShareImageModal';
 
 // 人体図は暗パネル上に「おなじみの暖色ヒートマップ(淡黄→朱=強い刺激)」で直感的に。
 const FIG_BODY = '#7c6b5e'; // 未刺激の部位(ミュートグレー)
-
-function bucket(i: number): number {
-  if (i <= 0.02) return 0;
-  return Math.min(5, Math.max(1, Math.ceil(i * 5)));
-}
 
 /** 総挙上量(kg)を身近な物に例える(さりげなく出す用)。1以上になる最大の物を選ぶ。 */
 function tonnageBrag(totalKg: number): string | null {

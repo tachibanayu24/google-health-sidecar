@@ -1,6 +1,15 @@
 import type { Muscle } from 'react-body-highlighter';
 
 /**
+ * 刺激値/強度(0..1)を 0..5 の5段バケットへ(0.02以下=0、以降 ceil(x*5) を 1..5 にクランプ)。
+ * 人体図ヒートマップのシェーディング段(Training/Routines/WorkoutReport/WeeklyReport 共通の単一ソース)。
+ */
+export function stimulusBucket(x: number): number {
+  if (x <= 0.02) return 0;
+  return Math.min(5, Math.max(1, Math.ceil(x * 5)));
+}
+
+/**
  * 筋部位の表示名と並び(seed の muscle_groups.id に一致)。UI 共通の単一ソース。
  * ラベルは正式名(解剖学的)で全画面統一(Record チップ / Training ボリューム / シェア画像)。
  */
