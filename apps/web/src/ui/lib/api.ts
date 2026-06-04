@@ -157,7 +157,8 @@ export const api = {
     req<{ deleted: boolean; ghDeleted: boolean }>(`/meals/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }),
-  recentWorkouts: () => req<{ sessions: RecentSession[] }>('/workouts/recent'),
+  recentWorkouts: (limit = 10) =>
+    req<{ sessions: RecentSession[] }>(`/workouts/recent?limit=${limit}`),
   getWorkout: (id: string) =>
     req<{
       session: {
@@ -166,6 +167,8 @@ export const api = {
         startedAt: number;
         title: string | null;
         bodyweightKg: number | null;
+        totalVolumeKg: number;
+        estCalories: number | null;
         note: string | null;
         noteAuthor: 'user' | 'ai' | null;
       };

@@ -54,8 +54,8 @@ export function HomeScreen({
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
   // TrainingGlance 用(トレーニング画面と queryKey 共有 → 二重取得回避)。
   const recent = useQuery({
-    queryKey: ['recent-workouts'],
-    queryFn: api.recentWorkouts,
+    queryKey: ['recent-workouts', 10],
+    queryFn: () => api.recentWorkouts(10),
     staleTime: 60_000,
   });
   const mv = useQuery({

@@ -21,10 +21,10 @@ type Tab = 'workouts' | 'volume' | 'exercises';
 
 /** トレーニング(分析ハブ・読み取り専用)。旧 推移 + 部位 を統合。記録は中央＋から。 */
 export function TrainingScreen({
-  onEditWorkout,
+  onOpenWorkout,
   onOpenRoutines,
 }: {
-  onEditWorkout: (id: string) => void;
+  onOpenWorkout: (id: string) => void;
   onOpenRoutines: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('workouts');
@@ -90,7 +90,7 @@ export function TrainingScreen({
 
       {tab === 'workouts' && (
         <>
-          <RecentWorkouts onEdit={onEditWorkout} />
+          <RecentWorkouts onOpen={onOpenWorkout} />
           <PrList prs={pr.data?.prs ?? []} />
         </>
       )}

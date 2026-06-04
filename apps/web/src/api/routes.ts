@@ -367,6 +367,8 @@ api.get('/workouts/:id', async (c) => {
       startedAt: first.started_at,
       title: first.title,
       bodyweightKg: first.bodyweight_kg,
+      totalVolumeKg: first.total_volume_kg,
+      estCalories: first.est_calories,
       note: first.note,
       noteAuthor: first.note_author,
     },

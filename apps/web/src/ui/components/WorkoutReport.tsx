@@ -30,6 +30,8 @@ export function WorkoutReport({
 
   const muscles = detail.data?.muscles ?? [];
   const exercises = detail.data?.exercises ?? [];
+  const note = detail.data?.session.note ?? null;
+  const noteIsAi = detail.data?.session.noteAuthor === 'ai';
 
   // 人体図データ: intensity を 5 段にバケットし slug 単位で最大値を採用。
   const slugBucket = new Map<Muscle, number>();
@@ -76,6 +78,18 @@ export function WorkoutReport({
         <ReportStat label="セット" value={String(session.sets)} unit="set" />
         <ReportStat label="種目" value={String(session.exercises)} />
       </div>
+
+      {/* メモ(note_author=ai は AIコメントとして明示) */}
+      {note && (
+        <div className="mt-4 rounded-2xl border border-line/70 bg-card/70 px-3 py-2.5">
+          {noteIsAi && (
+            <span className="mb-1 inline-block rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-bold text-accent">
+              AI コメント
+            </span>
+          )}
+          <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink">{note}</p>
+        </div>
+      )}
 
       {/* 人体図 + 効かせた部位 */}
       {detail.isLoading ? (

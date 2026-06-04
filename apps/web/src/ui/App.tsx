@@ -36,6 +36,9 @@ const RoutinesListScreen = lazy(() =>
 const RoutineDetailScreen = lazy(() =>
   import('./screens/Routines').then((m) => ({ default: m.RoutineDetailScreen })),
 );
+const WorkoutDetail = lazy(() =>
+  import('./screens/WorkoutDetail').then((m) => ({ default: m.WorkoutDetail })),
+);
 
 // ============ ルート定義(BrowserRouter / SPA fallback は wrangler assets で対応) ============
 export const router = createBrowserRouter([
@@ -52,6 +55,7 @@ export const router = createBrowserRouter([
       { path: '/nutrition/:mealType', element: <MealCategoryRoute /> },
       { path: '/record', element: <RecordRoute /> },
       { path: '/record/:id', element: <RecordRoute /> },
+      { path: '/workout/:id', element: <WorkoutDetailRoute /> },
       { path: '/meal', element: <MealRoute /> },
       { path: '/meal/:id', element: <MealRoute /> },
       { path: '*', element: <HomeRoute /> },
@@ -76,8 +80,20 @@ function TrainingRoute() {
   const navigate = useNavigate();
   return (
     <TrainingScreen
-      onEditWorkout={(id) => navigate(`/record/${id}`)}
+      onOpenWorkout={(id) => navigate(`/workout/${id}`)}
       onOpenRoutines={() => navigate('/routines')}
+    />
+  );
+}
+
+function WorkoutDetailRoute() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  return (
+    <WorkoutDetail
+      id={id ?? ''}
+      onBack={() => navigate(-1)}
+      onEdit={(wid) => navigate(`/record/${wid}`)}
     />
   );
 }
