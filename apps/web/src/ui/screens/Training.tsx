@@ -41,11 +41,7 @@ export function TrainingScreen({
 
   return (
     <div className="mx-auto max-w-md space-y-4">
-      <Performance
-        volumeDaily={tr.data?.volumeDaily ?? []}
-        prs={pr.data?.prs ?? []}
-        worked={worked}
-      />
+      <Performance volumeDaily={tr.data?.volumeDaily ?? []} />
       <TrainingCalendar />
       <Heatmap muscles={muscles} worked={worked} />
 
@@ -102,44 +98,31 @@ export function TrainingScreen({
   );
 }
 
-// ============ Performance スナップショット(全期間の累計で達成感を出す) ============
-function Performance({
-  volumeDaily,
-  prs,
-  worked,
-}: {
-  volumeDaily: Array<{ date: string; volume_kg: number }>;
-  prs: Array<{ name_ja: string | null; name_en: string; value: number; achieved_at: number }>;
-  worked: number;
-}) {
-  // 全期間の累計総ボリューム(これまで挙上した総重量)。達成感の指標。
-  const allTime = volumeDaily.reduce((a, d) => a + d.volume_kg, 0);
-  const tons = allTime / 1000;
-  const latestPr = [...prs].sort((a, b) => b.achieved_at - a.achieved_at)[0];
+// ============ 累計総ボリューム(全期間の達成感。アフリカゾウ換算でスケール感を出す) ============
+const ELEPHANT_KG = 6000; // アフリカゾウ(成獣)≒ 6 トン
+
+function Performance({ volumeDaily }: { volumeDaily: Array<{ date: string; volume_kg: number }> }) {
+  // 全期間の累計総ボリューム(これまで挙上した総重量)= 達成感の単一指標。
+  const allTimeKg = volumeDaily.reduce((a, d) => a + d.volume_kg, 0);
+  const tons = allTimeKg / 1000;
+  const n = allTimeKg / ELEPHANT_KG;
+  const elephants = n < 10 ? Math.round(n * 10) / 10 : Math.round(n);
   return (
     <Card>
       <div className="mb-1 font-display text-[11px] font-bold uppercase tracking-[0.12em] text-faint">
         累計総ボリューム
       </div>
-      <div className="flex items-end gap-4">
-        <div>
-          <div className="flex items-baseline gap-1">
-            <span className="stat text-3xl leading-none">
-              {tons.toLocaleString(undefined, { maximumFractionDigits: 1 })}
-            </span>
-            <span className="text-sm text-muted">t</span>
-          </div>
-          <div className="text-[11px] text-faint">これまでに挙上</div>
-        </div>
-        <div className="ml-auto text-right">
-          <div className="tnum text-sm font-semibold">{worked}/16 部位</div>
-          <div className="text-[10px] text-faint">直近7日</div>
-          {latestPr && (
-            <div className="mt-0.5 text-[11px] text-faint">
-              最新PR {latestPr.name_ja ?? latestPr.name_en} {Math.round(latestPr.value * 10) / 10}kg
-            </div>
-          )}
-        </div>
+      <div className="flex items-baseline gap-1">
+        <span className="stat text-4xl leading-none">
+          {tons.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+        </span>
+        <span className="text-sm font-semibold text-muted">t</span>
+      </div>
+      <div className="mt-1.5 text-xs text-muted">
+        これまでに挙上 ·{' '}
+        <span className="font-semibold text-ink">
+          アフリカゾウ 約{elephants.toLocaleString()}頭分
+        </span>
       </div>
     </Card>
   );
