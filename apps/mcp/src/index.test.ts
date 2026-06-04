@@ -24,7 +24,7 @@ const EXPECTED_TOOLS = [
   'search_exercises',
   'autocomplete_foods',
   'get_day',
-  // write(9)
+  // write(10)
   'log_meal',
   'log_workout',
   'log_weight',
@@ -34,6 +34,7 @@ const EXPECTED_TOOLS = [
   'log_preset',
   'delete_meal_preset',
   'log_meal_photo',
+  'set_workout_note',
   // destructive(1)
   'delete_recent_log',
   // routines(4)

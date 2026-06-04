@@ -166,6 +166,8 @@ export const api = {
         startedAt: number;
         title: string | null;
         bodyweightKg: number | null;
+        note: string | null;
+        noteAuthor: 'user' | 'ai' | null;
       };
       exercises: Array<{
         exerciseId: string;
@@ -185,6 +187,11 @@ export const api = {
     req<{ deleted: boolean; ghDeleted: boolean }>(`/workouts/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }),
+  setWorkoutNote: (id: string, note: string) =>
+    req<{ note: string | null; noteAuthor: 'user' | 'ai' | null }>(
+      `/workouts/${encodeURIComponent(id)}/note`,
+      { method: 'PATCH', body: JSON.stringify({ note }) },
+    ),
   prs: () => req<{ prs: Pr[] }>('/prs'),
   syncStatus: () =>
     req<{

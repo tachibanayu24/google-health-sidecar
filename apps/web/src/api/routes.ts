@@ -49,6 +49,7 @@ import {
   saveWorkout,
   searchExercises,
   setNutritionTarget,
+  setWorkoutNote,
   type UpdateSettingsInput,
   updateSettings,
 } from '@ghs/core';
@@ -366,10 +367,24 @@ api.get('/workouts/:id', async (c) => {
       startedAt: first.started_at,
       title: first.title,
       bodyweightKg: first.bodyweight_kg,
+      note: first.note,
+      noteAuthor: first.note_author,
     },
     exercises: [...byEx.values()].sort((a, b) => a.order - b.order),
     muscles,
   });
+});
+
+// ワークアウトのメモ(UI 由来=author 'user')。MCP の set_workout_note は author 'ai'。最大200文字。
+api.patch('/workouts/:id/note', async (c) => {
+  const ctx = makeContext(c.env);
+  const body = (await c.req.json().catch(() => null)) as { note?: string } | null;
+  const result = await setWorkoutNote(ctx, {
+    sessionId: c.req.param('id'),
+    note: body?.note ?? '',
+    author: 'user',
+  });
+  return c.json(result);
 });
 
 api.delete('/workouts/:id', async (c) => {

@@ -60,6 +60,7 @@ import {
   saveWorkout,
   searchExercises,
   setNutritionTarget,
+  setWorkoutNote,
   todayJst,
   toKg,
 } from '@ghs/core';
@@ -771,6 +772,24 @@ function registerWriteTools(server: McpServer, env: Env) {
       const clientRequestId = ensureCrid(input.clientRequestId);
       const res = await logMeal(ctx, { ...input, inputMethod: 'photo', clientRequestId });
       return ok({ ...res, clientRequestId });
+    },
+  );
+
+  server.registerTool(
+    'set_workout_note',
+    {
+      title: 'ワークアウトにメモ/コメントを書く(AIコメント)',
+      description:
+        '指定セッション(sessionId)にメモを書く。MCP 経由は **AI が書いたもの**として note_author="ai" になり、UI と画像エクスポートに「AI」ラベルで表示される。最大200文字。空文字でクリア。sessionId は get_recent_sessions / get_day で取得する。**単一メモ欄(last-writer-wins)**: ユーザーが UI で書いたメモと同じ1枠を上書きするため、既存メモを消さないよう必要時のみ書く。返り値 { note, noteAuthor }。GH には送らない D1 ローカル注釈。',
+      inputSchema: {
+        sessionId: z.string(),
+        note: z.string().max(200),
+      },
+      annotations: WRITE_LOCAL,
+    },
+    async ({ sessionId, note }) => {
+      const ctx = makeContext(env);
+      return ok(await setWorkoutNote(ctx, { sessionId, note, author: 'ai' }));
     },
   );
 }

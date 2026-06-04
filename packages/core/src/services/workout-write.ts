@@ -388,6 +388,27 @@ export async function deleteWorkout(
   return { deleted: true, ghDeleted };
 }
 
+/**
+ * ワークアウトのメモを設定(単一メモ欄 + 著者ラベル, last-writer-wins)。GH には送らない D1 ローカル注釈。
+ * author='user'(UI) / 'ai'(MCP)。最大200文字に丸め、空なら note/author とも null(クリア)。
+ */
+export async function setWorkoutNote(
+  ctx: AppContext,
+  input: { sessionId: string; note: string; author: 'user' | 'ai' },
+): Promise<{ note: string | null; noteAuthor: 'user' | 'ai' | null }> {
+  const trimmed = input.note.trim().slice(0, 200);
+  const note = trimmed.length > 0 ? trimmed : null;
+  const author = note ? input.author : null;
+  await ctx.db.run(
+    'UPDATE workout_sessions SET note=?, note_author=?, updated_at=? WHERE id=?',
+    note,
+    author,
+    nowSec(),
+    input.sessionId,
+  );
+  return { note, noteAuthor: author };
+}
+
 /** 主働筋の部位から会話的なセッション名を生成(例「胸・腕」)。primary のみ採用。最大3区分、超過は「他」。 */
 function deriveSessionTitle(
   exerciseIds: string[],
