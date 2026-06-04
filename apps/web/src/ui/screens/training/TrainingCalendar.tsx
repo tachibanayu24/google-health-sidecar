@@ -14,7 +14,9 @@ const REGION_GROUPS: Array<{ key: string; label: string; color: string; muscles:
     color: '#b7791f',
     muscles: ['front_delts', 'side_delts', 'rear_delts'],
   },
-  { key: 'arms', label: '腕', color: '#7c5cad', muscles: ['biceps', 'triceps', 'forearms'] },
+  { key: 'biceps', label: '二頭', color: '#7c5cad', muscles: ['biceps'] },
+  { key: 'triceps', label: '三頭', color: '#a36fd0', muscles: ['triceps'] },
+  { key: 'forearms', label: '前腕', color: '#9c8255', muscles: ['forearms'] },
   {
     key: 'legs',
     label: '脚',
@@ -126,6 +128,35 @@ export function TrainingCalendar() {
   );
 }
 
+type Region = { key: string; label: string; color: string };
+const regionLabel = (r: Region) => (r.label === '体幹' ? '幹' : r.label);
+
+/**
+ * セル内の部位ラベルを行に詰める。1文字(胸/背/肩/脚/幹)は1行2つまで(色で区別するので空白なし)、
+ * 2文字(二頭/三頭/前腕)はその行で単独。1文字を先頭行に寄せ、2文字を後ろの行へ。
+ */
+function chunkRegionRows(regions: Region[]): Region[][] {
+  const rows: Region[][] = [];
+  let cur: Region[] = [];
+  for (const r of [...regions].sort((a, b) => regionLabel(a).length - regionLabel(b).length)) {
+    if (regionLabel(r).length >= 2) {
+      if (cur.length) {
+        rows.push(cur);
+        cur = [];
+      }
+      rows.push([r]);
+    } else {
+      cur.push(r);
+      if (cur.length === 2) {
+        rows.push(cur);
+        cur = [];
+      }
+    }
+  }
+  if (cur.length) rows.push(cur);
+  return rows;
+}
+
 function DayCell({
   date,
   regions,
@@ -173,12 +204,16 @@ function DayCell({
         {day}
       </span>
       {trained && (
-        // 部位ラベルは縮小せず一定サイズ。各 span を半幅にして「1行2文字まで・3つ目は改行」で折り返す。
-        <div className="absolute inset-0 flex flex-wrap content-center justify-center font-bold leading-none">
-          {regions.map((r) => (
-            <span key={r.key} className="w-1/2 text-center text-[12px]" style={{ color: r.color }}>
-              {r.label === '体幹' ? '幹' : r.label}
-            </span>
+        // 縮小せず一定サイズ(12px)。1文字は1行2つ詰め(色で区別=空白なし)、2文字(二頭/三頭/前腕)は単独行。
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-[12px] font-bold leading-none">
+          {chunkRegionRows(regions).map((row) => (
+            <div key={row.map((r) => r.key).join()} className="flex">
+              {row.map((r) => (
+                <span key={r.key} style={{ color: r.color }}>
+                  {regionLabel(r)}
+                </span>
+              ))}
+            </div>
           ))}
         </div>
       )}
