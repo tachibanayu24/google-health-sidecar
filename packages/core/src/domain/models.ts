@@ -326,3 +326,88 @@ export const MuscleVolume = z.object({
   }),
 });
 export type MuscleVolume = z.infer<typeof MuscleVolume>;
+
+// ---------- 週次レポート(トレーナーAI生成・MCP保存, migration 0020 / docs/weekly-report-design.md) ----------
+
+/** weekly_reports 行。metrics_json は WeekReviewData の JSON 文字列(読出時に別途 parse、items_json と同方針)。 */
+export const WeeklyReport = z.object({
+  week_start: IsoDate, // JST 日曜(自然キー)
+  week_end: IsoDate, // JST 土曜
+  overall_score: z.number().int().nullable(),
+  training_score: z.number().int().nullable(),
+  nutrition_score: z.number().int().nullable(),
+  recovery_score: z.number().int().nullable(),
+  body_score: z.number().int().nullable(),
+  headline: z.string(),
+  training_note: z.string().nullable(),
+  nutrition_note: z.string().nullable(),
+  recovery_note: z.string().nullable(),
+  body_note: z.string().nullable(),
+  focus_next_week: z.string().nullable(),
+  subjective_context: z.string().nullable(), // ヒアリング由来の主観(metrics_json とは別=権威分離)
+  metrics_json: z.string(),
+  created_at: Unix,
+  updated_at: Unix,
+});
+export type WeeklyReport = z.infer<typeof WeeklyReport>;
+
+/** 週次レポート生成のための決定的データパック(= metrics_json の中身)。採点・講評・画像レンダリングの素材。 */
+const ZoneCounts = z.object({
+  under: z.number().int(),
+  building: z.number().int(),
+  optimal: z.number().int(),
+  high: z.number().int(),
+  over: z.number().int(),
+});
+const ReadinessDayCounts = z.object({
+  green: z.number().int(),
+  yellow: z.number().int(),
+  red: z.number().int(),
+  learning: z.number().int(),
+  noData: z.number().int(),
+});
+export const WeekReviewData = z.object({
+  schemaVersion: z.number().int(),
+  weekStart: IsoDate,
+  weekEnd: IsoDate,
+  isComplete: z.boolean(), // 週末が過去=完了週
+  coverageDays: z.number().int(), // 対象週で今日以前の日数(進行中週は <7)
+  sensingProvenance: z.enum(['d1_confirmed', 'gh_provisional']), // 終盤がミラー遅延で暫定か(P0-3 と同語彙)
+  training: z.object({
+    sessions: z.number().int(),
+    volumeKg: z.number(),
+    prs: z.number().int(),
+    landmarkZones: ZoneCounts, // effective_sets 基準(P0-1)の帯分布
+    hasData: z.boolean(),
+  }),
+  nutrition: z.object({
+    avgDayScore: z.number().nullable(), // 採点できた日の get_nutrition_score(0..1)平均
+    scoredDays: z.number().int(),
+    daysLogged: z.number().int(),
+    avgKcal: z.number(),
+    avgP: z.number(),
+    avgF: z.number(),
+    avgC: z.number(),
+    dominantPhase: z.string().nullable(),
+    hasData: z.boolean(),
+  }),
+  recovery: z.object({
+    avgSleepMin: z.number().nullable(),
+    avgEfficiency: z.number().nullable(),
+    readinessDays: ReadinessDayCounts,
+    evaluatedDays: z.number().int(),
+    avgHrv: z.number().nullable(),
+    avgRhr: z.number().nullable(),
+    hasData: z.boolean(),
+  }),
+  body: z.object({
+    startKg: z.number().nullable(),
+    endKg: z.number().nullable(),
+    deltaKg: z.number().nullable(),
+    estimatedTdee: z.number().nullable(), // rolling28d 文脈(週固定ではない)
+    phase: z.string().nullable(),
+    tdeeAsOf: IsoDate.nullable(),
+    hasData: z.boolean(),
+  }),
+});
+export type WeekReviewData = z.infer<typeof WeekReviewData>;

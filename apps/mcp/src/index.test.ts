@@ -7,7 +7,7 @@ import { REGISTRARS } from './index';
  * 期待集合を変えるとき(ツール追加/削除)はここも更新する=意図的な変更だけが通る。
  */
 const EXPECTED_TOOLS = [
-  // read(16)
+  // read(19)
   'get_settings',
   'get_exercise_history',
   'get_muscle_volume',
@@ -16,6 +16,9 @@ const EXPECTED_TOOLS = [
   'get_recent_sessions',
   'get_recent_prs',
   'get_weekly_summary',
+  'get_week_review_data',
+  'get_weekly_report',
+  'get_weekly_reports',
   'get_readiness',
   'get_nutrition_status',
   'get_nutrition_score',
@@ -24,7 +27,7 @@ const EXPECTED_TOOLS = [
   'search_exercises',
   'autocomplete_foods',
   'get_day',
-  // write(10)
+  // write(11)
   'log_meal',
   'log_workout',
   'log_weight',
@@ -35,6 +38,7 @@ const EXPECTED_TOOLS = [
   'delete_meal_preset',
   'log_meal_photo',
   'set_workout_note',
+  'save_weekly_report',
   // destructive(1)
   'delete_recent_log',
   // routines(4)
@@ -45,7 +49,7 @@ const EXPECTED_TOOLS = [
 ];
 
 describe('MCP tool registration contract', () => {
-  it('REGISTRARS は期待30ツールを過不足・重複なく登録する', () => {
+  it('REGISTRARS は期待35ツールを過不足・重複なく登録する', () => {
     const names: string[] = [];
     // registerTool の name だけ記録するモック(コールバックは実行しない=DB/env 不要)。
     const mockServer = { registerTool: (name: string) => names.push(name) };

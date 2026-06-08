@@ -102,7 +102,7 @@ push は失敗しても D1 には残る(best-effort)。`gh_sync_state` 台帳が
 
 ### MCP サーバ(`apps/mcp/src/index.ts`)
 
-- Hono + `@hono/mcp` の `StreamableHTTPTransport`。**ステートレス**(リクエスト毎に `McpServer` 生成)。`server.registerTool(...)` を **31本**(記録→分析→週次サマリ→コンディション→ルーティン→栄養/エネルギー/食事スコア→ワークアウトメモ→GH反映→取消)。`buildServer` は機能群の register 関数(read/write/destructive/routine)に分解し `index.test.ts` の contract で登録集合を回帰ガード。catalog の説明は `docs/mcp-design.md`。
+- Hono + `@hono/mcp` の `StreamableHTTPTransport`。**ステートレス**(リクエスト毎に `McpServer` 生成)。`server.registerTool(...)` を **35本**(記録→分析→週次サマリ→コンディション→ルーティン→栄養/エネルギー/食事スコア→ワークアウトメモ→週次レポート(AI生成・MCP保存)→GH反映→取消)。`buildServer` は機能群の register 関数(read/write/destructive/routine)に分解し `index.test.ts` の contract で登録集合を回帰ガード。catalog の説明は `docs/mcp-design.md`。
 - web と**同一の D1 / KV(TOKENS/LOCK/CACHE)を共有**。`migrations_dir` も cron も assets も持たない(スキーマの正本は web)。
 - 全 write ツールは `makeContext(env)` → core service を呼ぶ薄いラッパ。生 SQL は書かない。返り値は必ず `ghPushed` / `ghDeleted`(GH 反映の真偽)を含める — **嘘をつくと Claude がデータ可視性を失う**。
 - 認証は2層: 一次 = `MCP_SHARED_SECRET`(URL 埋め込み, fail-closed, 定数時間比較)、二次 = Anthropic 送信元 IP allowlist `ANTHROPIC_OUTBOUND_CIDR`(=`160.79.104.0/21`, fail-open)。比較ヘルパー `timingSafeEqual`/`ipv4InCidr` は `apps/mcp/src/auth.ts`(`auth.test.ts` でテスト)。

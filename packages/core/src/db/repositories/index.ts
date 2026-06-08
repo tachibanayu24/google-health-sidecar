@@ -8,4 +8,5 @@ export * from './storage';
 export * from './sync';
 export * from './trends';
 export * from './weekly';
+export * from './weekly-reports';
 export * from './workouts';

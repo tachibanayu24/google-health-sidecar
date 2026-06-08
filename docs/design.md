@@ -771,6 +771,12 @@ AIが組んだトレーニングメニュー(計画)を保存・参照する。*
 - **A-2 `get_meal_recovery_correlation`(食事×回復)**: 食事(塩分/糖質/炭水化物/最後の食事時刻)を中央値で高/低に分け、**翌朝**の回復(HRV/RHR/睡眠効率)の**中央値差と n のみ**返す(`correlate`)。因果・p値・相関係数は出さない。各群 n<5 は非表示。D1食事×GH回復の両方を持つ本アプリ固有。domain/nutrition-recovery.ts。
 - テスト: energy/training-progress/nutrition-recovery の純関数を計14件で検証。
 
+### 8.12 週次レポート(トレーナーAI生成・MCP保存)【実装済: 2026-06-09 / docs/weekly-report-design.md】
+前週(JST 日〜土)の包括レビューを **Claude が MCP 経由で生成・保存**(アプリ/cron では作らない・通知なし)。アプリは保存・一覧・詳細・画像エクスポートのみ。
+- **スキーマ(migration 0020 `weekly_reports`)**: `week_start`(JST日曜=自然キー・1週1レポート)/ 5軸スコア(overall/training/nutrition/recovery/body・0-100・CHECK・未採点 NULL)/ MECE 講評列(headline + 各 note + focus_next_week)/ `subjective_context`(ヒアリング主観・決定的 metrics とは別カラムで権威分離)/ `metrics_json`(生成時の決定的 snapshot を凍結)。**GH 非同期=`gh_sync_state` 非登録(WRITE_LOCAL・routines と同型)**。
+- **MCP(4本)**: `get_week_review_data`(固定週の決定的データパック)/ `save_weekly_report`(**読む→ヒアリング→採点→保存**の多段契約・進行中週は reject・週末はサーバ導出・非日曜 weekStart も reject)/ `get_weekly_report` / `get_weekly_reports`。スコアは Claude が description のルーブリックで写像(charter「偽0-100は出さない」との棲み分けは §0.1=Claude 講評の要約値で権威的合成スコアではない)。主観は講評に織り込むが構造化シグナル/スコアの決定的入力にはしない(P2-5 と整合)。
+- **Web `/weekly-reports`**(参照専用): 一覧 → 詳細(5軸スコア+総評+各note+主観+来週フォーカス+snapshot)・画像エクスポート(ShareImageModal)。Home に直近レポートのミニカード導線。既存「今週のまとめ」共有(rolling7日=`WeekRecapImage`)とは別物として共存。
+
 ---
 
 ## 9. UI/UX(PWA)

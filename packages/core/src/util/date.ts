@@ -39,3 +39,49 @@ export function normalizeRange(start: string, end: string): { start: string; end
 export function nowSec(): number {
   return Math.floor(Date.now() / 1000);
 }
+
+/**
+ * JST基準の曜日(0=日..6=土)。Worker のローカルTZ(UTC)に依存しないよう、
+ * epoch(+09:00 でパース)に +9h して getUTCDay で JST 曜日を取る(getDay は使わない=off-by-one 防止)。
+ */
+export function jstDayOfWeek(dateStr: string): number {
+  assertIsoDate(dateStr, 'date');
+  return new Date(Date.parse(`${dateStr}T00:00:00+09:00`) + JST_OFFSET_MS).getUTCDay();
+}
+
+/** JST日付文字列を delta 日ずらす(JSTの暦日加減算)。 */
+export function jstDatePlusDays(dateStr: string, delta: number): string {
+  assertIsoDate(dateStr, 'date');
+  return toJstDateString(Date.parse(`${dateStr}T00:00:00+09:00`) + delta * 86400_000);
+}
+
+/**
+ * 直近の「完了した」JST週(日〜土)。weekStart=先週日曜・weekEnd=先週土曜。
+ * 進行中(今週)は含めない=週次レポートの既定対象(docs/weekly-report-design.md §1)。
+ */
+export function lastCompletedWeekJst(from: string = todayJst()): {
+  weekStart: string;
+  weekEnd: string;
+} {
+  const dow = jstDayOfWeek(from); // 0=日..6=土
+  const thisSunday = jstDatePlusDays(from, -dow); // 今週日曜
+  const weekStart = jstDatePlusDays(thisSunday, -7); // 先週日曜
+  const weekEnd = jstDatePlusDays(weekStart, 6); // 先週土曜
+  return { weekStart, weekEnd };
+}
+
+/**
+ * 週(JST日付)の epoch秒境界。startSec=日曜00:00:00+09:00 / endSec=土曜23:59:59+09:00。
+ * getWeeklySummary / getWeekReviewData が PR 達成時刻等の突合に共有する。
+ */
+export function weekBoundsSec(
+  weekStart: string,
+  weekEnd: string,
+): { startSec: number; endSec: number } {
+  assertIsoDate(weekStart, 'weekStart');
+  assertIsoDate(weekEnd, 'weekEnd');
+  return {
+    startSec: Math.floor(Date.parse(`${weekStart}T00:00:00+09:00`) / 1000),
+    endSec: Math.floor(Date.parse(`${weekEnd}T23:59:59+09:00`) / 1000),
+  };
+}

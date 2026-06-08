@@ -56,6 +56,7 @@ flowchart TB
 | 歩数 / 消費kcal | GH デバイス | ✓ `daily_metrics`(`steps`/`active_energy_kcal`) | ✗ | ✓ **配線済**(分単位 interval を日次合算, migration 0014) |
 | 皮膚温 | GH デバイス | ✓ `daily_metrics`(`skin_temp_c`) | ✗ | ✓ read-only(`daily-sleep-temperature-derivations`=夜間皮膚温℃。2026-06-03 正ID判明・取込済。readiness の文脈指標) |
 | 食事プリセット / 栄養目標 | UI / MCP | ✓ | ✗ | ✗ |
+| 週次レポート(AI生成) | MCP(`save_weekly_report`) | ✓ `weekly_reports` | ✗ | ✗ |
 
 - ※ 食事の GH push は **`FEATURE_GH_NUTRITION_PUSH`**(本番 = `true`)が ON のときだけ実行。OFF だと台帳に `skipped_flag_off` で記録され push されない。
 - push は失敗しても D1 には残る(best-effort)。`gh_sync_state` 台帳が `pending → synced / failed → dead_letter`(403/401/400 は恒久失敗)を追跡し、cron が再試行する。冪等性は `client_request_id` で担保。

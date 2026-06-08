@@ -40,7 +40,7 @@ function fmtSleep(min: number | null): string {
  * 週間サマリーのシェアレポート(直近7日の総合ラップ)。Spotify Wrapped 風の濃色・大型タイポ。
  * 共通台紙 ShareImageModal(tone='bold')に乗せ、総挙上量は物に例えてさりげなく忍ばせる。
  */
-export function WeeklyReport({ onClose }: { onClose: () => void }) {
+export function WeekRecapImage({ onClose }: { onClose: () => void }) {
   const week = useQuery({ queryKey: ['weekly-summary'], queryFn: api.weeklySummary });
   const mv = useQuery({ queryKey: ['muscle-volume', 7], queryFn: () => api.muscleVolume(7) });
   const d = week.data;

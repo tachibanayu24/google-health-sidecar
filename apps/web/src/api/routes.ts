@@ -32,11 +32,13 @@ import {
   getSettings,
   getSleepByDate,
   getTrends,
+  getWeeklyReport,
   getWeeklySummaryNow,
   jstDaysAgo,
   LogMealInputSchema,
   type LogWeightInput,
   listMealPresets,
+  listWeeklyReports,
   logMeal,
   logWeight,
   type MealItemInput,
@@ -52,6 +54,7 @@ import {
   setWorkoutNote,
   type UpdateSettingsInput,
   updateSettings,
+  WeekReviewData,
 } from '@ghs/core';
 import { Hono } from 'hono';
 import type { HonoEnv } from '../env';
@@ -184,6 +187,55 @@ api.get('/weekly-summary', async (c) => {
     getActiveNutritionTarget(ctx.db),
   ]);
   return c.json({ provenance: 'd1_confirmed', ...summary, target });
+});
+
+// 週次レポート(AI生成・MCP保存)。読み取りのみ(生成は MCP 専用)。一覧は軽量(metrics_json 除外)。
+api.get('/weekly-reports', async (c) => {
+  const ctx = makeContext(c.env);
+  const rows = await listWeeklyReports(ctx);
+  return c.json({
+    provenance: 'd1_confirmed',
+    reports: rows.map((r) => ({
+      week_start: r.week_start,
+      week_end: r.week_end,
+      overall_score: r.overall_score,
+      training_score: r.training_score,
+      nutrition_score: r.nutrition_score,
+      recovery_score: r.recovery_score,
+      body_score: r.body_score,
+      headline: r.headline,
+      updated_at: r.updated_at,
+    })),
+  });
+});
+
+api.get('/weekly-reports/:weekStart', async (c) => {
+  const ctx = makeContext(c.env);
+  const r = await getWeeklyReport(ctx, c.req.param('weekStart'));
+  if (!r) return c.json({ error: 'not found' }, 404);
+  // 詳細は metrics を Zod 検証してから返す(破損/旧スキーマは null=詳細画面のクラッシュ防止。items_json と同方針)。
+  const parsedMetrics = WeekReviewData.safeParse(safeJson(r.metrics_json));
+  const metrics = parsedMetrics.success ? parsedMetrics.data : null;
+  return c.json({
+    provenance: 'd1_confirmed',
+    week_start: r.week_start,
+    week_end: r.week_end,
+    overall_score: r.overall_score,
+    training_score: r.training_score,
+    nutrition_score: r.nutrition_score,
+    recovery_score: r.recovery_score,
+    body_score: r.body_score,
+    headline: r.headline,
+    training_note: r.training_note,
+    nutrition_note: r.nutrition_note,
+    recovery_note: r.recovery_note,
+    body_note: r.body_note,
+    focus_next_week: r.focus_next_week,
+    subjective_context: r.subjective_context,
+    metrics,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+  });
 });
 
 // Readiness(コンディション信号)= 個人ベースライン比の相対逸脱。MCP get_readiness と共有。

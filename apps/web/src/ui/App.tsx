@@ -39,6 +39,12 @@ const RoutineDetailScreen = lazy(() =>
 const WorkoutDetail = lazy(() =>
   import('./screens/WorkoutDetail').then((m) => ({ default: m.WorkoutDetail })),
 );
+const WeeklyReportsScreen = lazy(() =>
+  import('./screens/WeeklyReports').then((m) => ({ default: m.WeeklyReportsScreen })),
+);
+const WeeklyReportDetailScreen = lazy(() =>
+  import('./screens/WeeklyReports').then((m) => ({ default: m.WeeklyReportDetailScreen })),
+);
 
 // ============ ルート定義(BrowserRouter / SPA fallback は wrangler assets で対応) ============
 export const router = createBrowserRouter([
@@ -49,6 +55,8 @@ export const router = createBrowserRouter([
       { path: '/training', element: <TrainingRoute /> },
       { path: '/routines', element: <RoutinesRoute /> },
       { path: '/routines/:id', element: <RoutineDetailRoute /> },
+      { path: '/weekly-reports', element: <WeeklyReportsRoute /> },
+      { path: '/weekly-reports/:weekStart', element: <WeeklyReportDetailRoute /> },
       { path: '/body', element: <RecoveryRoute /> },
       { path: '/settings', element: <SettingsRoute /> },
       { path: '/nutrition', element: <NutritionRoute /> },
@@ -72,6 +80,8 @@ function HomeRoute() {
       onOpenTraining={() => navigate('/training')}
       onOpenRecovery={() => navigate('/body')}
       onResume={() => navigate('/record')}
+      onOpenWeeklyReports={() => navigate('/weekly-reports')}
+      onOpenWeeklyReport={(ws) => navigate(`/weekly-reports/${ws}`)}
     />
   );
 }
@@ -109,6 +119,22 @@ function RoutineDetailRoute() {
   const { id } = useParams();
   const navigate = useNavigate();
   return <RoutineDetailScreen id={id ?? ''} onBack={() => navigate(-1)} />;
+}
+
+function WeeklyReportsRoute() {
+  const navigate = useNavigate();
+  return (
+    <WeeklyReportsScreen
+      onOpen={(ws) => navigate(`/weekly-reports/${ws}`)}
+      onBack={() => navigate(-1)}
+    />
+  );
+}
+
+function WeeklyReportDetailRoute() {
+  const { weekStart } = useParams();
+  const navigate = useNavigate();
+  return <WeeklyReportDetailScreen weekStart={weekStart ?? ''} onBack={() => navigate(-1)} />;
 }
 
 function RecoveryRoute() {

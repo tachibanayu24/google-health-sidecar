@@ -19,6 +19,8 @@ import type {
   Settings,
   Today,
   Trends,
+  WeeklyReportDetail,
+  WeeklyReportSummary,
   WeeklySummary,
 } from './api-types';
 import { enqueue } from './outbox';
@@ -116,6 +118,9 @@ export const api = {
   deleteRoutine: (id: string) =>
     req<{ deleted: boolean }>(`/routines/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   weeklySummary: () => req<WeeklySummary>('/weekly-summary'),
+  weeklyReports: () => req<{ reports: WeeklyReportSummary[] }>('/weekly-reports'),
+  weeklyReport: (weekStart: string) =>
+    req<WeeklyReportDetail>(`/weekly-reports/${encodeURIComponent(weekStart)}`),
   today: (date?: string) => req<Today>(`/today${date ? `?date=${date}` : ''}`),
   foodAutocomplete: (q: string) =>
     req<{ foods: FoodSuggestion[] }>(`/foods/autocomplete?q=${encodeURIComponent(q)}`),

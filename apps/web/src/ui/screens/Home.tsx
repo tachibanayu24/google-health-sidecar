@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
   CloudOff,
@@ -16,13 +17,14 @@ import { Card } from '../components/Card';
 import { DateField } from '../components/DateField';
 import { NutrientBars } from '../components/NutrientBars';
 import { ErrorBox, Loading } from '../components/state';
-import { WeeklyReport } from '../components/WeeklyReport';
+import { WeekRecapImage } from '../components/WeekRecapImage';
 import {
   api,
   type BodyReading,
   type NutritionTarget,
   type Readiness,
   type Today,
+  type WeeklyReportSummary,
 } from '../lib/api';
 import {
   DOW_JA,
@@ -54,11 +56,15 @@ export function HomeScreen({
   onOpenTraining,
   onOpenRecovery,
   onResume,
+  onOpenWeeklyReports,
+  onOpenWeeklyReport,
 }: {
   onOpenNutrition: (date: string) => void;
   onOpenTraining: () => void;
   onOpenRecovery: () => void;
   onResume: () => void;
+  onOpenWeeklyReports: () => void;
+  onOpenWeeklyReport: (weekStart: string) => void;
 }) {
   const [date, setDate] = useState(todayJst());
   const [shareWeek, setShareWeek] = useState(false);
@@ -84,12 +90,19 @@ export function HomeScreen({
   });
   // コンディション信号(からだ画面と queryKey 共有)。選択日のコンディションを Home でも一目に。
   const readiness = useQuery({ queryKey: ['readiness', date], queryFn: () => api.readiness(date) });
+  // 週次レポート(直近)。Home の導線で最新の overall+headline をミニカード表示。
+  const weekly = useQuery({
+    queryKey: ['weekly-reports'],
+    queryFn: api.weeklyReports,
+    staleTime: 60_000,
+  });
 
   if (today.isLoading) return <Loading />;
   if (today.error) return <ErrorBox error={today.error} />;
   const t = today.data!;
   const target = settings.data?.nutritionTarget ?? null;
   const worked = (mv.data?.muscles ?? []).filter((m) => m.actual_sets > 0).length;
+  const latestReport = weekly.data?.reports[0] ?? null;
   // 選択日のワークアウト(無ければ null)。各グランスは選択日に整合させる。
   const daySession = recent.data?.sessions?.find((s) => s.date === date) ?? null;
   // エネルギー収支(推定): 摂取 −(BMR+活動消費)。身体プロフィール未設定なら balance=null。
@@ -158,6 +171,14 @@ export function HomeScreen({
         onOpen={onOpenTraining}
       />
 
+      {!weekly.isLoading && (
+        <WeeklyReportEntry
+          latest={latestReport}
+          onOpenList={onOpenWeeklyReports}
+          onOpenReport={onOpenWeeklyReport}
+        />
+      )}
+
       <button
         type="button"
         onClick={() => setShareWeek(true)}
@@ -166,7 +187,7 @@ export function HomeScreen({
         <Share2 className="h-4 w-4" strokeWidth={2.2} /> 今週のまとめを画像に
       </button>
 
-      {shareWeek && <WeeklyReport onClose={() => setShareWeek(false)} />}
+      {shareWeek && <WeekRecapImage onClose={() => setShareWeek(false)} />}
     </div>
   );
 }
@@ -468,6 +489,68 @@ function ConditionGlance({
         {rhr != null && <span>RHR {round(rhr, 0)}</span>}
       </div>
     </GlanceCard>
+  );
+}
+
+// ============ 週次レポート導線(直近があればミニカード、無ければ控えめリンク) ============
+const wrColor = (s: number | null): string =>
+  s == null
+    ? '#9b9486'
+    : s >= 85
+      ? '#2f9e6e'
+      : s >= 70
+        ? '#4c9aa0'
+        : s >= 50
+          ? '#c98a2b'
+          : '#e0521f';
+
+function WeeklyReportEntry({
+  latest,
+  onOpenList,
+  onOpenReport,
+}: {
+  latest: WeeklyReportSummary | null;
+  onOpenList: () => void;
+  onOpenReport: (weekStart: string) => void;
+}) {
+  if (!latest) {
+    return (
+      <button
+        type="button"
+        onClick={onOpenList}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-line bg-card/60 py-3 text-sm font-semibold text-muted active:scale-[0.99]"
+      >
+        <CalendarDays className="h-4 w-4" strokeWidth={2.2} />{' '}
+        週次レポート(AIが会話で作成・ここで閲覧)
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenReport(latest.week_start)}
+      className="block w-full text-left"
+    >
+      <Card right={<ChevronRight className="h-4 w-4 text-faint" strokeWidth={2.4} />}>
+        <div className="flex items-center gap-3">
+          <div className="shrink-0 text-center">
+            <div
+              className="stat text-2xl leading-none"
+              style={{ color: wrColor(latest.overall_score) }}
+            >
+              {latest.overall_score ?? '—'}
+            </div>
+            <div className="text-[10px] font-bold text-faint">週次レポート</div>
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-semibold text-muted">
+              {formatDateForDisplay(latest.week_start)}–{formatDateForDisplay(latest.week_end)}
+            </div>
+            <p className="line-clamp-2 text-sm font-medium leading-snug">{latest.headline}</p>
+          </div>
+        </div>
+      </Card>
+    </button>
   );
 }
 

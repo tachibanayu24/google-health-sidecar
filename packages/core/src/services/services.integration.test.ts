@@ -24,12 +24,13 @@ import type {
   ProviderDataPoint,
   ReconcileResult,
 } from '../providers/HealthProvider';
-import { todayJst } from '../util/date';
+import { jstDatePlusDays, lastCompletedWeekJst, todayJst } from '../util/date';
 import { ProviderApiError, RateLimitError } from '../util/errors';
 import { deleteBodyMetric, logWeight } from './body';
 import type { AppContext } from './context';
 import { deleteMeal, logMeal, logMealFromPreset, saveMealPreset } from './nutrition';
 import { pullActiveEnergyDaily, retryPendingPushes, runDailyPull } from './sync';
+import { getWeeklyReport, getWeekReviewData, saveWeeklyReport } from './weekly-report';
 import {
   deleteWorkout,
   getExerciseHistory,
@@ -576,6 +577,112 @@ describe('分析(volume / calendar / history)', () => {
     expect(legs?.last_trained_date).toBeNull();
     expect(legs?.weekly_counts).toEqual([0, 0, 0, 0]);
     expect(legs?.total_sets).toBe(0);
+  });
+});
+
+describe('週次レポート(weekly-report)', () => {
+  const WS = '2025-01-05'; // 固定の過去週(日〜土: 2025-01-05..2025-01-11)
+  const seedWeek = async (ctx: AppContext) => {
+    await saveWorkout(ctx, {
+      date: '2025-01-06',
+      exercises: [
+        {
+          exerciseId: 'dumbbell-bench-press',
+          sets: [{ setType: 'main', entryValue: 30, reps: 10, entryUnit: 'kg' }],
+        },
+      ],
+    });
+    await logMeal(ctx, {
+      date: '2025-01-06',
+      mealType: 'Lunch',
+      items: [{ foodName: '鶏', caloriesKcal: 200, proteinG: 30 }],
+    });
+  };
+
+  it('getWeekReviewData: 固定週の決定的データパック(isComplete・帯分布・栄養日数)', async () => {
+    const ctx = makeCtx();
+    await seedWeek(ctx);
+    const d = await getWeekReviewData(ctx, WS);
+    expect(d.weekStart).toBe(WS);
+    expect(d.weekEnd).toBe('2025-01-11');
+    expect(d.isComplete).toBe(true);
+    expect(d.coverageDays).toBe(7);
+    expect(d.schemaVersion).toBe(1);
+    expect(d.sensingProvenance).toBe('d1_confirmed'); // 遠い過去=確定
+    expect(d.training.sessions).toBe(1);
+    expect(d.training.hasData).toBe(true);
+    const zoneTotal = Object.values(d.training.landmarkZones).reduce((a, b) => a + b, 0);
+    expect(zoneTotal).toBeGreaterThan(0); // landmark 設定済の部位が帯に計上される
+    expect(d.nutrition.daysLogged).toBe(1);
+  });
+
+  it('saveWeeklyReport→getWeeklyReport: 保存/再取得・created の真偽・snapshot 維持', async () => {
+    const ctx = makeCtx();
+    await seedWeek(ctx);
+    const r1 = await saveWeeklyReport(ctx, {
+      weekStart: WS,
+      scores: { overall: 80, training: 82, nutrition: 70, recovery: null, body: null },
+      headline: '良い週',
+      recoveryNote: '睡眠データ不足',
+      subjectiveContext: '膝に軽い違和感',
+    });
+    expect(r1.created).toBe(true);
+    expect(r1.weekEnd).toBe('2025-01-11');
+    expect(r1.subjectiveContext).toBe('膝に軽い違和感');
+
+    const got = await getWeeklyReport(ctx, WS);
+    expect(got?.overall_score).toBe(80);
+    expect(got?.headline).toBe('良い週');
+    expect(got?.subjective_context).toBe('膝に軽い違和感');
+    const snap1 = got?.metrics_json ?? '';
+    expect(snap1.length).toBeGreaterThan(0);
+
+    // 再保存(上書き): created=false、metrics_json は再凍結せず維持(refreshSnapshot 未指定)。
+    const r2 = await saveWeeklyReport(ctx, {
+      weekStart: WS,
+      scores: { overall: 90, training: 90, nutrition: 80, recovery: null, body: null },
+      headline: '見直し',
+    });
+    expect(r2.created).toBe(false);
+    const got2 = await getWeeklyReport(ctx, WS);
+    expect(got2?.overall_score).toBe(90);
+    expect(got2?.headline).toBe('見直し');
+    expect(got2?.metrics_json).toBe(snap1); // snapshot 維持(当時の事実のまま)
+  });
+
+  it('進行中(週末が未来)の週は保存を拒否する', async () => {
+    const ctx = makeCtx();
+    // 先週日曜 + 21日 = 2週先の日曜(必ず未来の未完了週・時刻非依存)。
+    const futureSunday = jstDatePlusDays(lastCompletedWeekJst().weekStart, 21);
+    await expect(
+      saveWeeklyReport(ctx, {
+        weekStart: futureSunday,
+        scores: { overall: 50, training: 50, nutrition: 50, recovery: 50, body: 50 },
+        headline: 'まだ終わってない週',
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('非日曜の weekStart は reject する(自然キー=JST日曜の不変条件)', async () => {
+    const ctx = makeCtx();
+    await expect(
+      saveWeeklyReport(ctx, {
+        weekStart: '2025-01-06', // 月曜(2025-01-05 が日曜)
+        scores: { overall: 50, training: null, nutrition: null, recovery: null, body: null },
+        headline: 'x',
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('スコア範囲外(>100)は CHECK 制約で弾く', async () => {
+    const ctx = makeCtx();
+    await expect(
+      saveWeeklyReport(ctx, {
+        weekStart: WS,
+        scores: { overall: 150, training: null, nutrition: null, recovery: null, body: null },
+        headline: 'invalid',
+      }),
+    ).rejects.toThrow();
   });
 });
 

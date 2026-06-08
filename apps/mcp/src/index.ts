@@ -15,6 +15,7 @@ import {
   deleteMealPresetRow,
   deleteRoutine,
   deleteWorkout,
+  errorMessage,
   getActiveNutritionTarget,
   getBodyForDate,
   getBodyMetricById,
@@ -42,10 +43,13 @@ import {
   getSettings,
   getSleepByDate,
   getTrainingFrequency,
+  getWeeklyReport,
   getWeeklySummaryNow,
+  getWeekReviewData,
   jstDaysAgo,
   LogMealInputSchema,
   listMealPresets,
+  listWeeklyReports,
   logMeal,
   logMealFromPreset,
   logWeight,
@@ -54,9 +58,11 @@ import {
   makeContext,
   resolveExercise,
   type SaveRoutineInput,
+  type SaveWeeklyReportInput,
   SaveWorkoutInputSchema,
   saveMealPreset,
   saveRoutine,
+  saveWeeklyReport,
   saveWorkout,
   searchExercises,
   setNutritionTarget,
@@ -311,10 +317,81 @@ function registerReadTools(server: McpServer, env: Env) {
   );
 
   server.registerTool(
+    'get_week_review_data',
+    {
+      title: '週次レビュー用データパック(決定的素材)',
+      description: `指定週(省略=直近の“完了”週=先週日〜土JST)の**決定的データパック**を返す。save_weekly_report で週次レポートを作る前に必ず読む採点・講評の素材。返り値: weekStart/weekEnd・isComplete(週末が過去=完了週)・coverageDays(今日以前の日数)・sensingProvenance(終盤がミラー遅延で暫定なら gh_provisional)/ training{sessions, volumeKg, prs, landmarkZones(effective_sets 基準=P0-1 の帯分布: under/building/optimal/high/over の部位数), hasData} / nutrition{avgDayScore(採点できた日の get_nutrition_score 0..1 平均), scoredDays, daysLogged, avgKcal/P/F/C, dominantPhase, hasData} / recovery{avgSleepMin, avgEfficiency, readinessDays{green/yellow/red/learning/noData}, evaluatedDays, avgHrv, avgRhr, hasData} / body{startKg/endKg/deltaKg(週内・固定窓), estimatedTdee(rolling28d 文脈=週固定ではない), phase, tdeeAsOf, hasData}。**これは決定的素材のみ。痛み/ストレス/遵守理由などの主観は会話で別途ヒアリングして save_weekly_report に渡す**。weekStart 省略時は直近の“完了”週。進行中(未完了)の週は isComplete=false / sensingProvenance=gh_provisional で示す — 暫定値を確定レポート化しないこと。hasData=false の軸は採点せず NULL にする(偽の数字を出さない)。`,
+      inputSchema: {
+        weekStart: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+      },
+      annotations: READ,
+    },
+    async ({ weekStart }) => {
+      const ctx = makeContext(env);
+      return ok({ provenance: 'd1_confirmed', ...(await getWeekReviewData(ctx, weekStart)) });
+    },
+  );
+
+  server.registerTool(
+    'get_weekly_report',
+    {
+      title: '保存済み週次レポート(1件)',
+      description: `保存済みの週次レポートを1件返す(weekStart 省略=最新)。返り値は週レンジ・5軸スコア(overall/training/nutrition/recovery/body, 0-100・未採点は null)・講評(headline / training_note / nutrition_note / recovery_note / body_note / focus_next_week)・subjective_context(ヒアリングで得た主観)・metrics_json(生成時の決定的 snapshot 文字列)。前週との比較や再表示に。一覧は get_weekly_reports、新規作成は save_weekly_report。まだ無ければ note を返す。`,
+      inputSchema: {
+        weekStart: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+      },
+      annotations: READ,
+    },
+    async ({ weekStart }) => {
+      const ctx = makeContext(env);
+      const report = await getWeeklyReport(ctx, weekStart);
+      return ok(
+        report
+          ? { provenance: 'd1_confirmed', report }
+          : { provenance: 'd1_confirmed', report: null, note: 'まだ週次レポートがありません。' },
+      );
+    },
+  );
+
+  server.registerTool(
+    'get_weekly_reports',
+    {
+      title: '保存済み週次レポート一覧',
+      description: `保存済みの週次レポート一覧を新しい週順で返す(limit 既定12・最大52)。各行は週レンジ・overall+4軸スコア・headline・更新時刻(metrics_json は含めない=軽量。詳細は get_weekly_report)。スコア推移の把握や、前週からの連続性のある講評を書くために使う。`,
+      inputSchema: { limit: z.number().int().min(1).max(52).optional() },
+      annotations: READ,
+    },
+    async ({ limit }) => {
+      const ctx = makeContext(env);
+      const rows = await listWeeklyReports(ctx, limit ?? 12);
+      return ok({
+        provenance: 'd1_confirmed',
+        reports: rows.map((r) => ({
+          week_start: r.week_start,
+          week_end: r.week_end,
+          overall_score: r.overall_score,
+          training_score: r.training_score,
+          nutrition_score: r.nutrition_score,
+          recovery_score: r.recovery_score,
+          body_score: r.body_score,
+          headline: r.headline,
+          updated_at: r.updated_at,
+        })),
+      });
+    },
+  );
+
+  server.registerTool(
     'get_readiness',
     {
       title: 'コンディション信号(Readiness)',
-      description: `指定日のコンディションを『あなた自身の過去データに対する相対逸脱の事実』として返す(date 省略で当日JST)。中核=夜間HRV(rMSSD, ln→7日ローリング平均; Plews/Buchheit)、補助=安静時心拍/呼吸数、文脈=皮膚温/睡眠時間・効率。各 contributor は {metric,label,unit,isCore,status(ready/learning/no-data),daysOfData,current(実測値・no-dataは null),baselineMedian,normalLow/High(あなたの平常範囲),deviation(low/normal/high),signal(green/yellow/red)}。overall は N-of-M(2指標以上同時に悪方向逸脱 or 中核HRVの赤で全体赤)で統合し、偽の0-100合成スコアは出さない。ベースライン未確立(<14日)・データ不足は overall.status=learning で判定を出さず learningRemainingDays を返す。併せて muscleLoad[]={muscle, acute7_sets(直近7日の総セット数=間接関与も1と計上), chronic_weekly_sets(直近28日の週平均), ratio(acute7/chronic_weekly・慢性が薄い部位は null), trend(detraining<0.8 / steady<=1.3 / ramping<=1.5 / spiking)}。重要: muscleLoad の set 数は get_muscle_volume の actual_sets と同じ素の計上(間接も各1。landmark 判定に使う effective_sets とは別)であり、frequency/calendar の主働のみ集計とも別系統 —『どの部位の日をやったか(主働の分割)』は get_muscle_calendar / get_training_frequency を見よ。muscleLoad は ACWR の怪我予測ではなく(学術的に否定済)漸進性過負荷の記述指標。全体として医学的診断でもパフォーマンス予測でもなく相対逸脱の事実のみ —『休め/病気だ/成績が上がる』と断定せず、HRVが平常下/呼吸が上がっている/特定部位を急増させた等の事実を踏まえて会話で助言すること。注意: 当日指定は HRV/RHR 等が GH ミラー遅延で未確定/欠損になりやすく(返り値 sensingProvenance=gh_provisional がその印)、確実な評価は前日指定が無難。使い分け: 1日の全データは get_day、直近7日集計は get_weekly_summary。`,
+      description: `指定日のコンディションを『あなた自身の過去データに対する相対逸脱の事実』として返す(date 省略で当日JST)。中核=夜間HRV(rMSSD, ln→7日ローリング平均; Plews/Buchheit)、補助=安静時心拍/呼吸数、文脈=皮膚温/睡眠時間・効率。各 contributor は {metric,label,unit,isCore,status(ready/learning/no-data),daysOfData,current(実測値・no-dataは null),baselineMedian,normalLow/High(あなたの平常範囲),deviation(low/normal/high),signal(green/yellow/red)}。overall は N-of-M(2指標以上同時に悪方向逸脱 or 中核HRVの赤で全体赤)で統合し、偽の0-100合成スコアは出さない。ベースライン未確立(<14日)・データ不足は overall.status=learning で判定を出さず learningRemainingDays を返す。併せて muscleLoad[]={muscle, acute7_sets(直近7日の総セット数=間接関与も1と計上), chronic_weekly_sets(直近28日の週平均), ratio(acute7/chronic_weekly・慢性が薄い部位は null), trend(detraining<0.8 / steady<=1.3 / ramping<=1.5 / spiking)}。重要: muscleLoad の set 数は get_muscle_volume の actual_sets と同じ素の計上(間接も各1。landmark 判定に使う effective_sets とは別)であり、frequency/calendar の主働のみ集計とも別系統 —『どの部位の日をやったか(主働の分割)』は get_muscle_calendar / get_training_frequency を見よ。muscleLoad は ACWR の怪我予測ではなく(学術的に否定済)漸進性過負荷の記述指標。全体として医学的診断でもパフォーマンス予測でもなく相対逸脱の事実のみ —『休め/病気だ/成績が上がる』と断定せず、HRVが平常下/呼吸が上がっている/特定部位を急増させた等の事実を踏まえて会話で助言すること。注意: 当日指定は HRV/RHR 等が GH ミラー遅延で未確定/欠損になりやすく(返り値 sensingProvenance=gh_provisional がその印)、確実な評価は前日指定が無難。使い分け: 1日の全データは get_day、直近7日集計は get_weekly_summary。※週次レポート(save_weekly_report)が保存する 0-100 スコアは Claude 講評の summary 値=例外であり、ここで否定している『アプリが出す権威的な合成スコア』ではない(docs/weekly-report-design.md §0.1)。`,
       inputSchema: {
         date: z
           .string()
@@ -795,6 +872,58 @@ function registerWriteTools(server: McpServer, env: Env) {
     async ({ sessionId, note }) => {
       const ctx = makeContext(env);
       return ok(await setWorkoutNote(ctx, { sessionId, note, author: 'ai' }));
+    },
+  );
+
+  server.registerTool(
+    'save_weekly_report',
+    {
+      title: '週次レポートを作成・保存',
+      description: `前週(JST 日〜土)の週次レポートを作成・保存する(D1ローカル・GH非同期)。アプリ/cron では作らず、あなた(Claude)がオーナーとの会話で作る。**必ず次の順序で行う**:
+(1) まず get_week_review_data を読む(決定的素材なしに採点・保存するな)。
+(2) **保存前に、この週について会話からまだ得られていない主観をオーナーに簡潔に数問ヒアリングする**: 週全体の手応え / 痛み・故障の有無と部位 / 生活ストレス / 睡眠の乱れ / 計画を遵守できた・できなかった理由 / 本人の狙い。既に会話で語られた項目は再質問しない(毎回全部聞くと鬱陶しい)。
+(3) スコアは get_week_review_data の決定的素材を下のルーブリックで 0-100 に写像する。**主観でスコアを動かす場合は当該 note に理由を明示**(スコアの一次根拠は数値。痛み/ストレス等の主観は recovery_note/body_note/headline/focus_next_week の語りに織り込み、subjectiveContext に渡す)。
+(4) headline(総評)+ 各 note(MECE: 各 note はその関心のみ・重複させない)+ focus_next_week(来週1〜3点)を書く。包括的に: 食事/睡眠/トレ/からだ/来週 を必ず1関心ずつ。
+
+【ルーブリック(0-100)】
+- training: landmarkZones の充足(optimal+high=充足 / building+under=不足 / over=過剰)。充足部位割合 r → 概ね round(40+50*r)、PR・セッション頻度で±。
+- nutrition: round(avgDayScore*100) を一貫性で減点(daysLogged<4 → ×0.8)。記録ゼロ日は平均母数外(一貫性は daysLogged/7 で表現)。
+- recovery: green 寄り+睡眠充足ほど高。red≥3日は減点。learning/欠損は母数外。
+- body: 週内 deltaKg がフェーズ目標(cut=減 / bulk=制御増 / maintain=安定)に沿うほど高。phase 未設定/体重不足は NULL。
+- overall: training0.30 / nutrition0.30 / recovery0.25 / body0.15。**NULL 軸は除外して残りで再正規化**。記録0日≥4 or red≥3日 で上限60。
+- 帯ラベル: 85-100優秀 / 70-84良好 / 50-69要改善 / <50立て直し。**データ不足の軸は NULL(偽の数字を出さない)**。
+
+【週の指定】weekStart 省略=直近の“完了”週(先週日〜土)。**進行中の週は採点しない**。オーナーが『今週』と言っても、明示的に進行中週を指定しない限り完了週を対象にすると一言断る。weekEnd はサーバが導出する(渡さない)。同一週の再保存は上書き(metrics snapshot は既定で維持、refreshSnapshot=true で再取得)。返り値 { weekStart, weekEnd, created, provisionalSensing, subjectiveContext }。provisionalSensing=true は終盤センシングが暫定 → 数日後の再保存(上書き)を促す。`,
+      inputSchema: {
+        weekStart: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        scores: z.object({
+          overall: z.number().int().min(0).max(100).nullable(),
+          training: z.number().int().min(0).max(100).nullable(),
+          nutrition: z.number().int().min(0).max(100).nullable(),
+          recovery: z.number().int().min(0).max(100).nullable(),
+          body: z.number().int().min(0).max(100).nullable(),
+        }),
+        headline: z.string().min(1),
+        trainingNote: z.string().nullable().optional(),
+        nutritionNote: z.string().nullable().optional(),
+        recoveryNote: z.string().nullable().optional(),
+        bodyNote: z.string().nullable().optional(),
+        focusNextWeek: z.string().nullable().optional(),
+        subjectiveContext: z.string().nullable().optional(),
+        refreshSnapshot: z.boolean().optional(),
+      },
+      annotations: WRITE_LOCAL,
+    },
+    async (args) => {
+      const ctx = makeContext(env);
+      try {
+        return ok(await saveWeeklyReport(ctx, args as SaveWeeklyReportInput));
+      } catch (e) {
+        return fail(errorMessage(e));
+      }
     },
   );
 }

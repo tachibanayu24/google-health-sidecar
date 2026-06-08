@@ -304,3 +304,71 @@ export interface MealPreset {
   useCount: number;
   items: MealItemInput[];
 }
+
+// ---- 週次レポート(AI生成・MCP保存) ----
+/** metrics_json の中身(= core の WeekReviewData)。画像レンダリングの固定フィールド。 */
+export interface WeekReviewData {
+  schemaVersion: number;
+  weekStart: string;
+  weekEnd: string;
+  isComplete: boolean;
+  coverageDays: number;
+  sensingProvenance: 'd1_confirmed' | 'gh_provisional';
+  training: {
+    sessions: number;
+    volumeKg: number;
+    prs: number;
+    landmarkZones: { under: number; building: number; optimal: number; high: number; over: number };
+    hasData: boolean;
+  };
+  nutrition: {
+    avgDayScore: number | null;
+    scoredDays: number;
+    daysLogged: number;
+    avgKcal: number;
+    avgP: number;
+    avgF: number;
+    avgC: number;
+    dominantPhase: string | null;
+    hasData: boolean;
+  };
+  recovery: {
+    avgSleepMin: number | null;
+    avgEfficiency: number | null;
+    readinessDays: { green: number; yellow: number; red: number; learning: number; noData: number };
+    evaluatedDays: number;
+    avgHrv: number | null;
+    avgRhr: number | null;
+    hasData: boolean;
+  };
+  body: {
+    startKg: number | null;
+    endKg: number | null;
+    deltaKg: number | null;
+    estimatedTdee: number | null;
+    phase: string | null;
+    tdeeAsOf: string | null;
+    hasData: boolean;
+  };
+}
+export interface WeeklyReportSummary {
+  week_start: string;
+  week_end: string;
+  overall_score: number | null;
+  training_score: number | null;
+  nutrition_score: number | null;
+  recovery_score: number | null;
+  body_score: number | null;
+  headline: string;
+  updated_at: number;
+}
+export interface WeeklyReportDetail extends WeeklyReportSummary {
+  training_note: string | null;
+  nutrition_note: string | null;
+  recovery_note: string | null;
+  body_note: string | null;
+  focus_next_week: string | null;
+  subjective_context: string | null;
+  metrics: WeekReviewData | null;
+  created_at: number;
+}
