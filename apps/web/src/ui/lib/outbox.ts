@@ -19,6 +19,7 @@ export interface OutboxItem {
   createdAt: number;
   attempts: number;
   lastError?: string;
+  failed?: boolean; // 恒久失敗(4xx/上限超)。自動再送の対象外。手動で再送/削除する(§9.8)。
 }
 
 const hasIdb = typeof indexedDB !== 'undefined';
@@ -85,22 +86,31 @@ async function remove(id: string): Promise<void> {
 
 let flushing = false;
 
+/** flush 時の HTTP 応答→アクション分類(純関数=テスト対象)。恒久失敗は破棄せず failed として保持する。 */
+export type FlushAction = 'sent' | 'retry' | 'failed';
+export function classifyFlush(status: number, nextAttempts: number): FlushAction {
+  if (status >= 200 && status < 300) return 'sent';
+  if (status >= 400 && status < 500) return 'failed'; // 恒久(不正入力/認証切れ)。authoring の真実を捨てない。
+  return nextAttempts >= MAX_ATTEMPTS ? 'failed' : 'retry'; // 5xx 等の一時障害。上限超で failed に固定。
+}
+
 /**
  * キューを古い順に再送。オンライン時のみ動作。
  * - 2xx: 成功 → 削除
- * - 4xx: 恒久的な不正入力 → 再送しても無駄なので破棄(dropped)
- * - 5xx: 一時障害 → attempts++、上限超過で破棄
+ * - 4xx / 5xx 上限超: 恒久失敗 → 破棄せず failed:true で保持(バナーから手動 再送/削除)
+ * - 5xx 上限内: 一時障害 → attempts++ で次回再送
  * - ネット例外: まだオフライン → 順序維持のため中断(残りは次回)
+ * failed:true のアイテムは自動再送の対象外(retryFailed で明示的に戻す)。
  */
-export async function flushOutbox(): Promise<{ sent: number; dropped: number }> {
-  if (!hasIdb || flushing) return { sent: 0, dropped: 0 };
-  if (typeof navigator !== 'undefined' && navigator.onLine === false)
-    return { sent: 0, dropped: 0 };
+export async function flushOutbox(): Promise<{ sent: number; failed: number }> {
+  if (!hasIdb || flushing) return { sent: 0, failed: 0 };
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return { sent: 0, failed: 0 };
   flushing = true;
   let sent = 0;
-  let dropped = 0;
+  let failed = 0;
   try {
     for (const it of await listOutbox()) {
+      if (it.failed) continue; // 恒久失敗は自動再送しない(手動 retry/削除待ち)
       try {
         const res = await fetch(`/api${it.path}`, {
           method: 'POST',
@@ -108,24 +118,20 @@ export async function flushOutbox(): Promise<{ sent: number; dropped: number }> 
           credentials: 'same-origin',
           body: JSON.stringify(it.body),
         });
-        if (res.ok) {
+        const next = it.attempts + 1;
+        const action = classifyFlush(res.status, next);
+        if (action === 'sent') {
           await remove(it.id);
           sent++;
-        } else if (res.status >= 400 && res.status < 500) {
-          await remove(it.id); // 恒久失敗(不正入力/権限) → 破棄
-          dropped++;
+        } else if (action === 'failed') {
+          await tx('readwrite', (s) =>
+            s.put({ ...it, attempts: next, failed: true, lastError: `HTTP ${res.status}` }),
+          );
+          failed++;
         } else {
-          const next: OutboxItem = {
-            ...it,
-            attempts: it.attempts + 1,
-            lastError: `HTTP ${res.status}`,
-          };
-          if (next.attempts >= MAX_ATTEMPTS) {
-            await remove(it.id);
-            dropped++;
-          } else {
-            await tx('readwrite', (s) => s.put(next));
-          }
+          await tx('readwrite', (s) =>
+            s.put({ ...it, attempts: next, lastError: `HTTP ${res.status}` }),
+          );
         }
       } catch {
         break; // ネット不通: まだオフライン
@@ -135,5 +141,32 @@ export async function flushOutbox(): Promise<{ sent: number; dropped: number }> 
     flushing = false;
     emit();
   }
-  return { sent, dropped };
+  return { sent, failed };
+}
+
+/** pending(自動再送待ち)/ failed(恒久失敗・手動対応)の件数。バナー表示用。 */
+export async function countsByState(): Promise<{ pending: number; failed: number }> {
+  let pending = 0;
+  let failed = 0;
+  for (const it of await listOutbox()) {
+    if (it.failed) failed++;
+    else pending++;
+  }
+  return { pending, failed };
+}
+
+/** 恒久失敗を再送可能へ戻す(手動再送)。failed を外し attempts をリセット。呼び出し側で flushOutbox する。 */
+export async function retryFailed(): Promise<void> {
+  for (const it of await listOutbox()) {
+    if (it.failed) await tx('readwrite', (s) => s.put({ ...it, failed: false, attempts: 0 }));
+  }
+  emit();
+}
+
+/** 恒久失敗を破棄(ユーザーが諦める)。authoring の真実が消えるため確認の上で。 */
+export async function clearFailed(): Promise<void> {
+  for (const it of await listOutbox()) {
+    if (it.failed) await remove(it.id);
+  }
+  emit();
 }

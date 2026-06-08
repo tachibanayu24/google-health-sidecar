@@ -217,7 +217,7 @@ function registerReadTools(server: McpServer, env: Env) {
     'get_muscle_volume',
     {
       title: '部位別ボリューム(間接含む総刺激)',
-      description: `直近 windowDays 日(既定7・当日含む)の16筋群別(chest/triceps/front_delts 等の粒度)の刺激量を返す。『その部位が十分に鍛えられているか(間接刺激まで含めた総刺激)』を見るための唯一の正規ツール。各筋群は actual_sets(実施セット数)/volume_kg(挙上ボリューム kg)/target_sets・vs_target(週間目標との比)/stimulus(0..1 の相対ヒートマップ強度)/landmark_zone(under=MEV未満/building/optimal=MAV帯=最も伸びやすい/high/over=MRV超)/landmarks{mev,mav_low,mav_high,mrv}(RP/Israetel の週間セット数ガイドライン。個人差ありの出発点であって検証済み個人閾値ではない)を持つ。【重要】actual_sets と landmark_zone は主働だけでなく間接関与(secondary/stabilizer)も各1セットとして計上した総量基準。よって複合種目の多い筋群(三頭/前三角等)は高めに出る一方、これこそが『間接含めて足りているか』の正しい指標。warmup は除外。『どの日に何の分割(主働)をやったか』は get_muscle_calendar / get_training_frequency を見ること(あちらは主働のみ集計で基準が違う)。`,
+      description: `直近 windowDays 日(既定7・当日含む)の16筋群別(chest/triceps/front_delts 等の粒度)の刺激量を返す。『その部位が十分に鍛えられているか(間接刺激まで含めた総刺激)』を見るための唯一の正規ツール。各筋群は actual_sets(実施セット数=間接関与も各1で計上)/effective_sets(間接を contribution で加重: primary1.0/secondary0.5/stabilizer0.25)/volume_kg(挙上ボリューム kg)/target_sets・vs_target(週間目標との比)/stimulus(0..1 の相対ヒートマップ強度)/landmark_zone(under=MEV未満/building/optimal=MAV帯=最も伸びやすい/high/over=MRV超)/landmarks{mev,mav_low,mav_high,mrv}(RP/Israetel の週間セット数ガイドライン。個人差ありの出発点であって検証済み個人閾値ではない)を持つ。【重要】landmark_zone と vs_target は effective_sets を基準に判定する(MEV/MAV/MRV は直接セット基準なので、間接を半分に加重した effective で比較するのが妥当)。actual_sets は『実際に何セット挙げたか』の素の事実で複合種目では effective より大きく出る。三頭/前三角のような間接刺激の多い筋群を actual_sets で見て『optimal/over だから直接トレ不要』と早合点しないこと — 充足判定は effective_sets ベースの landmark_zone を見る。warmup は除外。『どの日に何の分割(主働)をやったか』は get_muscle_calendar / get_training_frequency を見ること(あちらは主働のみ集計で基準が違う)。`,
       inputSchema: { windowDays: z.number().int().min(1).max(365).optional() },
       annotations: READ,
     },
@@ -234,7 +234,7 @@ function registerReadTools(server: McpServer, env: Env) {
     'get_muscle_calendar',
     {
       title: '部位カレンダー(主働の分割)',
-      description: `直近 days 日(既定30・当日含む)の『いつ・どの筋群を鍛えたか』を返す。返り値は sessionDates(実施日。warmupのみの日も rest 日判定のため含む)と cells[{date, muscle(16筋群ID), sets}]。頻度・分割(週何分割か、連続でどこを叩いたか)の俯瞰用。【基準】cells の sets は各種目の主働筋(primary mover)にのみ帰属させた working セット数で、間接関与(secondary/stabilizer)は含めない(ベンチ=胸であって腕ではない)。warmup は sets 集計から除外。したがって『何の日をやったか(分割)』はここで分かるが、『その筋群が間接刺激まで含めて十分鍛えられているか』は get_muscle_volume の actual_sets / landmark_zone を見ること(あちらは間接も計上する総量基準)。区分(胸/背/肩/腕/脚/体幹)単位の頻度サマリは get_training_frequency。`,
+      description: `直近 days 日(既定30・当日含む)の『いつ・どの筋群を鍛えたか』を返す。返り値は sessionDates(実施日。warmupのみの日も rest 日判定のため含む)と cells[{date, muscle(16筋群ID), sets}]。頻度・分割(週何分割か、連続でどこを叩いたか)の俯瞰用。【基準】cells の sets は各種目の主働筋(primary mover)にのみ帰属させた working セット数で、間接関与(secondary/stabilizer)は含めない(ベンチ=胸であって腕ではない)。warmup は sets 集計から除外。したがって『何の日をやったか(分割)』はここで分かるが、『その筋群が間接刺激まで含めて十分鍛えられているか』は get_muscle_volume の effective_sets / landmark_zone を見ること(間接を加重した実効セットで判定)。区分(胸/背/肩/腕/脚/体幹)単位の頻度サマリは get_training_frequency。`,
       inputSchema: { days: z.number().int().min(1).max(120).optional() },
       annotations: READ,
     },
@@ -248,7 +248,7 @@ function registerReadTools(server: McpServer, env: Env) {
     'get_training_frequency',
     {
       title: '部位別トレーニング頻度(主働の分割)',
-      description: `表示区分(胸/背/肩/腕/脚/体幹の6区分)ごとに last_trained_date(最終実施日)/days_since(経過日数)/weekly_counts(週次で『その区分を触れた』日数。weekly_counts[0]=直近7日, [1]=8〜14日前…)/ total_sets(窓内の主働セット数)を返す。weeks 既定4・当日含む。分割の偏り・各部位を最後にいつ叩いたかの即答用(get_muscle_calendar の区分ロールアップ版で軽い)。【重要な罠】last_trained・total_sets は主働筋(primary mover)で記録された日/セットのみを数える(例: デッドリフトのハムで脚が点灯)。total_sets が少ない=主働で直接叩いていないだけで、プレス由来の三頭・前三角のように間接刺激は十分なことが多い。total_sets だけを見て『その部位が手薄/足りない』と結論しないこと。間接刺激まで含めた十分性(足りているか)は必ず get_muscle_volume の actual_sets / landmark_zone で確認する。warmup は除外。`,
+      description: `表示区分(胸/背/肩/腕/脚/体幹の6区分)ごとに last_trained_date(最終実施日)/days_since(経過日数)/weekly_counts(週次で『その区分を触れた』日数。weekly_counts[0]=直近7日, [1]=8〜14日前…)/ total_sets(窓内の主働セット数)を返す。weeks 既定4・当日含む。分割の偏り・各部位を最後にいつ叩いたかの即答用(get_muscle_calendar の区分ロールアップ版で軽い)。【重要な罠】last_trained・total_sets は主働筋(primary mover)で記録された日/セットのみを数える(例: デッドリフトのハムで脚が点灯)。total_sets が少ない=主働で直接叩いていないだけで、プレス由来の三頭・前三角のように間接刺激は十分なことが多い。total_sets だけを見て『その部位が手薄/足りない』と結論しないこと。間接刺激まで含めた十分性(足りているか)は必ず get_muscle_volume の effective_sets / landmark_zone で確認する。warmup は除外。`,
       inputSchema: { weeks: z.number().int().min(1).max(12).optional() },
       annotations: READ,
     },
@@ -314,7 +314,7 @@ function registerReadTools(server: McpServer, env: Env) {
     'get_readiness',
     {
       title: 'コンディション信号(Readiness)',
-      description: `指定日のコンディションを『あなた自身の過去データに対する相対逸脱の事実』として返す(date 省略で当日JST)。中核=夜間HRV(rMSSD, ln→7日ローリング平均; Plews/Buchheit)、補助=安静時心拍/呼吸数、文脈=皮膚温/睡眠時間・効率。各 contributor は {metric,label,unit,isCore,status(ready/learning/no-data),daysOfData,current(実測値・no-dataは null),baselineMedian,normalLow/High(あなたの平常範囲),deviation(low/normal/high),signal(green/yellow/red)}。overall は N-of-M(2指標以上同時に悪方向逸脱 or 中核HRVの赤で全体赤)で統合し、偽の0-100合成スコアは出さない。ベースライン未確立(<14日)・データ不足は overall.status=learning で判定を出さず learningRemainingDays を返す。併せて muscleLoad[]={muscle, acute7_sets(直近7日の総セット数=間接関与も1と計上), chronic_weekly_sets(直近28日の週平均), ratio(acute7/chronic_weekly・慢性が薄い部位は null), trend(detraining<0.8 / steady<=1.3 / ramping<=1.5 / spiking)}。重要: muscleLoad の set 数は get_muscle_volume と同じ総量基準(間接含む)であり、frequency/calendar の主働のみ集計とは別系統 —『どの部位の日をやったか(主働の分割)』は get_muscle_calendar / get_training_frequency を見よ。muscleLoad は ACWR の怪我予測ではなく(学術的に否定済)漸進性過負荷の記述指標。全体として医学的診断でもパフォーマンス予測でもなく相対逸脱の事実のみ —『休め/病気だ/成績が上がる』と断定せず、HRVが平常下/呼吸が上がっている/特定部位を急増させた等の事実を踏まえて会話で助言すること。注意: 当日指定は HRV/RHR 等が GH ミラー遅延で未確定/欠損になりやすく、確実な評価は前日指定が無難。使い分け: 1日の全データは get_day、直近7日集計は get_weekly_summary。`,
+      description: `指定日のコンディションを『あなた自身の過去データに対する相対逸脱の事実』として返す(date 省略で当日JST)。中核=夜間HRV(rMSSD, ln→7日ローリング平均; Plews/Buchheit)、補助=安静時心拍/呼吸数、文脈=皮膚温/睡眠時間・効率。各 contributor は {metric,label,unit,isCore,status(ready/learning/no-data),daysOfData,current(実測値・no-dataは null),baselineMedian,normalLow/High(あなたの平常範囲),deviation(low/normal/high),signal(green/yellow/red)}。overall は N-of-M(2指標以上同時に悪方向逸脱 or 中核HRVの赤で全体赤)で統合し、偽の0-100合成スコアは出さない。ベースライン未確立(<14日)・データ不足は overall.status=learning で判定を出さず learningRemainingDays を返す。併せて muscleLoad[]={muscle, acute7_sets(直近7日の総セット数=間接関与も1と計上), chronic_weekly_sets(直近28日の週平均), ratio(acute7/chronic_weekly・慢性が薄い部位は null), trend(detraining<0.8 / steady<=1.3 / ramping<=1.5 / spiking)}。重要: muscleLoad の set 数は get_muscle_volume の actual_sets と同じ素の計上(間接も各1。landmark 判定に使う effective_sets とは別)であり、frequency/calendar の主働のみ集計とも別系統 —『どの部位の日をやったか(主働の分割)』は get_muscle_calendar / get_training_frequency を見よ。muscleLoad は ACWR の怪我予測ではなく(学術的に否定済)漸進性過負荷の記述指標。全体として医学的診断でもパフォーマンス予測でもなく相対逸脱の事実のみ —『休め/病気だ/成績が上がる』と断定せず、HRVが平常下/呼吸が上がっている/特定部位を急増させた等の事実を踏まえて会話で助言すること。注意: 当日指定は HRV/RHR 等が GH ミラー遅延で未確定/欠損になりやすく(返り値 sensingProvenance=gh_provisional がその印)、確実な評価は前日指定が無難。使い分け: 1日の全データは get_day、直近7日集計は get_weekly_summary。`,
       inputSchema: {
         date: z
           .string()
@@ -329,7 +329,10 @@ function registerReadTools(server: McpServer, env: Env) {
         getReadiness(ctx.db, date),
         getMuscleLoadRatios(ctx),
       ]);
-      return ok({ provenance: 'd1_confirmed', ...readiness, muscleLoad });
+      // 当日は sensing(HRV/RHR 等)が GH ミラー遅延で未確定になりうる(P0-3 正直化)。
+      const sensingProvenance =
+        (date ?? todayJst()) === todayJst() ? 'gh_provisional' : 'd1_confirmed';
+      return ok({ provenance: 'd1_confirmed', sensingProvenance, ...readiness, muscleLoad });
     },
   );
 
@@ -408,7 +411,7 @@ function registerReadTools(server: McpServer, env: Env) {
     'search_exercises',
     {
       title: '種目検索',
-      description: `種目マスタを検索し id を解決する起点ツール(log_workout の exerciseId はここで解決)。query は name_en / name_ja / エイリアス辞書(日本語俗称・略称・マシンのブランド名)を横断部分一致。返り値 exercises[] は id・name_en・name_ja・equipment・laterality(bilateral/unilateral)・load_basis(total/per_limb/per_side)・is_bodyweight・bw_factor(自重係数)に加え、muscles[{muscle, role(primary/secondary/stabilizer), contribution}] を含む。この muscles[] の重み(contribution・role)は get_muscle_volume の集計と完全に同じで、部位マッピングの妥当性検証にも使える。フィルタ: equipment(barbell/dumbbell/machine/cable/bodyweight/smith/band/kettlebell/other)・favorite(お気に入りのみ)で絞り込み可。muscle を指定すると逆引き(その部位を主働 primary または間接 secondary に持つ種目)= 安定筋 stabilizer のみの種目はヒットしない点に注意。query / muscle を省略すると全種目を返す(limit 既定50・最大200=全カタログ監査可)。並び順は お気に入り→名前。muscle に使える部位 id: chest/lats/traps/front_delts/side_delts/rear_delts/biceps/triceps/forearms/abs/obliques/quads/hamstrings/glutes/calves/lower_back。注意: 部位の数え方は2系統ある。『何の日をやったか(主働の分割)』は get_training_frequency / get_muscle_calendar、『その部位が間接刺激まで含め十分鍛えられているか』は get_muscle_volume の actual_sets / landmark_zone を見る — 本ツールの muscles[] は後者(間接含む重み)と同じ基準。`,
+      description: `種目マスタを検索し id を解決する起点ツール(log_workout の exerciseId はここで解決)。query は name_en / name_ja / エイリアス辞書(日本語俗称・略称・マシンのブランド名)を横断部分一致。返り値 exercises[] は id・name_en・name_ja・equipment・laterality(bilateral/unilateral)・load_basis(total/per_limb/per_side)・is_bodyweight・bw_factor(自重係数)に加え、muscles[{muscle, role(primary/secondary/stabilizer), contribution}] を含む。この muscles[] の重み(contribution・role)は get_muscle_volume の集計と完全に同じで、部位マッピングの妥当性検証にも使える。フィルタ: equipment(barbell/dumbbell/machine/cable/bodyweight/smith/band/kettlebell/other)・favorite(お気に入りのみ)で絞り込み可。muscle を指定すると逆引き(その部位を主働 primary または間接 secondary に持つ種目)= 安定筋 stabilizer のみの種目はヒットしない点に注意。query / muscle を省略すると全種目を返す(limit 既定50・最大200=全カタログ監査可)。並び順は お気に入り→名前。muscle に使える部位 id: chest/lats/traps/front_delts/side_delts/rear_delts/biceps/triceps/forearms/abs/obliques/quads/hamstrings/glutes/calves/lower_back。注意: 部位の数え方は2系統ある。『何の日をやったか(主働の分割)』は get_training_frequency / get_muscle_calendar、『その部位が間接刺激まで含め十分鍛えられているか』は get_muscle_volume の effective_sets / landmark_zone を見る — 本ツールの muscles[] の重み(contribution)が effective_sets の加重根拠そのもの。`,
       inputSchema: {
         query: z.string().optional(),
         muscle: z.string().optional(),
@@ -468,7 +471,7 @@ function registerReadTools(server: McpServer, env: Env) {
     'get_day',
     {
       title: '日次の俯瞰',
-      description: `指定日(date 省略時は今日JST, YYYY-MM-DD)のその日の全データを1度に返す。返り値: nutrition{totals(kcal/P/F/C・fiber/sugar(g)・sodium(mg)の合算), meals(品目明細)}・workouts(その日のセッション)・body(体重/体脂肪%)・sleep(主睡眠の deep/light/rem/awake/efficiency)・sensing(RHR/HRV/SpO2/呼吸/VO2max/歩数/active_energy_kcal)。いつ使うか: 1日の総合評価やエネルギー収支(摂取 vs 消費)に。使い分け: 直近7日の集計は get_weekly_summary、コンディション信号は get_readiness、1種目の時系列は get_exercise_history。注意: 未記録/未取得の項目は null。当日指定時、sensing/sleep は Fitbit→GH ミラーで数時間遅れて欠損や暫定値になりうる(前日まではほぼ確定)。`,
+      description: `指定日(date 省略時は今日JST, YYYY-MM-DD)のその日の全データを1度に返す。返り値: nutrition{totals(kcal/P/F/C・fiber/sugar(g)・sodium(mg)の合算), meals(品目明細)}・workouts(その日のセッション)・body(体重/体脂肪%)・sleep(主睡眠の deep/light/rem/awake/efficiency)・sensing(RHR/HRV/SpO2/呼吸/VO2max/歩数/active_energy_kcal)。いつ使うか: 1日の総合評価やエネルギー収支(摂取 vs 消費)に。使い分け: 直近7日の集計は get_weekly_summary、コンディション信号は get_readiness、1種目の時系列は get_exercise_history。注意: 未記録/未取得の項目は null。返り値 sensingProvenance(当日=gh_provisional / 過去日=d1_confirmed)が機械可読の鮮度フラグ。当日指定時 sensing/sleep は Fitbit→GH ミラーで数時間遅れて欠損や暫定値になりうる(前日まではほぼ確定)ので、gh_provisional の欠損を『今日のデータは無い』と権威的事実として断定しないこと。`,
       inputSchema: {
         date: z
           .string()
@@ -522,6 +525,8 @@ function registerReadTools(server: McpServer, env: Env) {
       const sleep = await getSleepByDate(ctx.db, d);
       return ok({
         provenance: 'd1_confirmed',
+        // 当日は Fitbit→GH ミラー遅延で sensing/sleep が未到達/暫定になりうる(P0-3 正直化)。
+        sensingProvenance: d === todayJst() ? 'gh_provisional' : 'd1_confirmed',
         date: d,
         nutrition: { totals, meals: mealsOut },
         workouts,
@@ -539,7 +544,7 @@ function registerWriteTools(server: McpServer, env: Env) {
     'log_meal',
     {
       title: '食事を記録',
-      description: `食事を D1 に記録し(正本)、可能なら Google Health(GH)へ push する。返り値は { mealId, ghPushed, clientRequestId }。ghPushed は GH 反映の真偽(栄養 push は機能フラグ依存で、OFF 時は D1 記録のみ・ghPushed=false になる。記録自体は失われない)。引数: mealType(必須・アプリ6種 Breakfast/MorningSnack/Lunch/AfternoonSnack/Dinner/Anytime。一般的な breakfast/lunch 等と混同しない)、items[](最低1品)。栄養値は呼び出し側が見積もって品目ごとに渡す: caloriesKcal は必須、proteinG/fatG/carbsG/fiberG/sugarG/sodiumMg は任意。単位は kcal・g(sodium のみ mg)。date 省略時は今日(JST)。冪等: 同じ記録の再送防止に clientRequestId を再利用(省略時はサーバ生成し返り値に含める)。既存 clientRequestId で再送すると新規作成せず既存 mealId を返す(その際 ghPushed=false)。訂正: 編集ツールは無い。誤記録は delete_recent_log で取消 → 再記録が公式フロー。写真から記録するなら log_meal_photo を使う。`,
+      description: `食事を D1 に記録し(正本)、可能なら Google Health(GH)へ push する。返り値は { mealId, ghPushed, idempotentHit, clientRequestId }。ghPushed は GH 反映の真偽(栄養 push は機能フラグ依存で、OFF 時は D1 記録のみ・ghPushed=false になる。記録自体は失われない)。引数: mealType(必須・アプリ6種 Breakfast/MorningSnack/Lunch/AfternoonSnack/Dinner/Anytime。一般的な breakfast/lunch 等と混同しない)、items[](最低1品)。栄養値は呼び出し側が見積もって品目ごとに渡す: caloriesKcal は必須、proteinG/fatG/carbsG/fiberG/sugarG/sodiumMg は任意。単位は kcal・g(sodium のみ mg)。date 省略時は今日(JST)。冪等: 同じ記録の再送防止に clientRequestId を再利用(省略時はサーバ生成し返り値に含める)。既存 clientRequestId で再送すると新規作成せず既存 mealId を返し idempotentHit=true になる(ghPushed=false は初回送信時の状態を見ること)。訂正: 編集ツールは無い。誤記録は delete_recent_log で取消 → 再記録が公式フロー。写真から記録するなら log_meal_photo を使う。`,
       inputSchema: LogMealInputSchema.shape,
       annotations: WRITE_GH,
     },
@@ -556,7 +561,7 @@ function registerWriteTools(server: McpServer, env: Env) {
     'log_workout',
     {
       title: 'ワークアウトを記録',
-      description: `ワークアウト(種目×セット)を D1 に記録し、completed なら GH へ push する。e1RM/PR/総ボリュームは core が計算。exerciseId は search_exercises で解決した id。重量種目は各セットに entryValue 必須(欠落だとエラーで弾く)、自重種目は省略可(loadMode を bodyweight、reps のみで可)。entryUnit は kg/lb。loadMode 省略時は種目マスタに従う。title 不要(主働筋の部位から自動命名、例「胸・腕」)。返り値: { sessionId, totalVolumeKg, title, ghPushed, newPrs[], clientRequestId }。ghPushed は GH 反映の真偽。newPrs は新自己ベスト{ name, recordType=e1rm, value, prevValue, unit=kg, isProvisional } — あれば普通に称えてよい。isProvisional=true は RPE 未入力で推定確度が低い(実測より低めに出る)暫定 PR で、重量の絶対値を語るときだけその旨を注に添える(祝福自体は控えめにしない)。冪等: clientRequestId を再送で再利用(省略時サーバ生成)。既存 clientRequestId の再送は新規作成せず既存 sessionId を返す(その際 totalVolumeKg=0・newPrs=[]・ghPushed=false になるため、再送結果から『PRなし』と判断しないこと)。分析は get_exercise_history(1種目の時系列)/ get_muscle_calendar・get_training_frequency(主働の分割・頻度)/ get_muscle_volume(間接含む総刺激)を併用。`,
+      description: `ワークアウト(種目×セット)を D1 に記録し、completed なら GH へ push する。e1RM/PR/総ボリュームは core が計算。exerciseId は search_exercises で解決した id。重量種目は各セットに entryValue 必須(欠落だとエラーで弾く)、自重種目は省略可(loadMode を bodyweight、reps のみで可)。entryUnit は kg/lb。loadMode 省略時は種目マスタに従う。title 不要(主働筋の部位から自動命名、例「胸・腕」)。返り値: { sessionId, totalVolumeKg, title, ghPushed, newPrs[], idempotentHit, clientRequestId }。ghPushed は GH 反映の真偽。newPrs は新自己ベスト{ name, recordType=e1rm, value, prevValue, unit=kg, isProvisional } — あれば普通に称えてよい。isProvisional=true は RPE 未入力で推定確度が低い(実測より低めに出る)暫定 PR で、重量の絶対値を語るときだけその旨を注に添える(祝福自体は控えめにしない)。冪等: clientRequestId を再送で再利用(省略時サーバ生成)。既存 clientRequestId の再送は新規作成せず既存 sessionId と永続化済みの totalVolumeKg/title を返し idempotentHit=true になる(newPrs は空=既処理であって『PRなし』ではない。ghPushed=false も同様に初回送信時の状態を見ること)。分析は get_exercise_history(1種目の時系列)/ get_muscle_calendar・get_training_frequency(主働の分割・頻度)/ get_muscle_volume(間接含む総刺激)を併用。`,
       inputSchema: SaveWorkoutInputSchema.shape,
       annotations: WRITE_GH,
     },

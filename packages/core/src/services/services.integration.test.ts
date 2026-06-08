@@ -150,6 +150,8 @@ describe('logMeal', () => {
     const r1 = await logMeal(ctx, input);
     const r2 = await logMeal(ctx, input);
     expect(r2.mealId).toBe(r1.mealId);
+    expect(r1.idempotentHit).toBe(false);
+    expect(r2.idempotentHit).toBe(true); // 再送は『既処理』を機械可読に示す(P0-2)
     const rows = await ctx.db.raw<{ n: number }>('SELECT count(*) AS n FROM meals');
     expect(rows[0]?.n).toBe(1);
   });
@@ -229,6 +231,12 @@ describe('saveWorkout', () => {
     const r1 = await saveWorkout(ctx, input);
     const r2 = await saveWorkout(ctx, input);
     expect(r2.sessionId).toBe(r1.sessionId);
+    expect(r1.idempotentHit).toBe(false);
+    expect(r2.idempotentHit).toBe(true);
+    // 冪等再送は偽の空サマリ(0/null)でなく永続化済みの実値を返す(P0-2 正直化)。
+    expect(r2.totalVolumeKg).toBe(r1.totalVolumeKg);
+    expect(r2.totalVolumeKg).toBeGreaterThan(0);
+    expect(r2.title).toBe(r1.title);
     const rows = await ctx.db.raw<{ n: number }>('SELECT count(*) AS n FROM workout_sessions');
     expect(rows[0]?.n).toBe(1);
   });
@@ -520,11 +528,19 @@ describe('分析(volume / calendar / history)', () => {
       ],
     });
 
-  it('getMuscleVolume: 主働筋 chest の actual_sets を集計(warmup 除外)', async () => {
+  it('getMuscleVolume: chest は actual=effective、間接 triceps は effective が加重で下がる(P0-1)', async () => {
     const ctx = makeCtx();
     await seedBench(ctx);
     const mv = await getMuscleVolume(ctx, { windowDays: 7 });
-    expect(mv.find((m) => m.muscle === 'chest')?.actual_sets).toBe(3);
+    const chest = mv.find((m) => m.muscle === 'chest');
+    expect(chest?.actual_sets).toBe(3); // warmup 除外の実施セット数
+    expect(chest?.effective_sets).toBe(3); // primary(contribution 1.0)→実効も 3
+    // 間接関与の triceps は actual=3 でも effective は contribution 加重で小さくなる。
+    // landmark_zone/vs_target はこの effective を基準に判定する(複合種目の偽 over を防ぐ)。
+    const triceps = mv.find((m) => m.muscle === 'triceps');
+    expect(triceps?.actual_sets).toBe(3);
+    expect(triceps?.effective_sets ?? 0).toBeGreaterThan(0);
+    expect(triceps?.effective_sets ?? 99).toBeLessThan(3);
   });
 
   it('getMuscleCalendar: 当日に chest セルが立ち、補助筋 triceps は帰属しない', async () => {

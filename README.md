@@ -54,7 +54,7 @@ flowchart TB
 | 睡眠 | GH デバイス | ✓ `sleep_logs` | ✗ | ✓ read-only |
 | 安静時心拍 / HRV / SpO₂ / VO₂max / 呼吸数 | GH デバイス | ✓ `daily_metrics` | ✗ | ✓ read-only |
 | 歩数 / 消費kcal | GH デバイス | ✓ `daily_metrics`(`steps`/`active_energy_kcal`) | ✗ | ✓ **配線済**(分単位 interval を日次合算, migration 0014) |
-| 皮膚温 | GH デバイス | — | ✗ | ✗ **恒久除外**(GH 未提供=候補8種すべて Invalid) |
+| 皮膚温 | GH デバイス | ✓ `daily_metrics`(`skin_temp_c`) | ✗ | ✓ read-only(`daily-sleep-temperature-derivations`=夜間皮膚温℃。2026-06-03 正ID判明・取込済。readiness の文脈指標) |
 | 食事プリセット / 栄養目標 | UI / MCP | ✓ | ✗ | ✗ |
 
 - ※ 食事の GH push は **`FEATURE_GH_NUTRITION_PUSH`**(本番 = `true`)が ON のときだけ実行。OFF だと台帳に `skipped_flag_off` で記録され push されない。

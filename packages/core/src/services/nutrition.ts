@@ -47,7 +47,7 @@ export interface LogMealInput {
 export async function logMeal(
   ctx: AppContext,
   input: LogMealInput,
-): Promise<{ mealId: string; ghPushed: boolean }> {
+): Promise<{ mealId: string; ghPushed: boolean; idempotentHit: boolean }> {
   const now = nowSec();
   // 冪等: 同じ client_request_id の食事が既にあれば再登録しない(オフライン再送/MCPリトライ, §9.8)。
   if (input.clientRequestId) {
@@ -55,7 +55,8 @@ export async function logMeal(
       'SELECT id FROM meals WHERE client_request_id = ? LIMIT 1',
       input.clientRequestId,
     );
-    if (ex[0]) return { mealId: ex[0].id, ghPushed: false };
+    // 冪等ヒット: idempotentHit=true で『新規記録』と区別(ghPushed は初回送信時の値を見ること)。
+    if (ex[0]) return { mealId: ex[0].id, ghPushed: false, idempotentHit: true };
   }
   const mealId = ulid();
   const date = input.date ?? todayJst();
@@ -108,7 +109,7 @@ export async function logMeal(
   if (ctx.featureGhNutritionPush && ctx.pushInline !== false) {
     ghPushed = await pushMeal(ctx, mealId, input);
   }
-  return { mealId, ghPushed };
+  return { mealId, ghPushed, idempotentHit: false };
 }
 
 /** 現在の食事内容をプリセット保存(「朝の定番」等)。items は MealItemInput[] を JSON 化。 */
@@ -140,7 +141,7 @@ export async function logMealFromPreset(
     note?: string;
     clientRequestId?: string;
   },
-): Promise<{ mealId: string; ghPushed: boolean }> {
+): Promise<{ mealId: string; ghPushed: boolean; idempotentHit: boolean }> {
   const preset = (await listMealPresets(ctx.db)).find((p) => p.id === input.presetId);
   if (!preset) throw new DomainError(`プリセットが見つかりません: "${input.presetId}"`);
   const base = MealItemInputSchema.array().parse(JSON.parse(preset.items_json));
@@ -226,15 +227,8 @@ export async function deleteMeal(
     mealId,
   );
   const dpId = rows[0]?.gh_datapoint_id ?? null;
-  let ghDeleted = false;
-  if (dpId && ctx.featureGhNutritionPush) {
-    try {
-      await getProvider(ctx).batchDelete(WRITE_DATATYPE.nutrition, [dpId]);
-      ghDeleted = true;
-    } catch {
-      /* best-effort: GH 削除に失敗しても D1 正本は削除する */
-    }
-  }
+  // §8.5/§12.6: D1 正本を先に削除し、その後 GH datapoint を best-effort で batchDelete(D1→GH 順)。
+  // 先に GH を消すと GH 成功直後・D1 batch 前の停止で false-synced(D1残/GH消)になりうるため D1 先行。
   // §8.5: 台帳と本体の削除を単一 batch で原子的に(中断時の孤児 entity_id を防ぐ)。meal_items は CASCADE。
   await runBatch(ctx.db, [
     {
@@ -243,5 +237,14 @@ export async function deleteMeal(
     },
     { sql: 'DELETE FROM meals WHERE id=?', binds: [mealId] },
   ]);
+  let ghDeleted = false;
+  if (dpId && ctx.featureGhNutritionPush) {
+    try {
+      await getProvider(ctx).batchDelete(WRITE_DATATYPE.nutrition, [dpId]);
+      ghDeleted = true;
+    } catch {
+      /* best-effort: GH 削除に失敗しても D1 正本は削除済み */
+    }
+  }
   return { deleted: true, ghDeleted };
 }

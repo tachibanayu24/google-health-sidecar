@@ -130,15 +130,16 @@ export const api = {
         newPrs: [],
         ghPushed: false,
         title: null,
+        idempotentHit: false,
         queued: true,
       }),
     ),
   logMeal: (body: unknown) =>
-    submitOrQueue<{ mealId: string; ghPushed: boolean; queued?: boolean }>(
+    submitOrQueue<{ mealId: string; ghPushed: boolean; idempotentHit: boolean; queued?: boolean }>(
       '/meals',
       'meal',
       body,
-      (crid) => ({ mealId: crid, ghPushed: false, queued: true }),
+      (crid) => ({ mealId: crid, ghPushed: false, idempotentHit: false, queued: true }),
     ),
   getMeal: (id: string) =>
     req<{
@@ -200,6 +201,7 @@ export const api = {
     req<{
       authError: string | null;
       pushQueue: { pending: number; failed: number; deadLetter: number };
+      staleMinutes: number | null; // 最終同期からの経過分(cron 凍結検知)
       runs: Array<{
         data_type: string;
         last_synced_at: number | null;

@@ -69,16 +69,27 @@ export async function saveWorkout(
   newPrs: NewPr[];
   ghPushed: boolean;
   title: string | null;
+  /** 冪等再送で既存セッションを返した場合 true。newPrs:[] は『PRなし』でなく『既処理』を意味する。 */
+  idempotentHit: boolean;
 }> {
   const now = nowSec();
   // 冪等: 同じ client_request_id のセッションが既にあれば再登録しない(オフライン再送/MCPリトライ, §9.8)。
   if (input.clientRequestId) {
-    const ex = await ctx.db.raw<{ id: string }>(
-      'SELECT id FROM workout_sessions WHERE client_request_id = ? LIMIT 1',
+    const ex = await ctx.db.raw<{ id: string; total_volume_kg: number; title: string | null }>(
+      'SELECT id, total_volume_kg, title FROM workout_sessions WHERE client_request_id = ? LIMIT 1',
       input.clientRequestId,
     );
+    // 冪等ヒット時は偽の空サマリ(0/[]/null)ではなく永続化済みの実値を返す(§9.8 正直化)。
+    // newPrs は再現不能なので空。idempotentHit=true で『PRなし』と区別する。
     if (ex[0])
-      return { sessionId: ex[0].id, totalVolumeKg: 0, newPrs: [], ghPushed: false, title: null };
+      return {
+        sessionId: ex[0].id,
+        totalVolumeKg: ex[0].total_volume_kg ?? 0,
+        newPrs: [],
+        ghPushed: false,
+        title: ex[0].title ?? null,
+        idempotentHit: true,
+      };
   }
   const date = input.date ?? todayJst();
   const startedAt = input.startedAtSec ?? now;
@@ -235,6 +246,7 @@ export async function saveWorkout(
     newPrs,
     ghPushed,
     title,
+    idempotentHit: false,
   };
 }
 
@@ -358,15 +370,9 @@ export async function deleteWorkout(
     sessionId,
   );
   const dpId = rows[0]?.gh_datapoint_id ?? null;
-  let ghDeleted = false;
-  if (dpId) {
-    try {
-      await getProvider(ctx).batchDelete(WRITE_DATATYPE.exercise, [dpId]);
-      ghDeleted = true;
-    } catch {
-      /* best-effort: GH 失敗でも D1 正本は削除 */
-    }
-  }
+  // §8.5/§12.6: D1 正本を先に削除し、その後 GH datapoint を best-effort で batchDelete(D1→GH 順)。
+  // 先に GH を消すと「GH 成功直後・D1 batch 前にプロセス停止」で D1 残・GH 消の false-synced になりうる。
+  // D1→GH なら失敗は「許容済み orphaned GH datapoint(upsert-only でいずれ無害)」に倒れる。
   // §8.5: 台帳と本体を単一 batch で原子的に削除(workout_exercises/sets は CASCADE)。
   // ⚠ personal_records.achieved_set_id は ON DELETE SET NULL のため、セッション削除後は null 化されて
   //   追えなくなり PR が orphan 化する。セットが生きているうちに、このセッションで達成した PR を先に消す。
@@ -385,6 +391,15 @@ export async function deleteWorkout(
     },
     { sql: 'DELETE FROM workout_sessions WHERE id=?', binds: [sessionId] },
   ]);
+  let ghDeleted = false;
+  if (dpId) {
+    try {
+      await getProvider(ctx).batchDelete(WRITE_DATATYPE.exercise, [dpId]);
+      ghDeleted = true;
+    } catch {
+      /* best-effort: GH 失敗でも D1 正本は削除済み */
+    }
+  }
   return { deleted: true, ghDeleted };
 }
 

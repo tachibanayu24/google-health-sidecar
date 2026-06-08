@@ -99,6 +99,15 @@ export async function deleteBodyMetric(
   );
   const weightDp = rows.find((r) => r.entity_type === 'body_metric')?.gh_datapoint_id ?? null;
   const fatDp = rows.find((r) => r.entity_type === 'body_metric_fat')?.gh_datapoint_id ?? null;
+  // §8.5/§12.6: D1 正本を先に削除し、その後 GH datapoint を best-effort で batchDelete(D1→GH 順)。
+  // 先に GH を消すと GH 成功直後・D1 batch 前の停止で false-synced になりうるため D1 先行。
+  await runBatch(ctx.db, [
+    {
+      sql: "DELETE FROM gh_sync_state WHERE entity_id=? AND entity_type IN ('body_metric','body_metric_fat')",
+      binds: [id],
+    },
+    { sql: 'DELETE FROM body_metrics WHERE id=?', binds: [id] },
+  ]);
   let ghDeleted = false;
   const provider = getProvider(ctx);
   for (const [dpId, dataType] of [
@@ -110,15 +119,8 @@ export async function deleteBodyMetric(
       await provider.batchDelete(dataType, [dpId]);
       ghDeleted = true;
     } catch {
-      /* best-effort: GH 失敗でも D1 正本は削除 */
+      /* best-effort: GH 失敗でも D1 正本は削除済み */
     }
   }
-  await runBatch(ctx.db, [
-    {
-      sql: "DELETE FROM gh_sync_state WHERE entity_id=? AND entity_type IN ('body_metric','body_metric_fat')",
-      binds: [id],
-    },
-    { sql: 'DELETE FROM body_metrics WHERE id=?', binds: [id] },
-  ]);
   return { deleted: true, ghDeleted };
 }

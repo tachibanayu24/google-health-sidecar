@@ -156,7 +156,8 @@ function buildServer(env: Env): McpServer {
       if (!parsed.success) return toolError(parsed.error);   // actionable な誤入力ガイド
       const input = ensureClientRequestId(parsed.data);      // §6: MCPがUUID生成・再利用
       const r = await logMeal(ctx(), input);                 // services 経由
-      return toolText({ mealId: r.mealId, ghPushed: r.ghPushed, idempotentHit: !r.ghPushed });
+      // idempotentHit は core が返す実フラグ(旧 !ghPushed の暗黙エンコードは P0-2 で廃止)
+      return toolText({ mealId: r.mealId, ghPushed: r.ghPushed, idempotentHit: r.idempotentHit });
     },
   );
 
@@ -251,7 +252,7 @@ IP 値(`160.79.104.0/21`)はハードコードせず `vars` に外出しし、An
 ### 5.1 設計原則
 
 - **全 write は `@ghs/core/services` 経由**(§8.5)。MCP に生 SQL を書かない。
-- **全 read に `provenance` を付す**: 前日(JST)以前 = `d1_confirmed`、当日未ミラー sensing = `gh_provisional`(+ `as_of` タイムスタンプ)。栄養は常に D1 正本のみ(`d1_confirmed`)。
+- **read の鮮度表明**: トップレベル `provenance:'d1_confirmed'`(authoring=正本)に加え、`get_day`/`get_readiness` は **当日 sensing/sleep の鮮度を `sensingProvenance`(当日=`gh_provisional` / 過去=`d1_confirmed`)で機械可読に返す**(P0-3)。全 read への 4タプル付与は過剰なので、sensing を持つこの2ツールに限定。栄養/ワークアウト等の authoring は常に D1 正本。
 - **生値 + 計算済み値の両方を返す**(e1RM 式の再実装不要・独自分析の自由も両立、`docs/design.md:651`)。
 - **正規化値は kg/ml 固定**。フィールド名に `_kg` / `_kcal` / `_ml` サフィックスを付け、`entry_unit` は `kg|lb` を明示(単位誤変換の最重要対策)。
 - **種目名解決は部分一致**。複数候補・0件は **曖昧エラーで候補配列を返す**(`docs/design.md:925`)。確実な解決は `search_exercises` で id を得てから。
@@ -266,7 +267,7 @@ read = 環境を変更しない / write = 追記(非破壊・冪等) / destructi
 | # | ツール | 種別 | 目的 | 呼ぶ core | 返却(Claude へのフィードバック) | 冪等 |
 |---|---|---|---|---|---|---|
 | R1 | `get_exercise_history` ★中核 | read | 種目の全セット時系列(生値+計算済み)。AI 分析の生命線 | `services/workout.getExerciseHistory(ctx, exerciseId, {since?,limit?})` | `{provenance:'d1_confirmed', sets:[{set_index,set_type,entry_value,entry_unit,load_mode,load_basis,reps,rpe,load_kg,set_volume_kg,e1rm_kg,session_date}]}` | N/A |
-| R2 | `get_muscle_volume` | read | 部位別 週間ボリューム+目標比較+ランドマーク帯。弱点部位分析 | `services/workout.getMuscleVolume(ctx, {windowDays?})` | `[{muscle,actual_sets,volume_kg,target_sets,stimulus,vs_target,landmark_zone,landmarks{mev,mav_low,mav_high,mrv}}]`(§8.9 RPガイドライン帯) | N/A |
+| R2 | `get_muscle_volume` | read | 部位別 週間ボリューム+目標比較+ランドマーク帯。弱点部位分析 | `services/workout.getMuscleVolume(ctx, {windowDays?})` | `[{muscle,actual_sets,effective_sets,volume_kg,target_sets,stimulus,vs_target,landmark_zone,landmarks{mev,mav_low,mav_high,mrv}}]`(§8.9。landmark_zone/vs_target は effective_sets 基準=P0-1) | N/A |
 | R3 | `get_muscle_calendar` | read | 直近 N 日 部位×日 ヒートマップ。頻度・分割の俯瞰 | `services/workout.getMuscleCalendar(ctx, {days?})` | `{days,sessionDates:[...],cells:[{date,muscle,sets}]}` | N/A |
 | R4 | `get_recent_sessions` | read | 直近ワークアウトセッション一覧。delete 対象 id 特定にも使う | `db/repositories.getRecentSessions(ctx.db, limit)` | `[RecentSessionRow]` + `provenance:'d1_confirmed'` | N/A |
 | R5 | `get_recent_prs` | read | PR 台帳(暫定/確定を `is_provisional` で区別) | `db/repositories.getRecentPrs(ctx.db, limit)` | `[{record_type,value,unit,rep_bucket,achieved_at,is_provisional,pr_basis}]` | N/A |

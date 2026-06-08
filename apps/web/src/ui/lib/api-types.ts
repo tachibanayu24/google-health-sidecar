@@ -46,6 +46,7 @@ export type LandmarkZone = 'under' | 'building' | 'optimal' | 'high' | 'over';
 export interface MuscleVolume {
   muscle: string;
   actual_sets: number;
+  effective_sets: number; // contribution 加重(間接0.5/補助0.25)。landmark_zone/vs_target の基準。
   volume_kg: number;
   target_sets: number | null;
   stimulus: number;
@@ -121,6 +122,7 @@ export interface SaveWorkoutResult {
   newPrs: NewPr[];
   ghPushed: boolean;
   title: string | null;
+  idempotentHit: boolean; // 冪等再送で既存を返した場合 true(newPrs:[] は『PRなし』でなく『既処理』)
 }
 export interface FoodSuggestion {
   food_name: string;

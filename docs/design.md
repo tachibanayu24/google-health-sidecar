@@ -677,7 +677,7 @@ stimulus(muscle, window) =
 - 色マップ: intensity 0→1 を 青(不足)→緑→黄→赤(高刺激)。`muscle_groups.svg_region_id` でSVGパスへ流し込み、前面/背面トグル。
 - **集計の2系統(重要・MCP誤読の温床)**: 部位別の数え方は目的別に2つあり**意図的に異なる**:
   - **主働のみ系**(`getMuscleCalendar` / `getTrainingFrequency`)= 各セットを種目の **primary mover のみ**に帰属(「ベンチ=胸であって腕ではない」)。「何の日(分割)をやったか・最後にいつ叩いたか」を答える。`total_sets` も主働のみ。
-  - **間接含む総量系**(`getMuscleVolume` の `actual_sets`/`landmark_zone`、`getMuscleLoadRatios`)= **secondary/stabilizer も各1セット計上**した総刺激。「その部位が(間接含め)十分鍛えられているか」を答える。
+  - **間接含む総量系**(`getMuscleVolume`、`getMuscleLoadRatios`)= secondary/stabilizer も勘定に入れる総刺激。「その部位が(間接含め)十分鍛えられているか」を答える。`getMuscleVolume` は2列を返す: `actual_sets`=**間接も各1で計上した実施セット数**(素の事実)、`effective_sets`=**contribution 加重**(primary 1.0 / secondary 0.5 / stabilizer 0.25)。**`landmark_zone` / `vs_target` の判定は `effective_sets` を基準**にする — MEV/MAV/MRV は直接セット基準のため、間接を半分に加重しないと複合種目の多い三頭/前三角が偽 over になり「直接腕トレ不要」と誤らせる(P0-1 正直化)。`getMuscleLoadRatios`(ACWR)は外部の絶対基準と比べない比指標のため素の計上のまま据え置く。
   - 罠: プレス由来で三頭・前三角は主働系では0でも間接系では十分。**主働系の0/低値だけで「手薄」と判断すると誤る**(実際にMCPトレーナーが誤結論した)。MCPツール説明文(`apps/mcp`)に各ツールの数え方と相互参照を明記し、この取り違えを防いでいる。
 
 ### 8.4 消費カロリー推定(METs)
@@ -714,7 +714,7 @@ NutritionService.logMeal() / editMeal():
 
 - **idempotency**: クライアント発番 UUID を各エンティティ id に使い UNIQUE で二重INSERT を弾く。**加えて業務キーの緩い重複警告**(§8.7)。
 - GH `notes` に逆引きタグ埋め込み: `notes = "<ユーザーメモ>\n\n[ghsidecar:session=<ULID>;v=1]"`(reconcileでID不一致時の二重化防止、表示時に正規表現で剥がす)。
-- CRUD伝播: session完了→create。サマリに影響する編集(duration/kcal変化)→**運動は `last_pushed_hash` 比較で patch**(無駄なPATCH抑制)。**食事は anonymous immutable なので常に batchDelete+create**(hash最適化は食事に不適用, §5.2)。削除→batchDelete。push失敗は `pending/failed` でcronリトライ。
+- CRUD伝播: session完了→create。サマリに影響する編集(duration/kcal変化)→**運動は `last_pushed_hash` 比較で patch**(無駄なPATCH抑制)。**食事は anonymous immutable なので常に batchDelete+create**(hash最適化は食事に不適用, §5.2)。削除は **D1 batch を先に確定 → その後 GH datapoint を best-effort で batchDelete**(D1→GH 順。先に GH を消すと D1 batch 直前の停止で「D1 残・GH 消」の検出困難な false-synced になるため。失敗は許容済み orphaned datapoint=upsert-only でいずれ無害に倒す, P0-5/§12.6)。push失敗は `pending/failed` でcronリトライ。
 - **競合解決は常にD1-wins**(双方向マージ排除)。
 
 ### 8.6 差別化ビュー(ガチ勢価値, ロードマップ割当を明示)
@@ -747,7 +747,7 @@ UI(IndexedDBアウトボックス)と MCP(Claude経由)が同一の食事/ワー
 ### 8.9 ボリュームランドマーク + 急性/慢性ボリューム比【実装済: 2026-06-03 / enhancements.md ⑧⑨】
 部位別週間ボリュームを「伸びやすい量に入っているか」「漸進性を保てているか」の2軸で見せる。純関数 `packages/core/src/domain/volume-landmarks.ts`(テスト9件)。**検証された用量反応・記述指標は出すが、検証されていない予測・閾値は主張しない**(実測主義)。
 
-- **MEV/MAV/MRV ランドマーク帯**: `muscle_groups` に `mev_sets / mav_low_sets / mav_high_sets / mrv_sets`(週間ハードセット数)を追加(migration 0016, RP/Israetel 由来)。`volumeLandmarkZone(sets, landmarks)` が `under(MEV未満)/building/optimal(MAV帯=最も伸びやすい)/high/over(MRV超)` を返す。`getMuscleVolume` の各行に `landmark_zone` + `landmarks` を同梱(MCP `get_muscle_volume` / Training「部位別ボリューム」の帯バー)。
+- **MEV/MAV/MRV ランドマーク帯**: `muscle_groups` に `mev_sets / mav_low_sets / mav_high_sets / mrv_sets`(週間ハードセット数)を追加(migration 0016, RP/Israetel 由来)。`volumeLandmarkZone(sets, landmarks)` が `under(MEV未満)/building/optimal(MAV帯=最も伸びやすい)/high/over(MRV超)` を返す。`getMuscleVolume` の各行に `landmark_zone` + `landmarks` を同梱(MCP `get_muscle_volume` / Training「部位別ボリューム」の帯バー)。**帯に渡す量は素の `actual_sets` ではなく contribution 加重した `effective_sets`**(P0-1, §8.0)。
   - **エビデンス**: 用量反応(週10–20セットが productive)はメタ解析で支持(Schoenfeld 2017 / Pelland 2024)。**部位別の具体値は RP のヒューリスティック=「ガイドライン・個人差ありの出発点」であって検証済み個人閾値ではない**(UI/MCP に明示)。RP が肥大ランドマークを示さない部位(obliques / lower_back)は NULL=帯なし。
 - **急性/慢性ボリューム比**: `getMuscleLoadRatios` が部位別に 直近7日 ÷ 直近28日週平均 を出す。`classifyLoadTrend` が `detraining/steady/ramping/spiking`。MCP `get_readiness` に `muscleLoad` として同梱(自律神経の回復 × 筋負荷を1コールでClaudeへ)。
   - **重要(看板を外す)**: 元の ACWR(0.8–1.3 で怪我予防)の**怪我予測としての妥当性は学術的に否定されている**(mathematical coupling 等, Impellizzeri 2020 / Lolli 2019)。よって**怪我リスク・魔法のスイートゾーンは主張せず**、漸進性過負荷の**記述指標**(急増/定常/低下の事実)としてのみ提示する。
@@ -1100,7 +1100,7 @@ npx wrangler d1 time-travel restore ghsidecar --timestamp=2026-06-01T09:00:00Z
 npx wrangler d1 export ghsidecar --remote --output=backup-$(date +%F).sql
 ```
 
-D1 正本が消えても **GH 側に push 済みの体重/運動/食事は残る**ため、二重に冗長(センシングデータは元来 GH が正本)。
+GH 側に push 済みのデータが残ることはあるが、**バックアップとして過信しないこと**(P0-6 訂正): ワークアウトは GH 上ではトップセットの notes 要約のみで**セット粒度・挙上明細・RPE・PR を持たない**、食事は `FEATURE_GH_NUTRITION_PUSH` 依存、体重/体脂肪のみ概ね忠実。退避先は **D1 Time Travel(上記 PITR)が一次**であり、GH push は冗長コピーではなく一方向ミラーと捉える(センシングは元来 GH が正本)。
 
 **意図的に「やらない」運用項目**(単一ユーザー・低QPSのため費用対効果が見合わない。将来マルチユーザー化時に再評価):
 - **KV 書込み監視の作問化** — §4.2 の二層キャッシュで実書込みは1日数十回に収まり無料枠(〜1000/日)に余裕。ダッシュボードの目視で十分、専用監視は作らない。

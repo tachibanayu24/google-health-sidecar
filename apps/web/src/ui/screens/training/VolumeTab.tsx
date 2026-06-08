@@ -52,7 +52,7 @@ export function VolumeTab({
       <Card title="部位別ボリューム">
         <p className="mb-2 text-[11px] leading-snug text-faint">
           帯=週間セット数の目安(緑=MAV域 最も伸びやすい / 縦線=MEV最低ライン)。
-          研究ベースのガイドライン(RP)で個人差あり・出発点。間接関与も1セットと計上。部位をタップ→種目。
+          研究ベースのガイドライン(RP)で個人差あり・出発点。間接関与は0.5・補助0.25で加重した実効セット。部位をタップ→種目。
         </p>
         <ul className="space-y-2">
           {sorted.map((m) => (
@@ -102,12 +102,16 @@ function MuscleRow({
           {MUSCLE_JA[m.muscle] ?? m.muscle}
         </span>
         {hasLandmarks ? (
-          <LandmarkBar sets={m.actual_sets} l={m.landmarks} color={zoneMeta?.color ?? BASE_BODY} />
+          <LandmarkBar
+            sets={m.effective_sets}
+            l={m.landmarks}
+            color={zoneMeta?.color ?? BASE_BODY}
+          />
         ) : (
           <StimulusBar stimulus={m.stimulus} />
         )}
         <span className="flex w-[4.5rem] shrink-0 items-center justify-end gap-1 text-xs">
-          <span className="tnum text-muted">{m.actual_sets}</span>
+          <span className="tnum text-muted">{m.effective_sets}</span>
           {zoneMeta ? (
             <span
               className="rounded-full px-1.5 py-0.5 text-[10px] font-bold"

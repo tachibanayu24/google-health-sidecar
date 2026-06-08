@@ -24,10 +24,23 @@ import {
   type Readiness,
   type Today,
 } from '../lib/api';
-import { DOW_JA, formatDateForDisplay, jstDayOfWeek, shiftDate, todayJst } from '../lib/datetime';
+import {
+  DOW_JA,
+  formatDateForDisplay,
+  jstDayOfWeek,
+  jstHourNow,
+  shiftDate,
+  todayJst,
+} from '../lib/datetime';
 import { energyBalance } from '../lib/energy';
 import { invalidateAfterFlush } from '../lib/invalidate';
-import { flushOutbox, pendingCount, subscribeOutbox } from '../lib/outbox';
+import {
+  clearFailed,
+  countsByState,
+  flushOutbox,
+  retryFailed,
+  subscribeOutbox,
+} from '../lib/outbox';
 import { round } from '../lib/units';
 
 // 体重/体脂肪のデュアル軸トレンド。recharts を eager(Home初期)に入れないため lazy 読み込み。
@@ -462,18 +475,23 @@ function ConditionGlance({
 function SyncHealthBanner() {
   const q = useQuery({ queryKey: ['sync-status'], queryFn: api.syncStatus, staleTime: 60_000 });
   if (!q.data) return null;
-  const { authError, runs, pushQueue } = q.data;
+  const { authError, runs, pushQueue, staleMinutes } = q.data;
   const failing = runs.filter((r) => r.consecutive_failures > 0 && r.last_error);
   const dead = pushQueue?.deadLetter ?? 0;
-  if (!authError && failing.length === 0 && dead === 0) return null;
+  // cron 凍結検知: 最終同期から6時間超 かつ JST 起床時間帯(7-23時)のときだけ警告(夜間の静寂で誤発火させない, P1-3)。
+  const hour = jstHourNow();
+  const stale = staleMinutes != null && staleMinutes >= 360 && hour >= 7 && hour < 23;
+  if (!authError && failing.length === 0 && dead === 0 && !stale) return null;
   const msg = authError
     ? 'GH 再認証が必要です。tools/oauth-bootstrap を再実行してください。'
     : dead > 0
       ? `GH への反映に${dead}件失敗(要対応)。権限/スコープを確認してください。`
-      : `GH 同期エラー: ${failing
-          .slice(0, 2)
-          .map((r) => r.data_type)
-          .join(', ')}${failing.length > 2 ? ` 他${failing.length - 2}` : ''}`;
+      : failing.length > 0
+        ? `GH 同期エラー: ${failing
+            .slice(0, 2)
+            .map((r) => r.data_type)
+            .join(', ')}${failing.length > 2 ? ` 他${failing.length - 2}` : ''}`
+        : `最終同期が約${Math.floor((staleMinutes ?? 0) / 60)}時間前 — cron 停止の可能性があります。`;
   return (
     <div className="flex items-start gap-2 rounded-xl border border-accent/40 bg-accent-soft px-3 py-2.5 text-sm text-accent-ink">
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.4} />
@@ -487,42 +505,78 @@ function SyncHealthBanner() {
   );
 }
 
-function usePendingCount(): number {
-  const [n, setN] = useState(0);
+function useOutboxCounts(): { pending: number; failed: number } {
+  const [c, setC] = useState({ pending: 0, failed: 0 });
   useEffect(() => {
-    const refresh = () => pendingCount().then(setN);
+    const refresh = () => countsByState().then(setC);
     refresh();
     return subscribeOutbox(refresh);
   }, []);
-  return n;
+  return c;
 }
 function OutboxBanner() {
-  const pending = usePendingCount();
+  const { pending, failed } = useOutboxCounts();
   const qc = useQueryClient();
-  const [sending, setSending] = useState(false);
-  if (pending === 0) return null;
+  const [busy, setBusy] = useState(false);
+  if (pending === 0 && failed === 0) return null;
   const flushNow = async () => {
-    setSending(true);
+    setBusy(true);
     const r = await flushOutbox();
-    setSending(false);
+    setBusy(false);
+    if (r.sent > 0) invalidateAfterFlush(qc);
+  };
+  const retryNow = async () => {
+    setBusy(true);
+    await retryFailed();
+    const r = await flushOutbox();
+    setBusy(false);
     if (r.sent > 0) invalidateAfterFlush(qc);
   };
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-line bg-paper px-3 py-2.5 text-sm">
-      <CloudOff className="h-4 w-4 shrink-0 text-muted" strokeWidth={2.2} />
-      <div className="min-w-0 flex-1">
-        <span className="font-semibold">未送信 {pending} 件</span>
-        <span className="ml-1 text-muted">オンライン復帰時に自動送信</span>
-      </div>
-      <button
-        type="button"
-        onClick={flushNow}
-        disabled={sending}
-        className="flex shrink-0 items-center gap-1 rounded-lg bg-ink px-2.5 py-1.5 text-xs font-bold text-card disabled:opacity-50"
-      >
-        <RefreshCw className={`h-3.5 w-3.5 ${sending ? 'animate-spin' : ''}`} strokeWidth={2.4} />{' '}
-        今すぐ送信
-      </button>
+    <div className="space-y-2">
+      {pending > 0 && (
+        <div className="flex items-center gap-2 rounded-xl border border-line bg-paper px-3 py-2.5 text-sm">
+          <CloudOff className="h-4 w-4 shrink-0 text-muted" strokeWidth={2.2} />
+          <div className="min-w-0 flex-1">
+            <span className="font-semibold">未送信 {pending} 件</span>
+            <span className="ml-1 text-muted">オンライン復帰時に自動送信</span>
+          </div>
+          <button
+            type="button"
+            onClick={flushNow}
+            disabled={busy}
+            className="flex shrink-0 items-center gap-1 rounded-lg bg-ink px-2.5 py-1.5 text-xs font-bold text-card disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${busy ? 'animate-spin' : ''}`} strokeWidth={2.4} />{' '}
+            今すぐ送信
+          </button>
+        </div>
+      )}
+      {failed > 0 && (
+        <div className="flex items-center gap-2 rounded-xl border border-accent/40 bg-accent-soft px-3 py-2.5 text-sm text-accent-ink">
+          <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={2.4} />
+          <div className="min-w-0 flex-1">
+            <span className="font-semibold">{failed} 件を送信できませんでした</span>
+            <span className="ml-1 text-muted">記録は端末に保持中</span>
+          </div>
+          <button
+            type="button"
+            onClick={retryNow}
+            disabled={busy}
+            className="shrink-0 rounded-lg bg-ink px-2.5 py-1.5 text-xs font-bold text-card disabled:opacity-50"
+          >
+            再送
+          </button>
+          <button
+            type="button"
+            onClick={() => clearFailed()}
+            disabled={busy}
+            className="shrink-0 rounded-lg border border-line px-2.5 py-1.5 text-xs font-semibold text-muted disabled:opacity-50"
+          >
+            削除
+          </button>
+        </div>
+      )}
     </div>
   );
 }

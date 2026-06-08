@@ -408,9 +408,16 @@ api.get('/sync-status', async (c) => {
     getGhAuthError(ctx.tokens),
     getPushQueueStats(ctx.db),
   ]);
+  // 最終同期からの経過分(全 data_type の last_synced_at の最大)。cron 凍結検知用(P1-3)。
+  // cron が静かに止まると consecutive_failures は増えない(=既存の失敗検知では拾えない)ため鮮度で見る。
+  const syncedAts = runs.map((r) => r.last_synced_at).filter((t): t is number => t != null);
+  const staleMinutes = syncedAts.length
+    ? Math.floor((Date.now() / 1000 - Math.max(...syncedAts)) / 60)
+    : null;
   return c.json({
     authError,
     pushQueue, // { pending, failed, deadLetter } — app→GH push の滞留/恒久失敗
+    staleMinutes, // 最終同期からの経過分(null=一度も同期していない)。UI が起床時間帯のみ警告する
     runs: runs.map((r) => ({
       data_type: r.data_type,
       last_synced_at: r.last_synced_at,

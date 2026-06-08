@@ -98,16 +98,24 @@ export async function getMuscleVolume(
     );
   }
 
-  const acc = new Map<string, { sets: number; volume: number; stimulus: number }>();
+  const acc = new Map<
+    string,
+    { sets: number; effective: number; volume: number; stimulus: number }
+  >();
   for (const s of sets) {
     const loadKg = loadKgOf(s);
-    const vol = countsTowardVolume(s.set_type as SetType) ? computeSetVolumeKg(loadKg, s.reps) : 0;
+    const counts = countsTowardVolume(s.set_type as SetType);
+    const vol = counts ? computeSetVolumeKg(loadKg, s.reps) : 0;
     const daysAgo = daysBetween(s.session_date, today);
     const decay = recencyDecay(daysAgo, windowDays);
     const stim = vol * setTypeStimulusWeight(s.set_type as SetType) * decay;
     for (const link of muscleByExercise.get(s.exercise_id) ?? []) {
-      const a = acc.get(link.muscle) ?? { sets: 0, volume: 0, stimulus: 0 };
-      a.sets += countsTowardVolume(s.set_type as SetType) ? 1 : 0;
+      const a = acc.get(link.muscle) ?? { sets: 0, effective: 0, volume: 0, stimulus: 0 };
+      a.sets += counts ? 1 : 0;
+      // effective_sets: 間接関与を contribution で加重(primary 1.0/secondary 0.5/stabilizer 0.25)。
+      // landmark_zone / vs_target は直接セット基準の MEV/MAV/MRV と比較するため、素の sets ではなく
+      // 加重済みの effective を渡す(volume/stimulus は元から加重済みで一貫させる, §8.9)。
+      a.effective += counts ? link.contribution : 0;
       a.volume += vol * link.contribution;
       a.stimulus += stim * link.contribution;
       acc.set(link.muscle, a);
@@ -115,24 +123,26 @@ export async function getMuscleVolume(
   }
   const maxStim = Math.max(1, ...[...acc.values()].map((v) => v.stimulus));
   return groups.map((g) => {
-    const a = acc.get(g.id) ?? { sets: 0, volume: 0, stimulus: 0 };
+    const a = acc.get(g.id) ?? { sets: 0, effective: 0, volume: 0, stimulus: 0 };
     const landmarks = {
       mev: g.mev_sets,
       mavLow: g.mav_low_sets,
       mavHigh: g.mav_high_sets,
       mrv: g.mrv_sets,
     };
+    const effectiveSets = Math.round(a.effective * 10) / 10;
     return {
       muscle: g.id,
       actual_sets: a.sets,
+      effective_sets: effectiveSets,
       volume_kg: Math.round(a.volume),
       target_sets: g.weekly_target_sets,
       stimulus: Math.round((a.stimulus / maxStim) * 1000) / 1000,
       vs_target: g.weekly_target_sets
-        ? Math.round((a.sets / g.weekly_target_sets) * 100) / 100
+        ? Math.round((effectiveSets / g.weekly_target_sets) * 100) / 100
         : null,
-      // ボリュームランドマーク帯(§8.9)。set 数は間接関与(secondary)も含む既存規約。
-      landmark_zone: volumeLandmarkZone(a.sets, landmarks),
+      // ボリュームランドマーク帯(§8.9)。直接セット基準のバンドと比較するため effective_sets(加重)を渡す。
+      landmark_zone: volumeLandmarkZone(effectiveSets, landmarks),
       landmarks: {
         mev: g.mev_sets,
         mav_low: g.mav_low_sets,

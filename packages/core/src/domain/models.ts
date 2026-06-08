@@ -310,11 +310,12 @@ export type ExerciseHistorySet = z.infer<typeof ExerciseHistorySet>;
 /** 部位別ボリューム/刺激(get_muscle_volume, §8.3)。 */
 export const MuscleVolume = z.object({
   muscle: MuscleGroupId,
-  actual_sets: z.number(),
+  actual_sets: z.number(), // 間接関与も各1で計上した実施セット数(warmup除外)。素の事実値。
+  effective_sets: z.number(), // contribution 加重(primary1.0/secondary0.5/stabilizer0.25)。landmark/vs_target の基準。
   volume_kg: z.number(),
   target_sets: z.number().int().nullable(),
   stimulus: z.number(), // ヒートマップ強度 0..1
-  vs_target: z.number().nullable(), // actual/target
+  vs_target: z.number().nullable(), // effective_sets/target
   // ボリュームランドマーク帯(§8.9)。landmarks が null の部位は zone=null。LandmarkZone は volume-landmarks.ts。
   landmark_zone: z.enum(['under', 'building', 'optimal', 'high', 'over']).nullable(),
   landmarks: z.object({
