@@ -215,6 +215,8 @@ export const api = {
         consecutive_failures: number;
       }>;
     }>('/sync-status'),
+  /** GH 手動同期(pull-to-refresh)。synced:false は60秒以内の再実行で間引かれた。 */
+  sync: () => req<{ synced: boolean; errors: string[] }>('/sync', { method: 'POST' }),
   mealPresets: () => req<{ presets: MealPreset[] }>('/meal-presets'),
   saveMealPreset: (body: { name: string; defaultMealType: string; items: MealItemInput[] }) =>
     req<{ presetId: string }>('/meal-presets', { method: 'POST', body: JSON.stringify(body) }),

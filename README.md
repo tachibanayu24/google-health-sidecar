@@ -70,6 +70,8 @@ flowchart TB
 3. **毎 `*/5`** — 歩数・消費kcal(分単位 interval)を当日分まで日次合計に上書き(pageSize 拡大で軽量化済。早朝7時のみ3日分再集計)
 4. **push 再試行** — 失敗/未送の GH push を最大 20 件再送
 
+アプリ上で画面を下に引っ張る(pull-to-refresh)と、cron を待たずに 2〜4 と同じ処理を即時実行する(`POST /api/sync`。60秒に1回まで)。
+
 > ユーザー期待の「食事をトレーナーAIが入力 → MCP → Logbook(D1)→ GH」は `log_meal` で実装済み(GH 反映は `FEATURE_GH_NUTRITION_PUSH` 依存)。ワークアウト・体重も同様に **MCP / UI のどちらからでも D1 + GH** へ入る。逆に睡眠・心拍などは GH 由来の read-only。
 
 ## ローカル起動

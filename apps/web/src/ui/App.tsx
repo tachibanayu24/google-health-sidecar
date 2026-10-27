@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Dumbbell, HeartPulse, House, Plus, Scale, Settings, Utensils } from 'lucide-react';
 import { lazy, Suspense, useRef, useState } from 'react';
 import {
@@ -11,9 +12,12 @@ import {
 } from 'react-router-dom';
 import { BrandLogo } from './components/BrandLogo';
 import { Modal, Sheet } from './components/Overlay';
+import { PullToRefresh } from './components/PullToRefresh';
 import { Loading } from './components/state';
 import { WeightLogSheet } from './components/WeightLogSheet';
+import { api } from './lib/api';
 import { todayJst } from './lib/datetime';
+import { flushOutbox } from './lib/outbox';
 import { HomeScreen } from './screens/Home';
 import { MealScreen } from './screens/Meal';
 import { MealCategoryDetail } from './screens/MealCategoryDetail';
@@ -235,6 +239,16 @@ function Layout() {
   const { pathname } = useLocation();
   const [chooser, setChooser] = useState(false);
   const [weightOpen, setWeightOpen] = useState(false);
+  const qc = useQueryClient();
+  const mainRef = useRef<HTMLElement>(null);
+  // 編集中フォーム(記録/食事)では誤発火で入力を乱さないよう無効。
+  const editing = pathname.startsWith('/record') || pathname.startsWith('/meal');
+  // 下スワイプ: 未送信キューを送り → GH 手動同期(pull + push 再送) → 全クエリ再取得。
+  const refreshAll = async () => {
+    await flushOutbox().catch(() => undefined);
+    await api.sync().catch(() => undefined); // 同期失敗でも D1 の再取得はする(エラーは同期バナーが出す)
+    await qc.invalidateQueries();
+  };
   const tab: Tab | null =
     pathname === '/'
       ? 'home'
@@ -248,12 +262,17 @@ function Layout() {
   return (
     <div className="flex h-full flex-col">
       <Header onSettings={() => navigate('/settings')} />
-      <main className="flex-1 overflow-y-auto px-5 pb-28 pt-3">
-        <div key={pathname} className="rise">
-          <Suspense fallback={<Loading />}>
-            <Outlet />
-          </Suspense>
-        </div>
+      <main
+        ref={mainRef}
+        className="relative flex-1 overflow-y-auto overscroll-y-contain px-5 pb-28 pt-3"
+      >
+        <PullToRefresh scrollRef={mainRef} enabled={!editing} onRefresh={refreshAll}>
+          <div key={pathname} className="rise">
+            <Suspense fallback={<Loading />}>
+              <Outlet />
+            </Suspense>
+          </div>
+        </PullToRefresh>
       </main>
       {chooser && (
         <LogChooser

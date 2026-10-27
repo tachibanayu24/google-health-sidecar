@@ -1078,6 +1078,8 @@ async scheduled(_controller, env, ctx) {
 
 `dead_letter` は自動再試行の対象外。件数は `/api/sync-status` の `pushQueue.deadLetter` に出し、Home の同期バナーが「GH への反映に N 件失敗(要対応)」と警告する(黙殺防止)。体脂肪は体重と別 datapoint なので `entity_type='body_metric_fat'` の独立台帳行で追跡し、片方の失敗がもう片方の `synced` を巻き戻さない(体重二重 push 防止)。
 
+**手動同期(pull-to-refresh, 2026-10-28)**: cron(`*/5`)はそのまま残し、加えて UI の下スワイプで即時同期できる。pull → 歩数/活動kcal 集計 → push 再送の段は `apps/web/src/sync.ts` の `runGhSync` に切り出し、cron と `POST /api/sync` が同じ関数を呼ぶ(各段の隔離・ログも共通。stale 化は cron のみ)。手動側は `days:1` 固定で、連打による GH API 過負荷を避けるため LOCK KV(`manual-sync:recent`, TTL 60s)で60秒に1回へ間引く(間引き時は `synced:false` を返し GH を叩かない)。UI(`components/PullToRefresh.tsx`)は `<main>` 最上部での下スワイプで outbox flush → `/api/sync` → 全クエリ invalidate の順に実行する。記録/食事の編集画面では無効。cron と並走しても pull は upsert・own-write 除外で冪等なので結果は変わらない。
+
 ### 12.3 失敗時通知
 `consecutive_failures >= 3`(特にrefresh失敗 `invalid_grant`=無人Workerの致命傷)で **Cloudflare Email Routing or Slack/Discord webhook** に1通だけ送る(dedupe)。`sync_runs` テーブル自体がUIダッシュボードになる(「最終同期2h前/体重OK/睡眠ERROR」)。
 

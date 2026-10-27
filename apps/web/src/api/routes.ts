@@ -58,6 +58,7 @@ import {
 } from '@ghs/core';
 import { Hono } from 'hono';
 import type { HonoEnv } from '../env';
+import { runGhSync } from '../sync';
 import { clampQueryInt } from './helpers';
 
 /** 破損しても落ちない JSON.parse(失敗時 null)。 */
@@ -478,6 +479,17 @@ api.get('/sync-status', async (c) => {
       consecutive_failures: r.consecutive_failures,
     })),
   });
+});
+
+// 手動同期(UI の pull-to-refresh)。cron(*/5)を待たずに GH→D1 取込 + push 再送を即時実行。
+// 連打で GH API を叩きすぎないよう60秒に1回へ間引く(KV の expirationTtl 下限=60s)。間引き時は
+// GH を叩かず synced:false を返す(UI は D1 の再取得だけ行う)。
+const MANUAL_SYNC_KEY = 'manual-sync:recent';
+api.post('/sync', async (c) => {
+  if (await c.env.LOCK.get(MANUAL_SYNC_KEY)) return c.json({ synced: false, errors: [] });
+  await c.env.LOCK.put(MANUAL_SYNC_KEY, '1', { expirationTtl: 60 });
+  const { errors } = await runGhSync(makeContext(c.env), { days: 1, label: 'manual-sync' });
+  return c.json({ synced: true, errors });
 });
 
 api.get('/meal-presets', async (c) => {

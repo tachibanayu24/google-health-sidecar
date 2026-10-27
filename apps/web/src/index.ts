@@ -1,17 +1,11 @@
-import {
-  makeContext,
-  pullActiveEnergyDaily,
-  pullStepsDaily,
-  retryPendingPushes,
-  runDailyPull,
-  staleAbandonedSessions,
-} from '@ghs/core';
+import { makeContext, staleAbandonedSessions } from '@ghs/core';
 import { todayJst } from '@ghs/core/util/date';
 import { Hono } from 'hono';
 import { api } from './api/routes';
 import { requireAuth } from './auth/gate';
 import { auth } from './auth/routes';
 import type { Env, HonoEnv } from './env';
+import { runGhSync } from './sync';
 
 const app = new Hono<HonoEnv>();
 
@@ -40,30 +34,12 @@ export default {
     const catchupSlot = jst.getUTCMinutes() === 0 && jst.getUTCHours() === 7;
     ctx.waitUntil(
       (async () => {
-        // 各段を独立に隔離(前段の throw で後段=特に push 再送(真実保全の核)がスキップされないように)。
-        // 失敗は握りつぶさず console.error でログに残す(observability 有効 → dashboard / wrangler tail で
-        // 後から点検して気づける)。隔離は維持(throw を飲んで後段は続行)。
+        // 各段を独立に隔離(前段の throw で後段がスキップされないように)。失敗は console.error で残す。
         await staleAbandonedSessions(app.db).catch((e) =>
           console.error('[cron] staleAbandonedSessions failed:', e),
         );
-        // GH→D1 reconcile(センシング: weight/sleep/HRV/皮膚温等。3日ルックバック・own-write除外・冪等)。
-        // 個々の dataType 失敗は runDailyPull が sync_runs に記録 + errors[] で返すのでそれも出す。
-        const pull = await runDailyPull(app).catch((e) => {
-          console.error('[cron] runDailyPull threw:', e);
-          return null;
-        });
-        if (pull?.errors.length) console.error('[cron] runDailyPull dataType errors:', pull.errors);
-        // ※ 食事(nutrition)は GH→アプリの pull をしない。食事は app/MCP が D1 正本→GH push の一方向(§5.2)。
-        // 分単位 interval の日次集計。pageSize 拡大(1000)で軽くなったため毎回(*/5)当日分を集計=高頻度。
-        await pullStepsDaily(app, { days: catchupSlot ? 3 : 1 }).catch((e) =>
-          console.error('[cron] pullStepsDaily failed:', e),
-        );
-        await pullActiveEnergyDaily(app, { days: catchupSlot ? 3 : 1 }).catch((e) =>
-          console.error('[cron] pullActiveEnergyDaily failed:', e),
-        );
-        await retryPendingPushes(app, { max: 20 }).catch((e) =>
-          console.error('[cron] retryPendingPushes failed:', e),
-        ); // 失敗/未送 push の再送
+        // pull → 歩数/活動kcal 集計 → push 再送(手動同期 /api/sync と共通, sync.ts)。
+        await runGhSync(app, { days: catchupSlot ? 3 : 1, label: 'cron' });
       })(),
     );
   },
